@@ -501,6 +501,7 @@ def _build_pipeline(cfg: GatewayConfig):
         upload_token=cfg.central.upload_token,
         timeout_seconds=cfg.central.upload_timeout_seconds,
         max_retries=cfg.central.max_upload_retries,
+        allow_insecure=cfg.central.allow_insecure,
     )
     return Pipeline(
         cfg,

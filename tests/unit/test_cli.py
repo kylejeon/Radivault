@@ -46,6 +46,7 @@ def _minimal_config(tmp_path: Path) -> Path:
         "central": {
             "base_url": "http://127.0.0.1:0",
             "upload_token": "ct",
+            "allow_insecure": True,
         },
         "logging": {"level": "INFO", "json": True},
     }

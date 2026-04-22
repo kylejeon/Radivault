@@ -81,7 +81,11 @@ def _build_config(tmp_path: Path) -> GatewayConfig:
         },
         "state": {"db_path": str(tmp_path / "state.sqlite3")},
         "audit": {"path": str(tmp_path / "audit.log"), "anchor_interval_seconds": 3600},
-        "central": {"base_url": "http://testserver", "upload_token": "tok-abc"},
+        "central": {
+            "base_url": "http://testserver",
+            "upload_token": "tok-abc",
+            "allow_insecure": True,
+        },
         "logging": {"level": "INFO", "json": True},
     }
     cfg_path = tmp_path / "gateway.yml"
@@ -132,7 +136,9 @@ def test_pipeline_happy_path_end_to_end(make_synthetic_study, tmp_path, monkeypa
     pacs = FakePacs(studies=studies, fetch_dir_src=study_src)
 
     # Upload client uses MockTransport bridging to FastAPI TestClient.
-    upload = UploadClient("http://testserver", upload_token="tok-abc", max_retries=1)
+    upload = UploadClient(
+        "http://testserver", upload_token="tok-abc", max_retries=1, allow_insecure=True
+    )
 
     def _bridge(request: httpx.Request) -> httpx.Response:
         resp = test_client.request(
@@ -217,7 +223,9 @@ def test_pipeline_quarantines_burned_in_studies(make_synthetic_study, tmp_path, 
         state_db=db,
     )
     pacs = FakePacs(studies=studies, fetch_dir_src=study_src)
-    upload = UploadClient("http://testserver", upload_token="tok-abc", max_retries=1)
+    upload = UploadClient(
+        "http://testserver", upload_token="tok-abc", max_retries=1, allow_insecure=True
+    )
 
     def _bridge(request: httpx.Request) -> httpx.Response:
         resp = test_client.request(

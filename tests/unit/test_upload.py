@@ -103,7 +103,9 @@ def test_upload_client_happy_path(mock_central_client, tmp_path):
         headers={"Authorization": "Bearer tok-abc"},
         base_url="http://testserver",
     )
-    upload = UploadClient("http://testserver", upload_token="tok-abc", max_retries=1)
+    upload = UploadClient(
+        "http://testserver", upload_token="tok-abc", max_retries=1, allow_insecure=True
+    )
     upload._client = client  # type: ignore[assignment]
     manifest = upload.build_manifest(
         gateway_id="gw_x",
@@ -143,7 +145,9 @@ def test_post_audit_anchor_reaches_mock_central(mock_central_client, tmp_path):
         headers={"Authorization": "Bearer tok-abc"},
         base_url="http://testserver",
     )
-    upload = UploadClient("http://testserver", upload_token="tok-abc", max_retries=1)
+    upload = UploadClient(
+        "http://testserver", upload_token="tok-abc", max_retries=1, allow_insecure=True
+    )
     upload._client = client  # type: ignore[assignment]
     result = upload.post_audit_anchor(
         gateway_id="gw_x",
@@ -202,7 +206,11 @@ def test_daemon_loop_schedules_anchor(mock_central_client, tmp_path, monkeypatch
             "path": str(tmp_path / "audit.log"),
             "anchor_interval_seconds": 60,
         },
-        "central": {"base_url": "http://testserver", "upload_token": "tok-abc"},
+        "central": {
+            "base_url": "http://testserver",
+            "upload_token": "tok-abc",
+            "allow_insecure": True,
+        },
         "logging": {"level": "INFO", "json": True},
     }
     cfg_path = tmp_path / "gateway.yml"
@@ -268,6 +276,27 @@ def test_daemon_loop_schedules_anchor(mock_central_client, tmp_path, monkeypatch
     assert body["seq_range"][1] >= 0
 
 
+def test_upload_client_rejects_http_by_default():
+    """H-1: plain HTTP must be refused unless allow_insecure is set."""
+    with pytest.raises(ValueError) as exc:
+        UploadClient("http://ingest.example", upload_token="t")
+    assert "https" in str(exc.value).lower()
+
+
+def test_upload_client_accepts_http_with_allow_insecure(caplog):
+    """H-1: opt-in insecure mode is allowed for dev and warns on startup."""
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="radivault.upload")
+    client = UploadClient("http://ingest.example", upload_token="t", allow_insecure=True)
+    try:
+        assert client.base_url == "http://ingest.example"
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("insecure central base_url" in m for m in messages)
+    finally:
+        client.close()
+
+
 def test_upload_client_permanent_400_not_retried(monkeypatch, tmp_path):
     # Build a transport that always returns 400.
     def handler(request):
@@ -275,7 +304,7 @@ def test_upload_client_permanent_400_not_retried(monkeypatch, tmp_path):
 
     transport = httpx.MockTransport(handler)
     client = httpx.Client(transport=transport, base_url="http://x")
-    upload = UploadClient("http://x", upload_token="t", max_retries=5)
+    upload = UploadClient("http://x", upload_token="t", max_retries=5, allow_insecure=True)
     upload._client = client  # type: ignore[assignment]
     f = tmp_path / "a.dcm"
     f.write_bytes(b"x")

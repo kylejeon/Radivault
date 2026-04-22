@@ -109,6 +109,10 @@ class CentralConfig(BaseModel):
     upload_token: str = Field(min_length=1)
     upload_timeout_seconds: int = Field(default=600, ge=10)
     max_upload_retries: int = Field(default=10, ge=1, le=50)
+    # H-1: TLS 1.3 outbound-only (dev-spec §5, §12.3). Default rejects
+    # ``http://`` base URLs. Flip to True for local dev against the mock
+    # central; the UploadClient will log a WARN at startup.
+    allow_insecure: bool = False
 
 
 class LoggingConfig(BaseModel):

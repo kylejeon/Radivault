@@ -60,8 +60,24 @@ class UploadClient:
         retry_factor: float = 2.0,
         retry_cap: float = 3600.0,
         retry_jitter: float = 0.2,
+        allow_insecure: bool = False,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        # H-1: enforce HTTPS on the central base URL unless the operator
+        # explicitly opts out via central.allow_insecure. TLS 1.3 outbound-only
+        # is a non-functional requirement (dev-spec §5, §12.3).
+        normalised = base_url.rstrip("/")
+        scheme = normalised.split("://", 1)[0].lower() if "://" in normalised else ""
+        if scheme != "https":
+            if not allow_insecure:
+                raise ValueError(
+                    "central.base_url must use https:// "
+                    "(set central.allow_insecure=true to override for dev)"
+                )
+            log.warning(
+                "insecure central base_url in use — not for production",
+                extra={"base_url": normalised},
+            )
+        self.base_url = normalised
         headers = {"Authorization": f"Bearer {upload_token}"}
         self._client = httpx.Client(
             headers=headers,
