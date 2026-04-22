@@ -1,0 +1,102 @@
+# RadiVault De-ID Ruleset — Annex E Basic Profile + selected options
+# dev-spec §13 Annex A 매트릭스와 1:1 대응 (AC-32 교차 검증 대상).
+# Action 코드:
+#   X = remove, Z = replace-with-empty, D = replace-with-dummy,
+#   U = replace-with-pseudo-uid, K = keep, C = clean (whitelist)
+version: "v0.1.0"
+
+rules:
+  # Patient
+  - tag: "00100010"  # PatientName
+    action: Z
+    replacement: "ANON"
+  - tag: "00100020"  # PatientID
+    action: D
+  - tag: "00100021"  # IssuerOfPatientID
+    action: X
+  - tag: "00100030"  # PatientBirthDate
+    action: D
+  - tag: "00100040"  # PatientSex
+    action: K
+  - tag: "00101010"  # PatientAge
+    action: D
+  - tag: "00101040"  # PatientAddress
+    action: X
+  - tag: "00102154"  # PatientTelephoneNumbers
+    action: X
+
+  # Administrative
+  - tag: "00080050"  # AccessionNumber
+    action: Z
+  - tag: "00080080"  # InstitutionName
+    action: X
+  - tag: "00080081"  # InstitutionAddress
+    action: X
+  - tag: "00080090"  # ReferringPhysicianName
+    action: Z
+  - tag: "00081050"  # PerformingPhysicianName
+    action: X
+  - tag: "00081060"  # NameOfPhysiciansReadingStudy
+    action: X
+  - tag: "00081070"  # OperatorsName
+    action: X
+  - tag: "00200010"  # StudyID
+    action: Z
+
+  # UIDs
+  - tag: "0020000D"  # StudyInstanceUID
+    action: U
+  - tag: "0020000E"  # SeriesInstanceUID
+    action: U
+  - tag: "00080018"  # SOPInstanceUID
+    action: U
+  - tag: "00200052"  # FrameOfReferenceUID
+    action: U
+  - tag: "00200200"  # SynchronizationFrameOfReferenceUID
+    action: U
+
+  # Dates/times (shifted per patient offset)
+  - tag: "00080020"  # StudyDate
+    action: D
+  - tag: "00080021"  # SeriesDate
+    action: D
+  - tag: "00080022"  # AcquisitionDate
+    action: D
+  - tag: "00080023"  # ContentDate
+    action: D
+  - tag: "00080030"  # StudyTime
+    action: D
+  - tag: "00080031"  # SeriesTime
+    action: D
+  - tag: "00080032"  # AcquisitionTime
+    action: D
+  - tag: "00080033"  # ContentTime
+    action: D
+
+  # Descriptors (clean if option enabled, otherwise remove)
+  - tag: "00081030"  # StudyDescription
+    action: C
+  - tag: "0008103E"  # SeriesDescription
+    action: C
+  - tag: "00204000"  # ImageComments
+    action: X
+  - tag: "00324000"  # StudyComments
+    action: X
+  - tag: "00401400"  # RequestedProcedureComments
+    action: X
+
+  # Device identity (partial)
+  - tag: "00080070"  # Manufacturer
+    action: K
+  - tag: "00081090"  # ManufacturerModelName
+    action: K
+  - tag: "00181000"  # DeviceSerialNumber
+    action: X
+  - tag: "00081010"  # StationName
+    action: X
+
+  # Misc
+  - tag: "00280301"  # BurnedInAnnotation (value YES triggers quarantine)
+    action: K
+  - tag: "00080005"  # SpecificCharacterSet (retain for Korean)
+    action: K

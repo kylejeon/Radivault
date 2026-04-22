@@ -1,0 +1,68 @@
+# RadiVault Gateway Agent — /etc/radivault/gateway.yml
+# 설정 스키마 버전. 마이그레이션 시 증가 (config schema version).
+version: 1
+
+# ─────────── 에이전트 식별 (Gateway identity) ───────────
+agent:
+  # 중앙이 발급한 gateway_id. 파일로만 주입하길 권장.
+  # Issued by central; load from file credential.
+  gateway_id: "${file:/run/credentials/gateway_id}"
+  hospital_id: "hosp_abc"                       # 중앙 등록된 병원 식별자
+  org_root_oid: "2.25.140737488355328"          # UID 가명화 root OID
+
+# ─────────── PACS 연결 (DICOMweb QIDO/WADO) ───────────
+pacs:
+  base_url: "https://pacs.hospital.local/dicom-web"
+  auth:
+    type: "bearer"                              # bearer | basic
+    token: "${file:/run/credentials/pacs_token}"
+  ca_bundle: "/etc/radivault/ca.pem"            # 자가서명 인증서 신뢰 시
+  max_concurrency: 4                            # 동시 WADO 페치
+  poll_interval_seconds: 300                    # 폴링 주기 (5분)
+  query:
+    modalities: ["CR", "CT", "MR", "DX"]        # ModalitiesInStudy 필터
+    lookback_days: 7                            # 첫 동기화 lookback
+
+# ─────────── De-ID 엔진 (Annex E Basic + 옵션) ───────────
+deid:
+  ruleset_version: "v0.1.0"
+  salt: "${file:/run/credentials/salt}"         # per-hospital salt (hex, ≥32바이트)
+  salt_version: 1
+  burnin_quarantine_modalities: ["SC", "US", "OT"]
+  retain_options:
+    longitudinal_dates: true                    # DCM 113107
+    patient_characteristics: true               # DCM 113108
+    clean_descriptors: true                     # DCM 113111
+    clean_graphics: true
+    safe_private: false                         # v0.1은 false 고정
+    uids: false                                 # UID는 항상 가명화 (변경 금지)
+    institution_identity: false
+    device_identity: "partial"                  # full | partial | none
+
+# ─────────── Staging 영역 (로컬 임시 저장) ───────────
+staging:
+  root: "/var/lib/radivault/staging"
+  retention_hours: 72                           # 업로드 실패분 최대 보존 시간
+  max_disk_pct: 80                              # 이 %를 넘으면 신규 페치 일시중단
+
+# ─────────── 로컬 상태 DB ───────────
+state:
+  db_path: "/var/lib/radivault/state.sqlite3"
+
+# ─────────── 감사 로그 ───────────
+audit:
+  path: "/var/log/radivault/audit.log"
+  anchor_interval_seconds: 3600                 # 중앙 anchor 주기 (1h)
+
+# ─────────── 중앙(RadiVault) 업로드 ───────────
+central:
+  base_url: "https://ingest.radivault.io"
+  upload_token: "${file:/run/credentials/upload_token}"
+  upload_timeout_seconds: 600
+  max_upload_retries: 10
+
+# ─────────── 로깅 ───────────
+logging:
+  level: "INFO"                                 # DEBUG | INFO | WARN | ERROR
+  json: true                                    # stdout를 JSON으로 방출
+  console_color: "auto"                         # auto | always | never

@@ -27,3 +27,14 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Local state (runtime)
+/var/
+

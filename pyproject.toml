@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "radivault-gateway"
+version = "0.1.0"
+description = "RadiVault Gateway Agent — on-prem PACS → De-ID → Central uploader"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "RadiVault" }]
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "pydicom>=2.4",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+mock = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "python-multipart>=0.0.9",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+radivault-gateway = "radivault_gateway.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/radivault_gateway", "src/radivault_mock_central"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+markers = [
+    "integration: integration tests requiring external services (Orthanc, docker); skipped by default",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydicom.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "E501",  # line length handled by formatter
+    "B008",  # function call in default arg (click patterns)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B", "SIM"]
