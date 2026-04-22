@@ -54,6 +54,9 @@ class StorageConfig:
     access_key_id: str | None = None
     secret_access_key: str | None = None
     local_root: str = "/var/lib/radivault-central/objects"
+    # Safety knobs — default off so prod mis-config fails closed.
+    allow_unencrypted: bool = False  # skip SSE-KMS enforcement (dev/test only)
+    allow_insecure: bool = False  # permit http:// endpoint_url (dev/test only)
 
 
 @dataclass

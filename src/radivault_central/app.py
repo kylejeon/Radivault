@@ -124,6 +124,8 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
                 access_key_id=settings.storage.access_key_id,
                 secret_access_key=settings.storage.secret_access_key,
                 kms_key_arn=settings.storage.kms_key_arn,
+                allow_unencrypted=settings.storage.allow_unencrypted,
+                allow_insecure=settings.storage.allow_insecure,
             )
 
     from radivault_central.db.session import get_session_factory

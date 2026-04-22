@@ -23,9 +23,14 @@ storage:
   endpoint_url: null
   region: "ap-northeast-2"
   bucket: "radivault-ingest-dev"
+  # Required for s3/minio provider — PUTs always use SSE-KMS when set.
+  # Leaving null requires allow_unencrypted=true (dev/test only).
   kms_key_arn: null
   force_path_style: true
   local_root: "/var/lib/radivault-central/objects"
+  # Safety overrides — both default false so prod mis-config fails closed.
+  allow_unencrypted: false     # dev/test only: skip SSE-KMS enforcement
+  allow_insecure: false        # dev/test only: permit http:// endpoint_url
 
 auth:
   hash_algorithm: "argon2id"

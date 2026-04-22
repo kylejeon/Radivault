@@ -25,6 +25,10 @@ storage:
   access_key_id: "minioadmin"
   secret_access_key: "minioadmin"
   local_root: "/var/lib/radivault-central/objects"
+  # MinIO dev stack only — prod MUST set kms_key_arn and use https://.
+  # Both flags emit a WARN log at startup.
+  allow_unencrypted: true
+  allow_insecure: true
 
 auth:
   hash_algorithm: "argon2id"
