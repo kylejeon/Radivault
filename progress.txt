@@ -64,3 +64,32 @@ Claude 서브에이전트는 서로를 직접 호출할 수 없으므로, 메인
 - feature_list.json (루트, 빈 파일) — 용도 미확인, 건드리지 않음.
 - radivault/ venv — .gitignore 처리됨.
 - 서브에이전트는 다른 에이전트를 직접 호출 불가 → 메인 대화가 NEXT_STEP 블록을 읽고 수동/자동 라우팅.
+
+## 2026-04-22 — Session 3 (Claude, @designer, Gateway Agent 디자인 명세, on claude branch)
+
+### 뭘 했나
+Gateway Agent는 GUI 없는 백엔드 CLI 도구지만 Kyle 요청으로 @designer를 강제 실행.
+UI가 아닌 "개발자/운영자가 마주하는 표면(CLI/Config/Log)"의 UX 디자인 명세를 작성.
+
+- docs/specs/design-spec-gateway-agent.md — v0.1 Draft
+  - §0 Scope: CLI 도구 디자인 선언 (web UI N/A 명시)
+  - §3 CLI 명령 트리: start/sync-once/status/de-id-test/audit verify/version 의
+     --help, happy-path 출력, 에러 시나리오, 종료 코드 (dev-spec §7.4와 정합)
+  - §4 Config YAML 예시 + pydantic→사용자 친화 에러 UX + 시크릿 3종 참조 가이드
+  - §5 로그: console(human/JSON) 10-line + audit JSON-lines 5-line 예시, 에러 메시지 템플릿
+  - §6 status 출력: 80-column ASCII 박스 UI 전체 레이아웃 + --json 구조
+  - §7 설치 워크스루: 병원 IT 관점 8단계 + 장애 플레이북 (도커/systemd)
+  - §8 i18n: 콘솔 ko+en 병기, audit log 영어 고정
+  - §9 접근성: 색 의존 금지, --no-color, NO_COLOR 준수, --plain 폴백 제안
+  - §10 AC 12개 (디자인 측)
+
+### 어디까지 됐나
+- Phase 3 "Design" Gateway Agent slug 완료.
+- 다음 핸드오프 대상: @developer (claude 브랜치 구현 착수).
+
+### 다음에 뭘 하나
+- Kyle 결정 대기: §11 오픈 질문 6건 (docs 사이트 호스팅, --plain v0.1 포함 여부,
+  status --watch에 rich/textual 허용, OK/FAIL 기호 스타일, error doc i18n 우선순위,
+  dry-run staging 정리 정책).
+- 병렬 가능: dev-spec-central-ingest 를 @planner 가 시작 — v0.1 mock central 계약을
+  실제 서버 스펙으로 승격하는 작업.
