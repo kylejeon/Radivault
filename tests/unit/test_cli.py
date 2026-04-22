@@ -118,6 +118,33 @@ def test_de_id_test_reports_bad_input(tmp_path):
     assert "ERR_DEID" in r.output
 
 
+def test_status_shows_stale_row(tmp_path: Path):
+    """AC-12 / FR-16: status CLI must surface stale staging entries."""
+    import os
+    import time
+
+    cfg_path = _minimal_config(tmp_path)
+    stg = tmp_path / "stg"
+    stg.mkdir(exist_ok=True)
+    # Create a fake pseudo-study directory and backdate its mtime so it sits
+    # far beyond the 72h retention_hours default used by _minimal_config.
+    old_study = stg / "2.25.OLD_STUDY"
+    old_study.mkdir()
+    ancient = time.time() - (73 * 3600)  # 73 hours ago
+    os.utime(old_study, (ancient, ancient))
+
+    runner = CliRunner()
+    r = runner.invoke(cli, ["-c", str(cfg_path), "status"])
+    assert r.exit_code == 0, r.output
+    assert "Stale: 1" in r.output
+
+    # JSON mode carries the same counter.
+    r_json = runner.invoke(cli, ["-c", str(cfg_path), "status", "--json"])
+    assert r_json.exit_code == 0
+    data = json.loads(r_json.output)
+    assert data["staging"]["stale_count"] == 1
+
+
 def test_config_validation_error_exits_64(tmp_path: Path):
     import yaml
 

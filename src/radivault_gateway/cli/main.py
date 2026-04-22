@@ -401,6 +401,7 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
 def status(ctx: click.Context, json_output: bool) -> None:
     cfg = _load_or_exit(ctx.obj["config_path"])
     from radivault_gateway.audit import verify_chain
+    from radivault_gateway.staging import StagingManager
     from radivault_gateway.state import StateDB
 
     try:
@@ -420,6 +421,21 @@ def status(ctx: click.Context, json_output: bool) -> None:
         head_seq = r.head_seq
         head_hash = r.head_hash
 
+    # AC-12 / FR-16: surface staging entries older than retention_hours.
+    # Threshold in seconds so callers (and the dev-spec anchor test fixture)
+    # can override via staging.retention_hours.
+    threshold_seconds = int(cfg.staging.retention_hours) * 3600
+    stale_count = 0
+    try:
+        staging = StagingManager(
+            cfg.staging.root,
+            retention_hours=cfg.staging.retention_hours,
+            max_disk_pct=cfg.staging.max_disk_pct,
+        )
+        stale_count = len(staging.stale_studies(threshold_seconds=threshold_seconds))
+    except Exception as exc:
+        click.echo(f"[WARN] staging stale-scan failed: {exc}", err=True)
+
     data = {
         "agent": {
             "version": __version__,
@@ -432,6 +448,7 @@ def status(ctx: click.Context, json_output: bool) -> None:
             "path": str(cfg.staging.root),
             "threshold_pct": cfg.staging.max_disk_pct,
             "retention_hours": cfg.staging.retention_hours,
+            "stale_count": stale_count,
         },
         "audit": {
             "path": str(audit_path),
@@ -451,8 +468,16 @@ def status(ctx: click.Context, json_output: bool) -> None:
     click.echo("Pipeline counts")
     for state_name, n in sorted(counts.items()):
         click.echo(f"  {state_name:20s}{n}")
+    # Design-spec §6.2 ``Staging`` block: show retention + stale count.
+    click.echo("Staging")
+    click.echo(f"  path           {cfg.staging.root}")
     click.echo(
-        f"Audit log  chain: {'OK' if chain_ok else 'FAIL' if audit_exists else 'ABSENT'}  head_seq={head_seq}"
+        f"  retention      {cfg.staging.retention_hours}h  threshold {cfg.staging.max_disk_pct}%"
+    )
+    click.echo(f"  Stale: {stale_count}")
+    click.echo(
+        f"Audit log  chain: {'OK' if chain_ok else 'FAIL' if audit_exists else 'ABSENT'}  "
+        f"head_seq={head_seq}"
     )
     sys.exit(0)
 
