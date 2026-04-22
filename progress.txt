@@ -1,0 +1,38 @@
+RadiVault (K-MedData) 진행 기록
+================================
+
+## 2026-04-22 — Session 1 (Claude)
+
+### 뭘 했나
+Phase 1 리서치 완료 상태에서, CLAUDE.md가 참조하는 기반 문서와 에이전트 파이프라인 템플릿을 새로 생성.
+
+- docs/research/k-meddata-research-summary.md — 첨부된 전체 리서치의 프로젝트 내부 사본 정리
+- docs/prd.md — 제품 요구사항 v0.1 (비전, 사용자, 기능 범위, Non-goals, KPI, 제약)
+- docs/ARCHITECTURE.md — Model 3 Hybrid 3-Zone 아키텍처 v0.1 (기술 스택은 TBD로 명시)
+- docs/UI_GUIDE.md — 플레이스홀더 (디자인 단계 진입 시 본격 작성)
+- _template/pipeline-guide.md — 6-Phase 파이프라인 운영 규칙
+- _template/dev-spec-template.md — 개발지시서 템플릿
+- _template/design-spec-template.md — 디자인 명세 템플릿
+- .gitignore — 기존 radivault/ venv 보호 포함
+
+### 어디까지 됐나
+- Phase 1 "Research" 산출물 정리 완료.
+- Phase 2 "Planning" 진입을 위한 기반 문서 전부 준비 완료.
+- 기술 스택은 의도적으로 미확정 (PRD §9, ARCHITECTURE §9).
+- 코드 작업은 아직 1줄도 없음 — claude 브랜치 분기 후 착수 예정.
+
+### 다음에 뭘 하나
+다음 세션 우선순위 (Kyle 결정 필요):
+
+1. **@planner 착수 대상 결정** — Phase 1 핵심 모듈 중 어느 dev-spec을 먼저 쓸지:
+   - (a) Gateway Agent (on-premise Docker, PACS 연동)
+   - (b) De-ID Engine (익명화 파이프라인)
+   - (c) Metadata Index DB (중앙 인덱스 스키마)
+2. **기술 스택 결정** — dev-spec 착수 전 또는 초안 작성 중에 Kyle과 확정.
+3. **파일럿 병원 물색 전략** — 비기술 트랙. 법률 자문·병원 접근·계약서 템플릿 준비.
+4. **PRD §11 오픈 퀘스천 해소** — 프로젝트명 확정, 법률 자문 법인 선정, 파트너십 vs 직판 채널.
+
+### 메모
+- 루트에 feature_list.json (빈 파일)이 존재 — 용도 미확인, 건드리지 않음.
+- radivault/ 디렉터리는 Python venv — .gitignore 처리 완료, 삭제하지 않음.
+- 이번 커밋이 main의 최초이자 유일한 커밋. 이후 모든 실제 작업은 claude 브랜치에서.

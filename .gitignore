@@ -1,0 +1,29 @@
+# Python virtualenvs
+radivault/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
