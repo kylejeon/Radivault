@@ -1,7 +1,8 @@
 # QA 보고서 — Gateway Agent v0.1 MVP
 
-> **Status**: Final · **Feature slug**: `gateway-agent` · **Last updated**: 2026-04-22
+> **Status**: Final · **Feature slug**: `gateway-agent` · **Last updated**: 2026-04-22 (Round 2)
 > **작성자**: @qa · **근거**: [dev-spec](../specs/dev-spec-gateway-agent.md), [design-spec](../specs/design-spec-gateway-agent.md)
+> **최신 판정 (Round 2)**: **PASS with minor issues**
 
 ---
 
@@ -160,6 +161,7 @@
 | 버전 | 날짜 | 작성자 | 변경 |
 |------|------|--------|------|
 | 1.0 | 2026-04-22 | @qa (Claude Opus 4.7) | 최초 검수 보고. 48/48 단위 테스트 통과·ruff clean·pip-audit 클린 독립 확인. Critical 2건(FR-11 quarantine 파일 삭제, FR-25 anchor 스케줄러 부재)으로 **FAIL** 판정. |
+| 2.0 | 2026-04-22 | @qa (Claude Opus 4.7) | 재검수 (Round 2). Round 1 Critical 2건 및 High/Medium 3건 모두 RESOLVED 확인. 54/54 단위 테스트 통과, ruff clean. 신규 minor 발견 1건(design-spec 113111 잔존)만 남아 **PASS with minor issues** 판정. |
 
 ---
 
@@ -175,3 +177,91 @@
   2. staging 레이아웃 2-depth vs 3-depth 유지 여부 — v0.1 플랫이 운영 편의상 허용이면 dev-spec 업데이트, 아니면 코드 수정.
   3. HTTPS 강제 가드 도입 기본값(거부 vs 경고).
   4. AC-28 CI / AC-29 trivy 범위를 v0.1 필수로 유지할지 v0.1.1로 분리할지.
+
+---
+
+## Round 2 Re-Verification (2026-04-22)
+
+검수 대상 커밋: `c4f698d..HEAD` (= `f1309d2..2168a39`, 총 6 커밋, 10 파일, +479/-23).
+독립 검증: `pytest tests/unit -q` → **54/54 통과 (0.39s)**, `ruff check src tests` → clean, `ruff format --check src tests` → 36 files already formatted. 브랜치: `claude`.
+
+### 2.1 요약 (Round 2 판정)
+
+- **판정: PASS with minor issues.**
+- Round 1 Critical 2건(C-1 번인 격리 파일 삭제, C-2 감사 anchor 스케줄러 부재)이 모두 RESOLVED. 코드·테스트·DB 행·감사 이벤트까지 증거 기반 확인. 병합 차단 사유 소멸.
+- Round 1 High/Medium 중 H-1(HTTPS 강제), CP-3(staging 3-depth), AC-12(stale_studies 연결), 스펙 오타(dev-spec §6.4 113105) — **4건 모두 RESOLVED**.
+- 신규 minor 1건 발견: `docs/specs/design-spec-gateway-agent.md:422` 주석에 `113111`이 잔존. 개발자 주장 범위(dev-spec)는 수정되었으나 design-spec YAML 예시 주석까지 놓침. 기능·보안 영향 없음 → minor.
+- 스코프 규율 우수. 전체 diff 479/23 라인 중 새 테스트가 211줄로 가장 크고, 구현 코드 변경은 목표 기능 외 touch 없음. 무허가 리팩터·over-engineering 흔적 없음.
+
+### 2.2 Round 1 Finding별 상태
+
+| 코드 | 항목 | Round 2 상태 | 증거 |
+|------|------|-------------|------|
+| **C-1** | FR-11/AC-8 번인 격리 파일 보존 | **RESOLVED** | `orchestrator/pipeline.py:193-225`: QuarantineRequired 시 `self._staging.move_to_quarantine(fetch_dir, qid)` 호출 → `StateDB.add_quarantine(..., payload_path=...)` 기록. `staging/manager.py:82-97` `move_to_quarantine()` 구현(기본 `root.parent/quarantine`, 0o700). `failed_reverify` 분기(`pipeline.py:262-288`)도 동일하게 `move_to_quarantine(staging_dir, pseudo_uid)` 호출 — §8.2 일치. 테스트 `tests/unit/test_pipeline_mock.py:215-303 test_pipeline_quarantines_burned_in_studies`가 (a) `quarantine/<id>/*.dcm` 존재, (b) `staging/` 비어있음, (c) `SELECT reason, payload_path FROM quarantine` row, 모두 assert. |
+| **C-2** | FR-25/AC-19 감사 anchor 스케줄러 | **RESOLVED** | `cli/main.py:298-391` `start` 데몬: `anchor_interval = cfg.audit.anchor_interval_seconds`, `_maybe_anchor()` 헬퍼가 `audit_logger.head_seq`/`.head_hash`를 읽어 `upload_client.post_audit_anchor(...)`를 호출, 성공 시 `audit.anchor.uploaded`, 실패 시 `audit.anchor.failed` 감사 이벤트 append. 스케줄 체크 루프 본문(line 379-381)과 슬립 내부(line 389-391) 두 지점에 있어 신호 수신/오랜 tick 중에도 주기 유지. 테스트 `tests/unit/test_upload.py:170-276 test_daemon_loop_schedules_anchor`가 `start --oneshot` 실행 → mock central `_anchors/*.json`에 `gateway_id`, `head_hash`(sha256 접두), `seq_range` 검증. 추가로 `tests/unit/test_upload.py:125-167 test_post_audit_anchor_reaches_mock_central`가 UploadClient 계약 단독 검증. |
+| **H-1** | HTTPS 강제 (central.base_url) | **RESOLVED** | `upload/client.py:66-79`: scheme !=`https`이면 `ValueError` raise (기본). `allow_insecure=True`이면 `log.warning("insecure central base_url in use — not for production")`. `config/schema.py:112-115` `CentralConfig.allow_insecure: bool = False` (opt-in). `cli/main.py:529` config → UploadClient에 전달. 테스트 `test_upload_client_rejects_http_by_default` (279-283) + `test_upload_client_accepts_http_with_allow_insecure` (286-297) 양방향 커버. |
+| **CP-3** | Staging 3-depth (FR-14) | **RESOLVED** | `deid/engine.py:242-251`: `series_dir = output_dir / new_series; out_path = series_dir / f"{new_sop}.dcm"` — `{out}/{series}/{sop}.dcm`. `reverify`는 `rglob("*.dcm")`로 서브트리 탐색(`engine.py:278`). `pipeline.py:299-310`: 파이프라인이 series 서브디렉터리 보존하며 `final_staging / series_name`으로 이관, `final_staging.rglob("*.dcm")`로 재수집. 결과 트리는 `{staging_root}/{pseudo_study_uid}/{pseudo_series_uid}/{pseudo_sop_uid}.dcm`으로 dev-spec §4.3 FR-14 일치. 테스트 `test_deid_output_follows_series_depth_layout` (195-212)이 per-file 경로 assert. |
+| **AC-12** | `stale_studies()` status 연결 | **RESOLVED** | `cli/main.py:424-477`: `status`가 StagingManager를 생성해 `stale_studies(threshold_seconds=...)` 호출, JSON 모드는 `data["staging"]["stale_count"]`, 텍스트 모드는 `Stale: N` 라인 출력(design-spec §6.2 `Staging` 블록). 테스트 `test_status_shows_stale_row` (`tests/unit/test_cli.py:121-145`): 73시간 backdate된 디렉터리를 생성 → text/JSON 양쪽에서 stale=1 검증. |
+| **Spec typo** | dev-spec §6.4 113111 → 113105 | **RESOLVED (dev-spec)** / **PARTIAL (design-spec)** | `docs/specs/dev-spec-gateway-agent.md:338, 818` 모두 `113105`로 교정, 파일 내 `113111` 잔존 없음 (grep 0건). 다만 `docs/specs/design-spec-gateway-agent.md:422`의 YAML 예시 주석 `clean_descriptors: true # DCM 113111`은 **여전히 잔존**. 기능 영향은 없으나 스펙 drift이므로 §2.3 N-1로 신규 등록. |
+
+**추가 확인 (여전히 open 대상)**:
+- **AC-29 (trivy)**: v0.1 범위 유지 여부 Kyle 결정 대기. 현재 workflow 미추가. 본 Round 2 스코프 외.
+- **AC-28 (CI)**: 동일. `.github/workflows/` 부재. 본 Round 2 스코프 외.
+위 두 건은 Round 1 권고에 남아 있으나 Kyle이 v0.1 필수에서 제외하기로 지시한 상태로 해석 (카르론). Round 2에서는 재FAIL 처리하지 않음.
+
+### 2.3 새 발견 (Round 2 신규)
+
+- **N-1 (Low · 문서 drift)**: `docs/specs/design-spec-gateway-agent.md:422` YAML 예시 주석에 `# DCM 113111` 잔존. dev-spec는 `113105`로 정합화되었으므로 design-spec도 맞추는 것이 안전. 기능·보안 영향 없음. 후속 doc-only patch 권고.
+- **N-2 (Observation · non-blocking)**: Round 1에서 보고한 Round 1 발견 중 **Should-fix 항목 5건** (AC-2 단위 테스트, AC-28 CI workflow, AC-29 trivy, AC-31 README salt 회전, H-2/M-1/M-2 Medium 보안 가드)은 Round 2 스코프에 포함되지 않았고 여전히 open. Round 2 대상은 Round 1 Must-fix + 선별 High로 한정되었으므로 scope 위반이 아님. v0.1.1에서 후속.
+- **N-3 (Observation)**: "첫 틱 즉시 anchor" (`cli/main.py:328` `last_anchor_at = time.monotonic() - anchor_interval`) 동작은 dev-spec에 명시되지 않은 개발자 선택. 운영 측면에서 기동 직후 중앙 연결 가시성 확보 목적이며 오남용 위험 없음 → **수용 가능한 범위 내 부가 동작**으로 판단. scope creep은 아님 (데몬 anchor 경로의 초기 상태 값 한 줄).
+
+기존 Round 1 발견 중 리패키징된 항목은 없음(진짜 신규만 등록).
+
+### 2.4 Scope 규율 평가
+
+| 파일 | 변경 라인 | 적정성 |
+|------|----------|--------|
+| `tests/unit/test_upload.py` | +183/-0 | 적정. 2개 신규 테스트(post_audit_anchor, daemon_loop) 및 H-1 테스트 2개 추가. |
+| `src/radivault_gateway/cli/main.py` | +91/-? | C-2 anchor 스케줄러(~60줄), AC-12 status stale 섹션(~15줄), H-1 allow_insecure 전달(1줄). 의도한 3건만 포함. |
+| `src/radivault_gateway/staging/manager.py` | +62/-? | C-1 quarantine_root / quarantine_dir / move_to_quarantine. FR-11 직접 대응. |
+| `tests/unit/test_pipeline_mock.py` | +53/-? | 신규 2 테스트 + 기존 테스트의 `allow_insecure=True` 전파. |
+| `src/radivault_gateway/orchestrator/pipeline.py` | +49/-? | C-1 quarantine 전환, CP-3 3-depth 이관. 목표 외 touch 없음. |
+| `tests/unit/test_cli.py` | +28 | `test_status_shows_stale_row`, `allow_insecure` 전파. |
+| `src/radivault_gateway/upload/client.py` | +18/-? | H-1 validator + warn log만. |
+| `src/radivault_gateway/deid/engine.py` | +10/-? | CP-3 series subdir + reverify rglob. |
+| `src/radivault_gateway/config/schema.py` | +4 | `allow_insecure` 필드 추가만. |
+| `docs/specs/dev-spec-gateway-agent.md` | +2/-2 | 오타 교정만. |
+
+결론: **무허가 리팩터·스코프 이탈 없음**. 모든 변경이 Round 1 권고와 1:1 매핑. 테스트 비율도 훌륭 (211/295 구현 라인에 테스트 추가). 작업 규율 A.
+
+### 2.5 테스트 커버리지 관찰
+
+- **`test_pipeline_quarantines_burned_in_studies`**: 얕지 않음. (a) 파일 시스템(`*.dcm` in quarantine), (b) 파이프라인 summary counters, (c) staging 비어있음, (d) DB row(`reason`, `payload_path`) 전부 assert. AC-8 증빙용으로 충분.
+- **`test_daemon_loop_schedules_anchor`**: CLI 진입(`CliRunner`) + `_build_pipeline` monkey-patch + `httpx.MockTransport` bridge → `start --oneshot` 1회 tick 후 mock central `_anchors/` JSON 페이로드 검증. head_hash 포맷, seq_range 둘 다 assert. AC-19의 본질 요구(인터벌 호출 발생·올바른 head 전달)를 기능 단위로 커버. 단, "시간당" 간격 자체는 60s로 축소(`anchor_interval_seconds: 60`)해 즉시 발화 경로만 테스트 — 인터벌 경과 로직은 간접 검증. 수용 가능.
+- **`test_post_audit_anchor_reaches_mock_central`**: UploadClient 계약만 단독 검증(POST body, anchor_id response). 단위 분리 적절.
+- **`test_upload_client_rejects_http_by_default` / `_accepts_http_with_allow_insecure`**: 양방향 브랜치 + warn 로그 record 검증.
+- **`test_status_shows_stale_row`**: 73h backdate로 실 경계조건 커버, text/JSON 양면 확인.
+- **`test_deid_output_follows_series_depth_layout`**: 각 output path의 parent 이름이 pseudo_series_uids 집합에 포함되는지 단위로 확인. 얕긴 해도 FR-14의 실질적 요구는 충족.
+
+전반적으로 **6개 신규 테스트 모두 행동(behavior) 기반**이며 구현 디테일에 결합되지 않음. shallow smoke 테스트 없음.
+
+### 2.6 Round 2 최종 판정
+
+**PASS with minor issues** (병합 가능)
+- Round 1 Critical 2건 및 High/Medium 3건 모두 RESOLVED, 증거 확보.
+- 유일한 open 항목은 Low 문서 drift 1건(N-1: design-spec 113111 잔존).
+- Round 1에서 이월된 Should-fix(AC-2 테스트, AC-28/29 CI/trivy, AC-31 README, H-2/M-1/M-2) 및 오늘 신규 발견한 N-1은 **v0.1.1 후속**으로 분리 처리 권고 — v0.1 MVP 병합·배포는 차단 사유 없음.
+
+---
+
+### NEXT_STEP (Round 2)
+- 완료 산출물: `docs/qa/qa-report-gateway-agent.md` (Round 2 섹션 추가)
+- 판정: **PASS with minor issues**
+- Critical 이슈: 0건 (Round 1 C-1, C-2 RESOLVED)
+- Minor 이슈: 1건 — (N-1) design-spec:422 `113111` 잔존 (문서 drift)
+- 제안 다음 단계:
+  - PASS with minor → **@marketer** 런칭 콘텐츠 준비 병렬 가능.
+  - **@developer** N-1 doc-only patch (design-spec 422) 머지 후 처리 가능. v0.1.1 backlog에 Round 1 Should-fix 5건 + N-1 묶어 이관.
+- Kyle 결정 필요 사항:
+  1. AC-28 CI workflow / AC-29 trivy를 v0.1 필수 → v0.1.1 이월로 공식 승인할지.
+  2. Round 1 Medium 보안 가드(H-2 PACS Basic auth 로그 필터, M-1 Linux 0600 enforce, M-2 secret __repr__)의 v0.1.1 타임라인.

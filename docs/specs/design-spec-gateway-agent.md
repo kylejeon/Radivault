@@ -419,7 +419,7 @@ deid:
   retain_options:
     longitudinal_dates: true                    # DCM 113107
     patient_characteristics: true               # DCM 113108
-    clean_descriptors: true                     # DCM 113111
+    clean_descriptors: true                     # DCM 113105
     clean_graphics: true
     safe_private: false                         # v0.1은 false 고정
     uids: false                                 # UID는 항상 가명화 (변경 금지)
