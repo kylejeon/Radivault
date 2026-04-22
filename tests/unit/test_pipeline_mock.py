@@ -254,3 +254,22 @@ def test_pipeline_quarantines_burned_in_studies(make_synthetic_study, tmp_path, 
     assert not any(
         p.name.startswith("1.2") for p in Path(os.environ["MOCK_CENTRAL_DUMP"]).glob("*")
     )
+
+    # FR-11 / AC-8: evidence is preserved in quarantine/, not deleted.
+    quarantine_root = Path(cfg.staging.root).parent / "quarantine"
+    assert quarantine_root.exists(), "quarantine root must exist"
+    # Exactly one quarantined study directory should be present.
+    quarantined_dirs = [p for p in quarantine_root.iterdir() if p.is_dir()]
+    assert len(quarantined_dirs) == 1
+    dcm_files = list(quarantined_dirs[0].glob("*.dcm"))
+    assert dcm_files, "quarantined study must retain its DICOM files"
+    # staging/ must be clean for this study.
+    staging_root = Path(cfg.staging.root)
+    assert not any(p.is_dir() for p in staging_root.iterdir()), (
+        "staging must not contain quarantined artifacts"
+    )
+    # StateDB.add_quarantine row must exist with the payload path.
+    row = db._conn.execute("SELECT reason, payload_path FROM quarantine").fetchone()
+    assert row is not None
+    assert row["reason"].startswith("burned_in_annotation")
+    assert Path(row["payload_path"]).exists()

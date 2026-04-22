@@ -190,20 +190,39 @@ class Pipeline:
                 deid_result = self._deid.deidentify_study(fetch_dir, staging_dir)
             except QuarantineRequired as exc:
                 pseudo_uid = None
+                qid = f"quarantine_{_short_hash(original_uid)}"
+                # FR-11 / AC-8: preserve the offending artifacts in the
+                # quarantine directory rather than deleting them. We move
+                # the original fetch_dir contents (pre-deid) so a DPO review
+                # can inspect the exact evidence. The partial de-id staging_dir
+                # (if any) is discarded because it was never a completed de-id.
+                quarantine_path = self._staging.move_to_quarantine(fetch_dir, qid)
                 self._db.upsert_study_job(
-                    f"quarantine_{_short_hash(original_uid)}",
+                    qid,
                     state=StudyState.QUARANTINED,
                     modalities=study.modalities_in_study,
+                )
+                self._db.add_quarantine(
+                    qid,
+                    reason=f"burned_in_annotation:{exc.reason}",
+                    payload_path=str(quarantine_path),
                 )
                 self._audit.append(
                     "quarantine.flagged",
                     meta={
                         "reason": exc.reason,
                         "n_files": len(exc.offending_sops),
+                        "quarantine_path": str(quarantine_path),
                     },
                 )
-                log.warning("quarantine", extra={"reason": exc.reason})
+                log.warning(
+                    "quarantine",
+                    extra={"reason": exc.reason, "quarantine_path": str(quarantine_path)},
+                )
                 shutil.rmtree(staging_dir, ignore_errors=True)
+                # fetch_dir was consumed by move_to_quarantine; prevent the
+                # finally-block rmtree from touching it.
+                fetch_dir = None
                 return StudyOutcome(
                     original_study_uid=original_uid,
                     pseudo_study_uid=None,
@@ -243,10 +262,17 @@ class Pipeline:
             # FR-13 reverify
             reverify = self._deid.reverify(staging_dir)
             if not reverify.ok:
+                # Per dev-spec §8.2 move the partially de-id'd artifacts into
+                # the quarantine directory (not staging) so operators can review
+                # what slipped past the Annex E rules without deleting evidence.
+                quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
                 self._audit.append(
                     "deid.reverify_failed",
                     target={"pseudo_study_uid": pseudo_uid},
-                    meta={"n_offending": len(reverify.offending)},
+                    meta={
+                        "n_offending": len(reverify.offending),
+                        "quarantine_path": str(quarantine_path),
+                    },
                 )
                 self._db.upsert_study_job(
                     pseudo_uid,
@@ -255,7 +281,11 @@ class Pipeline:
                     n_instances=deid_result.n_instances,
                     n_bytes=deid_result.n_bytes,
                 )
-                shutil.rmtree(staging_dir, ignore_errors=True)
+                self._db.add_quarantine(
+                    pseudo_uid,
+                    reason="reverify_failed",
+                    payload_path=str(quarantine_path),
+                )
                 return StudyOutcome(
                     original_study_uid=original_uid,
                     pseudo_study_uid=pseudo_uid,
