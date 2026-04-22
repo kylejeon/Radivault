@@ -68,7 +68,12 @@ docs/research/  docs/specs/dev-spec-*   docs/specs/design-spec-*      code (clau
 - `main` 머지는 CEO 수동.
 - 하나의 기능 개발 중에는 하나의 커밋 메시지 컨벤션 유지.
 
-## 8. 참조
+## 8. 에이전트 정의 위치
+
+- 서브에이전트 파일: [.claude/agents/](../.claude/agents/)
+- 오케스트레이션 가이드: [.claude/agents/README.md](../.claude/agents/README.md)
+
+## 9. 참조
 
 - [CLAUDE.md](../CLAUDE.md) — 프로젝트 규칙
 - [PRD](../docs/prd.md)

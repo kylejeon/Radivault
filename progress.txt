@@ -1,7 +1,7 @@
 RadiVault (K-MedData) 진행 기록
 ================================
 
-## 2026-04-22 — Session 1 (Claude)
+## 2026-04-22 — Session 1 (Claude, main 부트스트랩)
 
 ### 뭘 했나
 Phase 1 리서치 완료 상태에서, CLAUDE.md가 참조하는 기반 문서와 에이전트 파이프라인 템플릿을 새로 생성.
@@ -18,21 +18,49 @@ Phase 1 리서치 완료 상태에서, CLAUDE.md가 참조하는 기반 문서�
 ### 어디까지 됐나
 - Phase 1 "Research" 산출물 정리 완료.
 - Phase 2 "Planning" 진입을 위한 기반 문서 전부 준비 완료.
-- 기술 스택은 의도적으로 미확정 (PRD §9, ARCHITECTURE §9).
-- 코드 작업은 아직 1줄도 없음 — claude 브랜치 분기 후 착수 예정.
+- main 최초 커밋 1a9bcc9 생성, claude 브랜치 분기 완료.
+
+## 2026-04-22 — Session 2 (Claude, 에이전트 팀 구축, on claude branch)
+
+### 뭘 했나
+CLAUDE.md의 6-Phase 파이프라인에 1:1 대응하는 Claude Code 서브에이전트 6개를 `.claude/agents/`에 생성.
+
+- .claude/agents/researcher.md — Phase 1 리서치
+- .claude/agents/planner.md — Phase 2 개발지시서
+- .claude/agents/designer.md — Phase 3 디자인 명세
+- .claude/agents/developer.md — Phase 4 코드 구현 (claude 브랜치 전용)
+- .claude/agents/qa.md — Phase 5 검수·보안·컴플라이언스
+- .claude/agents/marketer.md — Phase 6 B2B 세일즈·런칭 콘텐츠
+- .claude/agents/README.md — 오케스트레이션 가이드 (핸드오프 프로토콜·병렬 규칙·흐름 예시)
+- _template/pipeline-guide.md §8 추가 — 에이전트 정의 위치 링크
+
+### 유기적 협업 설계
+Claude 서브에이전트는 서로를 직접 호출할 수 없으므로, 메인 Claude 세션이 오케스트레이터 역할. 각 에이전트는:
+1. 선행 산출물 필수 읽기 (없으면 이전 단계 요청 리턴)
+2. feature-slug 일관성 유지 (dev-spec ↔ design-spec ↔ qa-report)
+3. 표준 핸드오프 블록(NEXT_STEP) 출력 — 메인이 다음 에이전트 호출
+
+### 도구 권한 (최소 권한 원칙)
+- researcher: Read/Write/Grep/Glob/WebSearch/WebFetch/Bash(find용)
+- planner, designer: Read/Write/Grep/Glob (순수 스펙 작성)
+- developer: Read/Write/Edit/Bash/Grep/Glob (풀 코딩)
+- qa: Read/Bash/Grep/Glob/Write (검수만, 코드 수정 금지)
+- marketer: Read/Write/WebSearch/WebFetch/Grep/Glob
+- 전원: main 브랜치 접근·git push·파일 삭제 금지 룰 시스템 프롬프트에 명시
+
+### 어디까지 됐나
+- 부트스트랩(문서 + 에이전트) 완료. 이제 Phase 2 "Planning" 실제 착수 가능.
+- 모든 에이전트 정의가 claude 브랜치 위에 있으며 main은 bootstrap 커밋 1개만 존재.
 
 ### 다음에 뭘 하나
 다음 세션 우선순위 (Kyle 결정 필요):
 
-1. **@planner 착수 대상 결정** — Phase 1 핵심 모듈 중 어느 dev-spec을 먼저 쓸지:
-   - (a) Gateway Agent (on-premise Docker, PACS 연동)
-   - (b) De-ID Engine (익명화 파이프라인)
-   - (c) Metadata Index DB (중앙 인덱스 스키마)
-2. **기술 스택 결정** — dev-spec 착수 전 또는 초안 작성 중에 Kyle과 확정.
-3. **파일럿 병원 물색 전략** — 비기술 트랙. 법률 자문·병원 접근·계약서 템플릿 준비.
-4. **PRD §11 오픈 퀘스천 해소** — 프로젝트명 확정, 법률 자문 법인 선정, 파트너십 vs 직판 채널.
+1. **첫 dev-spec 착수 대상 결정** — Gateway Agent / De-ID Engine / Metadata Index DB 중.
+2. **기술 스택 확정 타이밍** — dev-spec 착수 전 또는 초안 작성 중.
+3. **파일럿 병원 물색 전략** — 비기술 트랙. 법률 자문·병원 접근·계약서 준비.
+4. **PRD §11 오픈 퀘스천 해소**.
 
 ### 메모
-- 루트에 feature_list.json (빈 파일)이 존재 — 용도 미확인, 건드리지 않음.
-- radivault/ 디렉터리는 Python venv — .gitignore 처리 완료, 삭제하지 않음.
-- 이번 커밋이 main의 최초이자 유일한 커밋. 이후 모든 실제 작업은 claude 브랜치에서.
+- feature_list.json (루트, 빈 파일) — 용도 미확인, 건드리지 않음.
+- radivault/ venv — .gitignore 처리됨.
+- 서브에이전트는 다른 에이전트를 직접 호출 불가 → 메인 대화가 NEXT_STEP 블록을 읽고 수동/자동 라우팅.
