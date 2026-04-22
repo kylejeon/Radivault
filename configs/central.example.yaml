@@ -1,0 +1,54 @@
+# /etc/radivault-central/ingest.yml — example
+# Copy to /etc/radivault-central/ingest.yml and customise per environment.
+
+version: 1
+
+app:
+  env: "dev"
+  api_contract_version: "1"
+  workers: 2
+
+db:
+  dsn: "postgresql+psycopg://central_app:central_app@localhost:5432/central"
+  migration_dsn: "postgresql+psycopg://central_migrator:central_migrator@localhost:5432/central"
+  pool_size: 10
+  max_overflow: 10
+
+redis:
+  url: "redis://localhost:6379/0"
+  idempotency_ttl_seconds: 86400
+
+storage:
+  provider: "local"            # s3 | minio | local
+  endpoint_url: null
+  region: "ap-northeast-2"
+  bucket: "radivault-ingest-dev"
+  kms_key_arn: null
+  force_path_style: true
+  local_root: "/var/lib/radivault-central/objects"
+
+auth:
+  hash_algorithm: "argon2id"
+  argon2:
+    time_cost: 3
+    memory_cost_kib: 65536
+    parallelism: 2
+
+rate_limit:
+  hospital_ingest_per_min: 60
+  hospital_ingest_per_hour: 2000
+  hospital_anchor_per_min: 6
+  ip_global_per_min: 300
+  max_concurrent_uploads_default: 4
+
+observability:
+  log_level: "INFO"
+  json_logs: true
+  otlp_endpoint: null
+  metrics_path: "/metrics"
+  sentry_dsn: null
+
+ops:
+  anchor_lag_warn_seconds: 10800
+  anchor_lag_block_enabled: false
+  max_manifest_bytes: 1048576

@@ -1,0 +1,67 @@
+# Central Ingest — multi-stage image (dev-spec FR-64..FR-69).
+#
+# Stage 1 builds a virtualenv with the [central] extras.
+# Stage 2 runs gunicorn+uvicorn as uid 10001.
+
+############################
+# Stage 1 — builder
+############################
+FROM python:3.11-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+COPY src ./src
+COPY alembic ./alembic
+COPY alembic.ini ./
+COPY configs ./configs
+COPY README.md ./
+
+RUN python -m venv /opt/radivault-venv \
+ && /opt/radivault-venv/bin/pip install --upgrade pip \
+ && /opt/radivault-venv/bin/pip install .[central]
+
+############################
+# Stage 2 — runtime
+############################
+FROM python:3.11-slim-bookworm AS runtime
+
+ARG APP_UID=10001
+ARG APP_GID=10001
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/radivault-venv/bin:${PATH}" \
+    RV_CENTRAL_CONFIG=/etc/radivault-central/ingest.yml
+
+RUN groupadd --system --gid ${APP_GID} radivault \
+ && useradd --system --uid ${APP_UID} --gid ${APP_GID} \
+    --home-dir /var/lib/radivault-central \
+    --shell /usr/sbin/nologin radivault \
+ && mkdir -p /var/lib/radivault-central /etc/radivault-central \
+ && chown -R radivault:radivault /var/lib/radivault-central /etc/radivault-central
+
+COPY --from=builder /opt/radivault-venv /opt/radivault-venv
+COPY --from=builder /build/alembic /opt/radivault-venv/alembic
+COPY --from=builder /build/alembic.ini /opt/radivault-venv/alembic.ini
+COPY --from=builder /build/configs/central.docker.yaml /etc/radivault-central/ingest.yml
+
+USER radivault:radivault
+WORKDIR /var/lib/radivault-central
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=2).read()" || exit 1
+
+ENTRYPOINT ["sh", "-c"]
+CMD ["gunicorn radivault_central.app:app -k uvicorn.workers.UvicornWorker --workers ${WORKERS:-2} --bind 0.0.0.0:8000 --timeout 900 --graceful-timeout 120 --max-requests 1000 --max-requests-jitter 100"]

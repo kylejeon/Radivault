@@ -1,0 +1,93 @@
+# Dev compose stack for Central Ingest (dev-spec FR-67).
+#
+# Brings up postgres + redis + minio + central. Run ``docker compose -f
+# docker-compose.central.yml up -d``. Migrations are applied by the ``central``
+# service on startup via ``ingest-admin migrate up``.
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: central_app
+      POSTGRES_PASSWORD: central_app
+      POSTGRES_DB: central
+    ports:
+      - "5432:5432"
+    volumes:
+      - central_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U central_app -d central"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - central_miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio-setup:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/radivault-ingest-dev || true
+      "
+
+  central:
+    build:
+      context: .
+      dockerfile: Dockerfile.central
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      RV_CENTRAL_CONFIG: /etc/radivault-central/ingest.yml
+      DATABASE_URL: postgresql+psycopg://central_app:central_app@postgres:5432/central
+      MIGRATION_DATABASE_URL: postgresql+psycopg://central_app:central_app@postgres:5432/central
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: radivault-ingest-dev
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_PROVIDER: minio
+      WORKERS: "2"
+
+volumes:
+  central_pgdata:
+  central_miniodata:

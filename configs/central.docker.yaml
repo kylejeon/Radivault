@@ -1,0 +1,49 @@
+# Docker Compose profile — points to sibling services by service name.
+version: 1
+
+app:
+  env: "dev"
+  api_contract_version: "1"
+  workers: 2
+
+db:
+  dsn: "postgresql+psycopg://central_app:central_app@postgres:5432/central"
+  migration_dsn: "postgresql+psycopg://central_migrator:central_migrator@postgres:5432/central"
+  pool_size: 10
+  max_overflow: 10
+
+redis:
+  url: "redis://redis:6379/0"
+  idempotency_ttl_seconds: 86400
+
+storage:
+  provider: "minio"
+  endpoint_url: "http://minio:9000"
+  region: "us-east-1"
+  bucket: "radivault-ingest-dev"
+  force_path_style: true
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin"
+  local_root: "/var/lib/radivault-central/objects"
+
+auth:
+  hash_algorithm: "argon2id"
+  argon2:
+    time_cost: 3
+    memory_cost_kib: 65536
+    parallelism: 2
+
+rate_limit:
+  hospital_ingest_per_min: 60
+  hospital_ingest_per_hour: 2000
+  hospital_anchor_per_min: 6
+  ip_global_per_min: 300
+
+observability:
+  log_level: "INFO"
+  json_logs: true
+
+ops:
+  anchor_lag_warn_seconds: 10800
+  anchor_lag_block_enabled: false
+  max_manifest_bytes: 1048576
