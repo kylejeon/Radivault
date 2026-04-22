@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Request
 from ulid import ULID
 
-from radivault_central.audit.ingest_event import record_ingest_event
+from radivault_central.audit.ingest_event import record_ingest_event, record_rejection
 from radivault_central.auth.middleware import require_hospital
 from radivault_central.db.repository import (
     get_hospital_by_pk,
@@ -19,6 +20,7 @@ from radivault_central.db.repository import (
 )
 from radivault_central.errors import (
     AuthMismatch,
+    CentralError,
     IngestContentType,
     ManifestDuplicate,
     ManifestSchema,
@@ -36,6 +38,34 @@ from radivault_central.telemetry import (
 
 log = logging.getLogger("radivault_central.routers.ingest")
 router = APIRouter()
+
+
+def _peek_gateway_id(raw_manifest: bytes | None) -> str | None:
+    """Best-effort gateway_id extraction — no PHI, no exceptions."""
+    if not raw_manifest:
+        return None
+    try:
+        decoded = json.loads(raw_manifest.decode("utf-8"))
+    except Exception:
+        return None
+    val = decoded.get("gateway_id") if isinstance(decoded, dict) else None
+    if isinstance(val, str) and val:
+        return val[:64]
+    return None
+
+
+def _peek_pseudo_study_uid(raw_manifest: bytes | None) -> str | None:
+    """Best-effort pseudo_study_uid extraction (already PHI-safe by construction)."""
+    if not raw_manifest:
+        return None
+    try:
+        decoded = json.loads(raw_manifest.decode("utf-8"))
+    except Exception:
+        return None
+    val = decoded.get("pseudo_study_uid") if isinstance(decoded, dict) else None
+    if isinstance(val, str) and val:
+        return val[:256]
+    return None
 
 
 @router.post("/v1/ingest/studies", status_code=201)
@@ -61,74 +91,92 @@ async def post_ingest(request: Request) -> dict:
     elif isinstance(manifest_upload, str):
         raw_manifest = manifest_upload.encode("utf-8")
     else:  # pragma: no cover
-        raise ManifestSchema(detail=f"manifest part unrecognised type: {type(manifest_upload).__name__}")
+        raise ManifestSchema(
+            detail=f"manifest part unrecognised type: {type(manifest_upload).__name__}"
+        )
 
     hospital_pk, hospital_id = require_hospital(request)
     session_factory = request.app.state.session_factory
     store = request.app.state.object_store
     env = request.app.state.env
+    request_id = getattr(request.state, "request_id", "unknown")
 
-    # Load hospital row + validate.
-    with session_factory() as session:
-        hospital = get_hospital_by_pk(session, hospital_pk)
-        if hospital is None:
-            raise AuthMismatch(detail="hospital row missing")
-        validator = ManifestValidator(
-            hospital=hospital,
-            max_manifest_bytes=request.app.state.max_manifest_bytes,
-        )
-        try:
-            manifest = validator.parse_and_validate(raw_manifest)
-        except Exception as exc:
-            code = getattr(exc, "code", "ERR_MANIFEST_SCHEMA")
-            MANIFEST_REJECTIONS.labels(hospital_id=hospital_id, error_code=code).inc()
-            INGEST_REQUESTS.labels(hospital_id=hospital_id, status="rejected").inc()
-            raise
-        if manifest.hospital_id != hospital_id:
-            raise AuthMismatch(
-                detail=(
-                    f"manifest.hospital_id={manifest.hospital_id!r} "
-                    f"!= token.hospital_id={hospital_id!r}"
-                )
-            )
-        if study_exists(session, manifest.pseudo_study_uid):
-            INGEST_REQUESTS.labels(hospital_id=hospital_id, status="rejected").inc()
-            raise ManifestDuplicate(detail=f"study already ingested: {manifest.pseudo_study_uid}")
-
-    # Read and validate file payloads before we touch storage.
-    started = time.time()
-    expected_map = {f.filename: f for f in manifest.files}
+    # FR-56: every rejected preflight must land as one ``ingest.rejected`` row
+    # in ``audit_ingest_event``. We funnel every preflight failure through a
+    # single try/except that calls ``record_rejection`` *before* re-raising.
+    # The audit write carries only error_code / request_id / hospital_pk /
+    # pseudo_study_uid — no PHI, no manifest body.
+    manifest = None
     file_bodies: list[tuple[str, bytes, str]] = []  # (filename, data, sha256)
     total_received = 0
-    for upload in files:
-        if not hasattr(upload, "read"):
-            raise ManifestSchema(detail=f"unexpected non-file part: {type(upload).__name__}")
-        data = await upload.read()
-        if isinstance(data, str):
-            data = data.encode("utf-8")
-        digest = hashlib.sha256(data).hexdigest()
-        expected = expected_map.get(upload.filename)
-        if expected is None or expected.sha256.lower() != digest.lower():
-            MANIFEST_REJECTIONS.labels(hospital_id=hospital_id, error_code="ERR_MANIFEST_SHA256").inc()
-            INGEST_REQUESTS.labels(hospital_id=hospital_id, status="rejected").inc()
-            raise ManifestSha256(
-                detail=f"sha256 mismatch for {upload.filename}",
+    started = time.time()
+    try:
+        # Load hospital row + validate manifest.
+        with session_factory() as session:
+            hospital = get_hospital_by_pk(session, hospital_pk)
+            if hospital is None:
+                raise AuthMismatch(detail="hospital row missing")
+            validator = ManifestValidator(
+                hospital=hospital,
+                max_manifest_bytes=request.app.state.max_manifest_bytes,
             )
-        file_bodies.append((upload.filename, data, digest))
-        total_received += len(data)
+            manifest = validator.parse_and_validate(raw_manifest)
+            if manifest.hospital_id != hospital_id:
+                raise AuthMismatch(
+                    detail=(
+                        f"manifest.hospital_id={manifest.hospital_id!r} "
+                        f"!= token.hospital_id={hospital_id!r}"
+                    )
+                )
+            if study_exists(session, manifest.pseudo_study_uid):
+                raise ManifestDuplicate(
+                    detail=f"study already ingested: {manifest.pseudo_study_uid}"
+                )
 
-    if len(file_bodies) != len(manifest.files):
-        MANIFEST_REJECTIONS.labels(
-            hospital_id=hospital_id, error_code="ERR_MANIFEST_SHA256"
-        ).inc()
+        # Read and validate file payloads before we touch storage.
+        expected_map = {f.filename: f for f in manifest.files}
+        for upload in files:
+            if not hasattr(upload, "read"):
+                raise ManifestSchema(detail=f"unexpected non-file part: {type(upload).__name__}")
+            data = await upload.read()
+            if isinstance(data, str):
+                data = data.encode("utf-8")
+            digest = hashlib.sha256(data).hexdigest()
+            expected = expected_map.get(upload.filename)
+            if expected is None or expected.sha256.lower() != digest.lower():
+                raise ManifestSha256(detail=f"sha256 mismatch for {upload.filename}")
+            file_bodies.append((upload.filename, data, digest))
+            total_received += len(data)
+
+        if len(file_bodies) != len(manifest.files):
+            raise ManifestSha256(detail="file count mismatch with manifest")
+    except CentralError as exc:
+        code = exc.code
+        MANIFEST_REJECTIONS.labels(hospital_id=hospital_id, error_code=code).inc()
         INGEST_REQUESTS.labels(hospital_id=hospital_id, status="rejected").inc()
-        raise ManifestSha256(detail="file count mismatch with manifest")
+        # Prefer manifest's parsed fields when available; fall back to a
+        # best-effort peek of the raw bytes. Never echo the full body.
+        gateway_id = manifest.gateway_id if manifest is not None else _peek_gateway_id(raw_manifest)
+        study_uid = (
+            manifest.pseudo_study_uid
+            if manifest is not None
+            else _peek_pseudo_study_uid(raw_manifest)
+        )
+        record_rejection(
+            session_factory,
+            hospital_pk=hospital_pk,
+            gateway_id=gateway_id,
+            status_code=exc.status_code,
+            error_code=code,
+            request_id=request_id,
+            pseudo_study_uid=study_uid,
+        )
+        raise
 
     central_job_id = f"ingest_{ULID()!s}"
     hash2 = hashlib.sha256(manifest.pseudo_study_uid.encode()).hexdigest()[:2]
     key_prefix = (
-        f"{env}/{hash2}/{hospital_id}/"
-        f"{manifest.pseudo_study_uid}/{manifest.pseudo_study_uid}"
+        f"{env}/{hash2}/{hospital_id}/{manifest.pseudo_study_uid}/{manifest.pseudo_study_uid}"
     )
     uploaded_keys: list[str] = []
     try:
@@ -192,7 +240,7 @@ async def post_ingest(request: Request) -> dict:
             gateway_id=manifest.gateway_id,
             event="ingest.accepted",
             status_code=201,
-            request_id=getattr(request.state, "request_id", "unknown"),
+            request_id=request_id,
             central_job_id=central_job_id,
             pseudo_study_uid=manifest.pseudo_study_uid,
             bytes_received=total_received,
