@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -116,6 +118,154 @@ def test_upload_client_happy_path(mock_central_client, tmp_path):
     result = upload.upload_study(manifest, [f1, f2])
     assert result.job_id.startswith("ingest_")
     client.close()
+
+
+def test_post_audit_anchor_reaches_mock_central(mock_central_client, tmp_path):
+    """FR-25 / AC-19: UploadClient.post_audit_anchor must deliver the head
+    hash + seq range to the central ``/v1/audit/anchor`` endpoint."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        resp = mock_central_client.request(
+            request.method,
+            request.url.path,
+            content=request.content,
+            headers=dict(request.headers),
+            params=dict(request.url.params),
+        )
+        return httpx.Response(
+            status_code=resp.status_code,
+            headers=dict(resp.headers),
+            content=resp.content,
+        )
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "Bearer tok-abc"},
+        base_url="http://testserver",
+    )
+    upload = UploadClient("http://testserver", upload_token="tok-abc", max_retries=1)
+    upload._client = client  # type: ignore[assignment]
+    result = upload.post_audit_anchor(
+        gateway_id="gw_x",
+        seq_range=(0, 5),
+        head_hash="sha256:" + "a" * 64,
+    )
+    assert result.get("anchor_id", "").startswith("anc_")
+    # The mock central persists anchor requests under _anchors/.
+    dump = Path(os.environ["MOCK_CENTRAL_DUMP"]) / "_anchors"
+    assert dump.exists()
+    stored = sorted(dump.glob("*.json"))
+    assert stored, "anchor payload must be dumped by mock central"
+    body = json.loads(stored[-1].read_text())
+    assert body["head_hash"] == "sha256:" + "a" * 64
+    assert body["seq_range"] == [0, 5]
+    assert body["gateway_id"] == "gw_x"
+    client.close()
+
+
+def test_daemon_loop_schedules_anchor(mock_central_client, tmp_path, monkeypatch):
+    """FR-25 scheduler: `start --oneshot` with short anchor interval must POST
+    a head hash reflecting the local audit chain."""
+    # Build minimal config pointing at mock central (via MockTransport below).
+    import yaml
+    from click.testing import CliRunner
+
+    from radivault_gateway.cli.main import cli
+
+    salt_file = tmp_path / "salt"
+    salt_file.write_text("0123456789abcdef" * 2)
+    cfg_data = {
+        "version": 1,
+        "agent": {
+            "gateway_id": "gw_anchor",
+            "hospital_id": "hosp_a",
+            "org_root_oid": "2.25.140737488355328",
+        },
+        "pacs": {
+            "base_url": "https://pacs.example/dicom-web",
+            "auth": {"type": "bearer", "token": "tok"},
+            "max_concurrency": 2,
+            "poll_interval_seconds": 60,
+        },
+        "deid": {
+            "ruleset_version": "v0.1.0",
+            "salt": f"${{file:{salt_file}}}",
+            "salt_version": 1,
+        },
+        "staging": {
+            "root": str(tmp_path / "stg"),
+            "retention_hours": 72,
+            "max_disk_pct": 99,
+        },
+        "state": {"db_path": str(tmp_path / "state.sqlite3")},
+        "audit": {
+            "path": str(tmp_path / "audit.log"),
+            "anchor_interval_seconds": 60,
+        },
+        "central": {"base_url": "http://testserver", "upload_token": "tok-abc"},
+        "logging": {"level": "INFO", "json": True},
+    }
+    cfg_path = tmp_path / "gateway.yml"
+    cfg_path.write_text(yaml.safe_dump(cfg_data))
+
+    # Seed the audit log with one event so head_seq >= 0.
+    from radivault_gateway.audit import AuditLogger
+
+    seed = AuditLogger(tmp_path / "audit.log", gateway_id="gw_anchor")
+    seed.append("agent.started")
+
+    # Patch pipeline to skip PACS + upload and stub anchor to use MockTransport.
+    from radivault_gateway.cli import main as cli_main
+
+    def _bridge(request: httpx.Request) -> httpx.Response:
+        resp = mock_central_client.request(
+            request.method,
+            request.url.path,
+            content=request.content,
+            headers=dict(request.headers),
+            params=dict(request.url.params),
+        )
+        return httpx.Response(
+            status_code=resp.status_code,
+            headers=dict(resp.headers),
+            content=resp.content,
+        )
+
+    original_build = cli_main._build_pipeline
+
+    def _build_with_stub(cfg):
+        pipeline = original_build(cfg)
+        # Replace the upload client's transport with the mock central bridge.
+        pipeline._upload._client = httpx.Client(
+            transport=httpx.MockTransport(_bridge),
+            headers={"Authorization": "Bearer tok-abc"},
+            base_url="http://testserver",
+        )
+        # Stub PACS query to return zero studies so run_once just ticks once.
+        pipeline._pacs.query_studies = lambda *a, **kw: []  # type: ignore[assignment]
+        return pipeline
+
+    monkeypatch.setattr(cli_main, "_build_pipeline", _build_with_stub)
+
+    # Force the anchor interval check to fire on first tick by pretending the
+    # last anchor was long ago: we use --oneshot so the main loop exits after
+    # one iteration, which triggers the post-tick anchor branch.
+    runner = CliRunner()
+    r = runner.invoke(cli, ["-c", str(cfg_path), "start", "--oneshot"])
+    assert r.exit_code == 0, r.output
+
+    # Assert mock central received at least one anchor payload with our head.
+    dump = Path(os.environ["MOCK_CENTRAL_DUMP"]) / "_anchors"
+    assert dump.exists(), r.output
+    anchors = sorted(dump.glob("*.json"))
+    assert anchors, f"no anchor received. stdout: {r.output}"
+    body = json.loads(anchors[-1].read_text())
+    assert body["gateway_id"] == "gw_anchor"
+    # head_hash should match the audit logger's latest head (one event seeded
+    # plus whatever run_once appended) — at minimum, non-zero and well formed.
+    assert body["head_hash"].startswith("sha256:")
+    # seq_range end must be >= 0 (we seeded seq=0).
+    assert body["seq_range"][1] >= 0
 
 
 def test_upload_client_permanent_400_not_retried(monkeypatch, tmp_path):

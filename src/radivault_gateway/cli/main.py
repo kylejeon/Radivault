@@ -302,8 +302,16 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
         json_output=cfg.logging.json_output,
     )
     interval = poll_interval or cfg.pacs.poll_interval_seconds
+    anchor_interval = cfg.audit.anchor_interval_seconds
     pipeline = _build_pipeline(cfg)
-    click.echo(f"[radivault-gateway] starting, poll_interval={interval}s")
+    # Reuse pipeline's upload client + audit logger for anchor scheduling so
+    # head_hash always reflects the most recent chain state.
+    audit_logger = pipeline._audit
+    upload_client = pipeline._upload
+    click.echo(
+        f"[radivault-gateway] starting, poll_interval={interval}s "
+        f"anchor_interval={anchor_interval}s"
+    )
     import signal
     import time
 
@@ -315,12 +323,62 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
+    # Anchor once immediately after the first tick so operators see central
+    # connectivity at startup; subsequent anchors follow anchor_interval cadence.
+    last_anchor_at = time.monotonic() - anchor_interval
+
+    def _maybe_anchor() -> None:
+        """FR-25 / AC-19: post hourly audit anchor to central.
+
+        Failure to anchor must not crash the daemon; we log WARN and let the
+        next tick retry with a merged seq range.
+        """
+        head_seq = audit_logger.head_seq
+        head_hash = audit_logger.head_hash
+        if head_seq < 0:
+            # No events yet — nothing to anchor.
+            return
+        seq_range = (0, head_seq)
+        try:
+            resp = upload_client.post_audit_anchor(
+                gateway_id=cfg.agent.gateway_id,
+                seq_range=seq_range,
+                head_hash=head_hash,
+            )
+        except Exception as exc:
+            log_record = getattr(exc, "status_code", None)
+            click.echo(
+                f"[radivault-gateway] WARN anchor failed status={log_record} error={exc}",
+                err=True,
+            )
+            audit_logger.append(
+                "audit.anchor.failed",
+                meta={"error": str(exc), "status_code": log_record},
+            )
+            return
+        anchor_id = resp.get("anchor_id") if isinstance(resp, dict) else None
+        click.echo(
+            f"[radivault-gateway] INFO anchor ok seq_range={seq_range} "
+            f"head_hash={head_hash[:23]}... anchor_id={anchor_id}"
+        )
+        audit_logger.append(
+            "audit.anchor.uploaded",
+            meta={
+                "seq_range": [seq_range[0], seq_range[1]],
+                "head_hash": head_hash,
+                "anchor_id": anchor_id,
+            },
+        )
+
     while not stopping["flag"]:
         summary = pipeline.run_once()
         click.echo(
             f"tick uploaded={summary.uploaded} quarantined={summary.quarantined} "
             f"failed={summary.failed}"
         )
+        if time.monotonic() - last_anchor_at >= anchor_interval:
+            _maybe_anchor()
+            last_anchor_at = time.monotonic()
         if oneshot:
             break
         # Sleep in small slices so signals land within ~1s.
@@ -328,6 +386,9 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
         while slept < interval and not stopping["flag"]:
             time.sleep(1)
             slept += 1
+            if time.monotonic() - last_anchor_at >= anchor_interval:
+                _maybe_anchor()
+                last_anchor_at = time.monotonic()
     click.echo("[radivault-gateway] stopped")
 
 
