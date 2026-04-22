@@ -242,7 +242,13 @@ class DeidEngine:
             pseudo_series_uids.add(new_series)
             pseudo_sop_uids.append(new_sop)
 
-            out_path = output_dir / f"{new_sop}.dcm"
+            # FR-14 canonical layout: {root}/{pseudo_study_uid}/
+            #   {pseudo_series_uid}/{pseudo_sop_uid}.dcm
+            # The de-id output is series-nested; the pipeline moves the
+            # per-series subtree intact into the staging root.
+            series_dir = output_dir / new_series
+            series_dir.mkdir(parents=True, exist_ok=True)
+            out_path = series_dir / f"{new_sop}.dcm"
             ds.save_as(out_path, enforce_file_format=False)
             output_paths.append(out_path)
             total_bytes += out_path.stat().st_size
@@ -269,7 +275,7 @@ class DeidEngine:
         """
         offending: list[tuple[int, int, str]] = []
         patient_name_tag = (0x0010, 0x0010)
-        for path in sorted(Path(deided_dir).glob("*.dcm")):
+        for path in sorted(Path(deided_dir).rglob("*.dcm")):
             ds = pydicom.dcmread(path, force=False)
             for (group, element), _action in ANNEX_E_MATRIX.items():
                 if (group, element) == patient_name_tag:

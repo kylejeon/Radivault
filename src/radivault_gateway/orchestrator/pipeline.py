@@ -296,13 +296,18 @@ class Pipeline:
                     deid_ms=deid_ms,
                 )
 
-            # Move from temp to staging root under pseudo_study_uid
+            # FR-14 canonical layout: preserve the series-nested tree the
+            # de-id engine produced under ``{staging_root}/{pseudo_study_uid}/
+            # {pseudo_series_uid}/{pseudo_sop_uid}.dcm``.
             final_staging = self._staging.ensure_study_dir(pseudo_uid)
             for path in deid_result.output_paths:
-                target = final_staging / path.name
+                series_name = path.parent.name
+                target_dir = final_staging / series_name
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target = target_dir / path.name
                 shutil.move(str(path), str(target))
             shutil.rmtree(staging_dir, ignore_errors=True)
-            staged_files = sorted(final_staging.glob("*.dcm"))
+            staged_files = sorted(final_staging.rglob("*.dcm"))
             self._audit.append(
                 "staging.written",
                 target={"pseudo_study_uid": pseudo_uid},

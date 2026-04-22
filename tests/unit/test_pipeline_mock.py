@@ -192,6 +192,26 @@ def test_pipeline_happy_path_end_to_end(make_synthetic_study, tmp_path, monkeypa
     assert b"1.2.3.FAKE" not in (dump / "manifest.json").read_bytes()
 
 
+def test_deid_output_follows_series_depth_layout(make_synthetic_study, tmp_path):
+    """FR-14 / CP-3: de-id output must be organised under
+    ``{out}/{pseudo_series_uid}/{pseudo_sop_uid}.dcm`` so the pipeline can
+    preserve a 3-depth staging tree."""
+    study = make_synthetic_study(n_instances=2, dirname="layout")
+    db = StateDB(tmp_path / "state.sqlite3")
+    db.set_agent_identity(gateway_id="gw_t", hospital_id="h", org_root_oid="2.25.1", salt_version=1)
+    engine = DeidEngine(
+        salt="salt_" + "a" * 16,
+        salt_version=1,
+        org_root_oid="2.25.140737488355328",
+        state_db=db,
+    )
+    result = engine.deidentify_study(study, tmp_path / "out")
+    # Each output path must live inside a series-named subdirectory.
+    for path in result.output_paths:
+        assert path.parent.name in result.pseudo_series_uids
+        assert path.parent.parent == tmp_path / "out"
+
+
 def test_pipeline_quarantines_burned_in_studies(make_synthetic_study, tmp_path, monkeypatch):
     monkeypatch.setenv("MOCK_CENTRAL_DUMP", str(tmp_path / "dump"))
     monkeypatch.setenv("MOCK_CENTRAL_TOKEN", "tok-abc")
