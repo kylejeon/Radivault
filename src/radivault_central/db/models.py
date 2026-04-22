@@ -1,0 +1,272 @@
+"""SQLAlchemy ORM for dev-spec §6.2 / §6.3 / §6.4 schema.
+
+Notes on spec deviations (documented intentionally — dev-spec §9.4 "implementer
+may use psycopg sync"):
+
+- SQLAlchemy 2.0 **sync** is used (psycopg v3) instead of async asyncpg. The
+  dev-spec itself called this out as an acceptable simplification.
+- Partitioning (PARTITION BY RANGE) is not expressed at the ORM level. The
+  Alembic migration creates plain tables for v0.1; the dev-spec accepts this
+  for SQLite/Postgres-lite test environments while still running the same code
+  against a partitioned Postgres schema in production.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
+
+# SQLite does not autoincrement BIGINT; use Integer on sqlite via variant so
+# tests run against an in-memory DB while prod still uses 64-bit identities.
+BigId = BigInteger().with_variant(Integer(), "sqlite")
+
+
+class Base(DeclarativeBase):
+    """Common declarative base for Central Ingest ORM classes."""
+
+
+def _json_type() -> type:
+    """JSONB on Postgres, generic JSON elsewhere (SQLite test runs)."""
+    return JSONB().with_variant(JSON(), "sqlite")
+
+
+class Hospital(Base):
+    __tablename__ = "hospital"
+    __table_args__ = (Index("idx_hospital_active", "active"),)
+
+    hospital_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    hospital_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    region: Mapped[str] = mapped_column(String, nullable=False, default="KR-SE")
+    salt_version_current: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    allowed_ruleset_versions: Mapped[list | None] = mapped_column(_json_type())
+    max_study_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=21474836480
+    )  # 20 GB
+    max_instances_per_study: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
+    max_concurrent_uploads: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    daily_byte_quota: Mapped[int | None] = mapped_column(BigInteger)
+    monthly_byte_quota: Mapped[int | None] = mapped_column(BigInteger)
+    enrolled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    tokens: Mapped[list[AuthToken]] = relationship(
+        back_populates="hospital", cascade="all, delete-orphan"
+    )
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_token"
+    __table_args__ = (
+        UniqueConstraint("token_kid", name="uq_auth_token_kid"),
+        Index(
+            "idx_auth_token_hospital_active",
+            "hospital_pk",
+        ),
+    )
+
+    token_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
+    )
+    token_kid: Mapped[str] = mapped_column(String, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(String)
+
+    hospital: Mapped[Hospital] = relationship(back_populates="tokens")
+
+
+class PatientPseudo(Base):
+    __tablename__ = "patient_pseudo"
+    __table_args__ = (
+        UniqueConstraint("hospital_pk", "pseudo_patient_key", name="uq_patient_pseudo_hp"),
+    )
+
+    patient_pseudo_pk: Mapped[int] = mapped_column(
+        BigId, primary_key=True, autoincrement=True
+    )
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
+    )
+    pseudo_patient_key: Mapped[str] = mapped_column(String, nullable=False)
+    age_bucket: Mapped[int | None] = mapped_column(SmallInteger)
+    sex: Mapped[str | None] = mapped_column(String(1))
+    offset_days_hash: Mapped[str | None] = mapped_column(String)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Study(Base):
+    __tablename__ = "study"
+    __table_args__ = (
+        Index("idx_study_modality_bodypart", "modality", "body_part"),
+        Index("idx_study_date", "study_date_shifted"),
+        Index("idx_study_patient", "patient_pseudo_pk"),
+        Index("idx_study_hospital_ingested", "hospital_pk", "ingested_at"),
+        Index("idx_study_manufacturer", "manufacturer"),
+    )
+
+    study_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    pseudo_study_uid: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
+    )
+    patient_pseudo_pk: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("patient_pseudo.patient_pseudo_pk")
+    )
+    modality: Mapped[str | None] = mapped_column(String)
+    body_part: Mapped[str | None] = mapped_column(String)
+    study_date_shifted: Mapped[datetime | None] = mapped_column(DateTime)
+    manufacturer: Mapped[str | None] = mapped_column(String)
+    model_name: Mapped[str | None] = mapped_column(String)
+    n_instances: Mapped[int] = mapped_column(Integer, nullable=False)
+    n_series: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    raw_dicom_tags: Mapped[dict | None] = mapped_column(_json_type())
+    central_job_id: Mapped[str] = mapped_column(String, nullable=False)
+    gateway_id: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class Series(Base):
+    __tablename__ = "series"
+    __table_args__ = (
+        Index("idx_series_study", "study_pk"),
+        Index("idx_series_modality", "modality"),
+    )
+
+    series_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    study_pk: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    pseudo_series_uid: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    modality: Mapped[str | None] = mapped_column(String)
+    body_part: Mapped[str | None] = mapped_column(String)
+    series_number: Mapped[int | None] = mapped_column(Integer)
+    n_instances: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_dicom_tags: Mapped[dict | None] = mapped_column(_json_type())
+
+
+class Instance(Base):
+    __tablename__ = "instance"
+    __table_args__ = (Index("idx_instance_series", "series_pk"),)
+
+    instance_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    series_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("series.series_pk"), nullable=False
+    )
+    pseudo_sop_uid: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    sop_class_uid: Mapped[str | None] = mapped_column(String)
+    instance_number: Mapped[int | None] = mapped_column(Integer)
+    object_key: Mapped[str] = mapped_column(String, nullable=False)
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+class AuditIngestEvent(Base):
+    __tablename__ = "audit_ingest_event"
+    __table_args__ = (
+        Index("idx_aie_hospital_time", "hospital_pk", "received_at"),
+        Index("idx_aie_event", "event"),
+    )
+
+    event_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
+    )
+    gateway_id: Mapped[str] = mapped_column(String, nullable=False)
+    central_job_id: Mapped[str | None] = mapped_column(String)
+    event: Mapped[str] = mapped_column(String, nullable=False)
+    pseudo_study_uid: Mapped[str | None] = mapped_column(String)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String)
+    request_id: Mapped[str] = mapped_column(String, nullable=False)
+    bytes_received: Mapped[int | None] = mapped_column(BigInteger)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AuditAnchor(Base):
+    __tablename__ = "audit_anchor"
+    __table_args__ = (
+        UniqueConstraint("hospital_pk", "seq_lo", "seq_hi", name="uq_audit_anchor_range"),
+        UniqueConstraint("hospital_pk", "head_hash", name="uq_audit_anchor_hash"),
+        CheckConstraint("seq_lo <= seq_hi", name="ck_audit_anchor_order"),
+        Index("idx_anchor_hospital_time", "hospital_pk", "anchored_at"),
+    )
+
+    anchor_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
+    )
+    gateway_id: Mapped[str] = mapped_column(String, nullable=False)
+    seq_lo: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    seq_hi: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    head_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    anchored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AuditDailyDigest(Base):
+    __tablename__ = "audit_daily_digest"
+    __table_args__ = (
+        UniqueConstraint("digest_date", "hospital_pk", name="uq_audit_daily_digest"),
+    )
+
+    digest_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    digest_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
+    )
+    anchor_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    digest_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    object_lock_key: Mapped[str | None] = mapped_column(String)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class IngestIdempotencyMirror(Base):
+    __tablename__ = "ingest_idempotency_mirror"
+    __table_args__ = (Index("idx_idemp_mirror_time", "first_seen_at"),)
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    hospital_pk: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hospital.hospital_pk"), primary_key=True
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    response_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    response_status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    response_body: Mapped[str | None] = mapped_column(String)
