@@ -1,0 +1,418 @@
+"""Pipeline coordinator — PACS → De-ID → Staging → Upload → Audit.
+
+Implements the flow described in dev-spec §8.1. Single-threaded per-study for
+v0.1; the scheduler calls :meth:`Pipeline.run_once` at each poll tick.
+
+Failure modes mirror §8.2: fetch failures → state=failed_fetch with retry
+bookkeeping; de-id quarantine → state=quarantined with audit record; upload
+failures are surfaced as :class:`UploadError` and the orchestrator records
+``failed_upload`` in the state DB.
+"""
+
+from __future__ import annotations
+
+import logging
+import shutil
+import tempfile
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+from radivault_gateway import __version__
+from radivault_gateway.audit import AuditLogger
+from radivault_gateway.config import GatewayConfig
+from radivault_gateway.deid import DeidEngine, QuarantineRequired
+from radivault_gateway.pacs import DicomWebPacsClient, PacsError, StudySummary
+from radivault_gateway.staging import StagingManager
+from radivault_gateway.state import StateDB, StudyState
+from radivault_gateway.upload import UploadClient, UploadError
+
+
+log = logging.getLogger("radivault.pipeline")
+
+
+@dataclass
+class StudyOutcome:
+    original_study_uid: str
+    pseudo_study_uid: str | None
+    state: StudyState
+    reason: str | None = None
+    duration_ms: int = 0
+    fetch_ms: int = 0
+    deid_ms: int = 0
+    upload_ms: int = 0
+
+
+@dataclass
+class RunSummary:
+    uploaded: int = 0
+    quarantined: int = 0
+    failed: int = 0
+    skipped: int = 0
+    total: int = 0
+    outcomes: list[StudyOutcome] = field(default_factory=list)
+
+
+class Pipeline:
+    def __init__(
+        self,
+        config: GatewayConfig,
+        *,
+        state_db: StateDB,
+        audit_logger: AuditLogger,
+        staging: StagingManager,
+        deid: DeidEngine,
+        pacs: DicomWebPacsClient,
+        upload: UploadClient,
+    ) -> None:
+        self._cfg = config
+        self._db = state_db
+        self._audit = audit_logger
+        self._staging = staging
+        self._deid = deid
+        self._pacs = pacs
+        self._upload = upload
+
+    def run_once(
+        self,
+        *,
+        since: date | None = None,
+        until: date | None = None,
+        dry_run: bool = False,
+        limit: int | None = None,
+    ) -> RunSummary:
+        """Perform one full sync cycle. Returns a summary with per-study outcomes."""
+        summary = RunSummary()
+
+        if self._staging.backpressure_triggered():
+            log.warning(
+                "staging backpressure active; skipping fetch",
+                extra={"usage_pct": round(self._staging.disk_usage_pct(), 1)},
+            )
+            self._audit.append(
+                "staging.backpressure",
+                meta={"usage_pct": round(self._staging.disk_usage_pct(), 1)},
+            )
+            return summary
+
+        today = date.today()
+        if until is None:
+            until = today
+        if since is None:
+            since = today - timedelta(days=self._cfg.pacs.query.lookback_days)
+
+        self._audit.append(
+            "pacs.query",
+            meta={
+                "since": since.isoformat(),
+                "until": until.isoformat(),
+                "modalities": self._cfg.pacs.query.modalities,
+            },
+        )
+        try:
+            studies = self._pacs.query_studies(
+                since, until, modalities=self._cfg.pacs.query.modalities
+            )
+        except PacsError as exc:
+            self._audit.append(
+                "pacs.query.failed",
+                meta={"error": str(exc), "status_code": exc.status_code},
+            )
+            log.error("pacs query failed", extra={"error": str(exc)})
+            summary.failed += 1
+            return summary
+        if limit is not None:
+            studies = studies[:limit]
+        summary.total = len(studies)
+        log.info("pacs query ok", extra={"returned": summary.total})
+
+        for study in studies:
+            outcome = self._process_study(study, dry_run=dry_run)
+            summary.outcomes.append(outcome)
+            if outcome.state == StudyState.UPLOADED:
+                summary.uploaded += 1
+            elif outcome.state == StudyState.QUARANTINED:
+                summary.quarantined += 1
+            elif outcome.state in {
+                StudyState.FAILED_FETCH,
+                StudyState.FAILED_DEID,
+                StudyState.FAILED_REVERIFY,
+                StudyState.FAILED_UPLOAD,
+            }:
+                summary.failed += 1
+            else:
+                summary.skipped += 1
+        return summary
+
+    # ---- study-level orchestration ----
+
+    def _process_study(self, study: StudySummary, *, dry_run: bool) -> StudyOutcome:
+        started = datetime.now()
+        original_uid = study.study_instance_uid
+        pseudo_uid: str | None = None
+        fetch_dir: Path | None = None
+        try:
+            fetch_dir = Path(tempfile.mkdtemp(prefix="radivault_fetch_"))
+            fetch_started = datetime.now()
+            try:
+                fetch = self._pacs.fetch_study(original_uid, fetch_dir)
+            except PacsError as exc:
+                self._audit.append(
+                    "pacs.fetch.failed",
+                    meta={"error": str(exc), "status_code": exc.status_code},
+                    target={"original_study_uid_hash": _short_hash(original_uid)},
+                )
+                return StudyOutcome(
+                    original_study_uid=original_uid,
+                    pseudo_study_uid=None,
+                    state=StudyState.FAILED_FETCH,
+                    reason=str(exc),
+                    duration_ms=_elapsed_ms(started),
+                )
+            fetch_ms = _elapsed_ms(fetch_started)
+            self._audit.append(
+                "pacs.fetch.completed",
+                target={"original_study_uid_hash": _short_hash(original_uid)},
+                meta={
+                    "n_instances": len(fetch.instance_paths),
+                    "bytes": fetch.bytes_total,
+                    "duration_ms": fetch_ms,
+                },
+            )
+
+            # De-ID
+            staging_dir = Path(tempfile.mkdtemp(prefix="radivault_deid_"))
+            self._audit.append(
+                "deid.started",
+                target={"original_study_uid_hash": _short_hash(original_uid)},
+                meta={"n_instances": len(fetch.instance_paths)},
+            )
+            deid_started = datetime.now()
+            try:
+                deid_result = self._deid.deidentify_study(fetch_dir, staging_dir)
+            except QuarantineRequired as exc:
+                pseudo_uid = None
+                self._db.upsert_study_job(
+                    f"quarantine_{_short_hash(original_uid)}",
+                    state=StudyState.QUARANTINED,
+                    modalities=study.modalities_in_study,
+                )
+                self._audit.append(
+                    "quarantine.flagged",
+                    meta={
+                        "reason": exc.reason,
+                        "n_files": len(exc.offending_sops),
+                    },
+                )
+                log.warning("quarantine", extra={"reason": exc.reason})
+                shutil.rmtree(staging_dir, ignore_errors=True)
+                return StudyOutcome(
+                    original_study_uid=original_uid,
+                    pseudo_study_uid=None,
+                    state=StudyState.QUARANTINED,
+                    reason=exc.reason,
+                    duration_ms=_elapsed_ms(started),
+                    fetch_ms=fetch_ms,
+                )
+            except Exception as exc:  # noqa: BLE001 — broad to audit unknowns
+                self._audit.append(
+                    "deid.failed",
+                    meta={"error": str(exc)},
+                )
+                log.exception("deid failed")
+                shutil.rmtree(staging_dir, ignore_errors=True)
+                return StudyOutcome(
+                    original_study_uid=original_uid,
+                    pseudo_study_uid=None,
+                    state=StudyState.FAILED_DEID,
+                    reason=str(exc),
+                    duration_ms=_elapsed_ms(started),
+                    fetch_ms=fetch_ms,
+                )
+            deid_ms = _elapsed_ms(deid_started)
+            pseudo_uid = deid_result.pseudo_study_uid
+            self._audit.append(
+                "deid.completed",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={
+                    "n_instances": deid_result.n_instances,
+                    "ruleset_version": self._cfg.deid.ruleset_version,
+                    "salt_version": self._cfg.deid.salt_version,
+                    "duration_ms": deid_ms,
+                },
+            )
+
+            # FR-13 reverify
+            reverify = self._deid.reverify(staging_dir)
+            if not reverify.ok:
+                self._audit.append(
+                    "deid.reverify_failed",
+                    target={"pseudo_study_uid": pseudo_uid},
+                    meta={"n_offending": len(reverify.offending)},
+                )
+                self._db.upsert_study_job(
+                    pseudo_uid,
+                    state=StudyState.FAILED_REVERIFY,
+                    modalities=study.modalities_in_study,
+                    n_instances=deid_result.n_instances,
+                    n_bytes=deid_result.n_bytes,
+                )
+                shutil.rmtree(staging_dir, ignore_errors=True)
+                return StudyOutcome(
+                    original_study_uid=original_uid,
+                    pseudo_study_uid=pseudo_uid,
+                    state=StudyState.FAILED_REVERIFY,
+                    reason="reverify_failed",
+                    duration_ms=_elapsed_ms(started),
+                    fetch_ms=fetch_ms,
+                    deid_ms=deid_ms,
+                )
+
+            # Move from temp to staging root under pseudo_study_uid
+            final_staging = self._staging.ensure_study_dir(pseudo_uid)
+            for path in deid_result.output_paths:
+                target = final_staging / path.name
+                shutil.move(str(path), str(target))
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            staged_files = sorted(final_staging.glob("*.dcm"))
+            self._audit.append(
+                "staging.written",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={"n_files": len(staged_files)},
+            )
+            self._db.upsert_study_job(
+                pseudo_uid,
+                state=StudyState.DEIDED,
+                modalities=study.modalities_in_study,
+                n_instances=deid_result.n_instances,
+                n_bytes=deid_result.n_bytes,
+            )
+            self._db.mark_state(pseudo_uid, StudyState.DEIDED)
+
+            if dry_run:
+                self._audit.append(
+                    "upload.skipped",
+                    target={"pseudo_study_uid": pseudo_uid},
+                    meta={"reason": "dry_run"},
+                )
+                return StudyOutcome(
+                    original_study_uid=original_uid,
+                    pseudo_study_uid=pseudo_uid,
+                    state=StudyState.DEIDED,
+                    reason="dry_run",
+                    duration_ms=_elapsed_ms(started),
+                    fetch_ms=fetch_ms,
+                    deid_ms=deid_ms,
+                )
+
+            # Upload
+            manifest = self._upload.build_manifest(
+                gateway_id=self._cfg.agent.gateway_id,
+                hospital_id=self._cfg.agent.hospital_id,
+                pseudo_study_uid=pseudo_uid,
+                modalities=study.modalities_in_study,
+                ruleset_version=self._cfg.deid.ruleset_version,
+                salt_version=self._cfg.deid.salt_version,
+                method_codes=_method_codes(self._cfg),
+                dcm_files=staged_files,
+            )
+            self._audit.append(
+                "upload.started",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={"n_files": len(staged_files), "bytes": manifest["total_bytes"]},
+            )
+            self._db.mark_state(pseudo_uid, StudyState.UPLOADING)
+            upload_started = datetime.now()
+            try:
+                result = self._upload.upload_study(manifest, staged_files)
+            except UploadError as exc:
+                self._audit.append(
+                    "upload.failed",
+                    target={"pseudo_study_uid": pseudo_uid},
+                    meta={"error": str(exc), "status_code": exc.status_code},
+                )
+                self._db.mark_state(
+                    pseudo_uid, StudyState.FAILED_UPLOAD, last_error=str(exc)
+                )
+                self._db.schedule_retry(
+                    pseudo_uid,
+                    (datetime.now(tz=timezone.utc) + timedelta(minutes=5)).isoformat(),
+                )
+                return StudyOutcome(
+                    original_study_uid=original_uid,
+                    pseudo_study_uid=pseudo_uid,
+                    state=StudyState.FAILED_UPLOAD,
+                    reason=str(exc),
+                    duration_ms=_elapsed_ms(started),
+                    fetch_ms=fetch_ms,
+                    deid_ms=deid_ms,
+                )
+            upload_ms = _elapsed_ms(upload_started)
+            self._audit.append(
+                "upload.completed",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={
+                    "central_job_id": result.job_id,
+                    "bytes": manifest["total_bytes"],
+                    "duration_ms": upload_ms,
+                },
+            )
+            self._db.upsert_study_job(
+                pseudo_uid,
+                state=StudyState.UPLOADED,
+                modalities=study.modalities_in_study,
+                n_instances=deid_result.n_instances,
+                n_bytes=deid_result.n_bytes,
+                central_job_id=result.job_id,
+            )
+            self._db.mark_state(pseudo_uid, StudyState.UPLOADED)
+            self._db.clear_retry(pseudo_uid)
+
+            # Cleanup staging (FR-15)
+            if self._staging.cleanup_study(pseudo_uid):
+                self._audit.append(
+                    "staging.cleanup",
+                    target={"pseudo_study_uid": pseudo_uid},
+                    meta={},
+                )
+            else:
+                self._audit.append(
+                    "staging.cleanup_failed",
+                    target={"pseudo_study_uid": pseudo_uid},
+                    meta={},
+                )
+
+            return StudyOutcome(
+                original_study_uid=original_uid,
+                pseudo_study_uid=pseudo_uid,
+                state=StudyState.UPLOADED,
+                duration_ms=_elapsed_ms(started),
+                fetch_ms=fetch_ms,
+                deid_ms=deid_ms,
+                upload_ms=upload_ms,
+            )
+        finally:
+            if fetch_dir is not None:
+                shutil.rmtree(fetch_dir, ignore_errors=True)
+
+
+def _elapsed_ms(start: datetime) -> int:
+    return int((datetime.now() - start).total_seconds() * 1000)
+
+
+def _short_hash(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _method_codes(cfg: GatewayConfig) -> list[str]:
+    codes = ["113100"]
+    if cfg.deid.retain_options.longitudinal_dates:
+        codes.append("113107")
+    if cfg.deid.retain_options.patient_characteristics:
+        codes.append("113108")
+    if cfg.deid.retain_options.clean_descriptors:
+        codes.append("113105")
+    return codes
