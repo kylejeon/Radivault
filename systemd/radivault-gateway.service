@@ -1,0 +1,30 @@
+[Unit]
+Description=RadiVault Gateway Agent
+Documentation=https://docs.radivault.io/gateway-agent
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/radivault
+
+# Load per-host secrets from files and expose them to the container via
+# /run/credentials/<name>. Paths must be readable by root only (chmod 600).
+LoadCredential=gateway_id:/etc/radivault/credentials/gateway_id
+LoadCredential=upload_token:/etc/radivault/credentials/upload_token
+LoadCredential=pacs_token:/etc/radivault/credentials/pacs_token
+LoadCredential=salt:/etc/radivault/credentials/salt
+
+Environment=RADIVAULT_CONFIG=/etc/radivault/gateway.yml
+
+ExecStartPre=/usr/bin/docker compose -f /opt/radivault/docker-compose.yml pull gateway-agent mock-central
+ExecStart=/usr/bin/docker compose -f /opt/radivault/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f /opt/radivault/docker-compose.yml down
+
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

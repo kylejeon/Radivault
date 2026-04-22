@@ -1,0 +1,55 @@
+version: 1
+
+agent:
+  gateway_id: "gw_dev_local"
+  hospital_id: "hosp_dev"
+  org_root_oid: "2.25.140737488355328"
+
+pacs:
+  base_url: "http://orthanc:8042/dicom-web"
+  auth:
+    type: "bearer"
+    token: "dev-placeholder-token"
+  max_concurrency: 2
+  poll_interval_seconds: 60
+  query:
+    modalities: ["CR", "CT", "MR", "DX"]
+    lookback_days: 30
+
+deid:
+  ruleset_version: "v0.1.0"
+  salt: "${file:/run/credentials/salt}"
+  salt_version: 1
+  burnin_quarantine_modalities: ["SC", "US", "OT"]
+  retain_options:
+    longitudinal_dates: true
+    patient_characteristics: true
+    clean_descriptors: true
+    clean_graphics: true
+    safe_private: false
+    uids: false
+    institution_identity: false
+    device_identity: "partial"
+
+staging:
+  root: "/var/lib/radivault/staging"
+  retention_hours: 72
+  max_disk_pct: 80
+
+state:
+  db_path: "/var/lib/radivault/state.sqlite3"
+
+audit:
+  path: "/var/log/radivault/audit.log"
+  anchor_interval_seconds: 3600
+
+central:
+  base_url: "http://mock-central:8080"
+  upload_token: "mock-upload-token"
+  upload_timeout_seconds: 120
+  max_upload_retries: 3
+
+logging:
+  level: "INFO"
+  json: true
+  console_color: "never"

@@ -1,0 +1,63 @@
+# Local development / pilot setup.
+# Three services:
+#   gateway-agent : the actual agent (runs `start`)
+#   mock-central  : FastAPI mock of the central ingest/audit endpoints
+#   orthanc       : DICOMweb PACS for end-to-end integration tests
+#
+# Secrets live in ./secrets (chmod 0600 recommended); real deployment should
+# use systemd `LoadCredential=` and mount /run/credentials instead.
+
+services:
+  gateway-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: radivault-gateway:0.1.0
+    restart: unless-stopped
+    depends_on:
+      - mock-central
+      - orthanc
+    environment:
+      RADIVAULT_CONFIG: /etc/radivault/gateway.yml
+      NO_COLOR: "1"
+    volumes:
+      - ./configs/gateway.docker.yaml:/etc/radivault/gateway.yml:ro
+      - ./secrets:/run/credentials:ro
+      - gateway-state:/var/lib/radivault
+      - gateway-logs:/var/log/radivault
+
+  mock-central:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: radivault-gateway:0.1.0
+    command: >
+      python -m uvicorn radivault_mock_central.main:app
+      --host 0.0.0.0 --port 8080
+    environment:
+      MOCK_CENTRAL_TOKEN: mock-upload-token
+      MOCK_CENTRAL_DUMP: /tmp/mock-central
+    ports:
+      - "8080:8080"
+    volumes:
+      - mock-central-dump:/tmp/mock-central
+
+  orthanc:
+    image: jodogne/orthanc-plugins:latest
+    restart: unless-stopped
+    ports:
+      - "8042:8042"
+      - "4242:4242"
+    environment:
+      ORTHANC_NAME: radivault-dev
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
+      ORTHANC__DICOM_WEB__ROOT: /dicom-web/
+    volumes:
+      - orthanc-data:/var/lib/orthanc/db
+
+volumes:
+  gateway-state:
+  gateway-logs:
+  mock-central-dump:
+  orthanc-data:

@@ -1,0 +1,25 @@
+# CI variant: no gateway-agent; just the dependencies to run the test suite.
+# ``ORTHANC_URL=http://localhost:8042/dicom-web`` and
+# ``MOCK_CENTRAL_URL=http://localhost:8080`` may be exported by the test runner.
+services:
+  mock-central:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: radivault-gateway:0.1.0
+    command: >
+      python -m uvicorn radivault_mock_central.main:app
+      --host 0.0.0.0 --port 8080
+    environment:
+      MOCK_CENTRAL_TOKEN: mock-upload-token
+    ports:
+      - "8080:8080"
+
+  orthanc:
+    image: jodogne/orthanc-plugins:latest
+    ports:
+      - "8042:8042"
+    environment:
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
+      ORTHANC__DICOM_WEB__ROOT: /dicom-web/
