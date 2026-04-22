@@ -40,56 +40,88 @@ Claude 서브에이전트는 서로를 직접 호출할 수 없으므로, 메인
 2. feature-slug 일관성 유지 (dev-spec ↔ design-spec ↔ qa-report)
 3. 표준 핸드오프 블록(NEXT_STEP) 출력 — 메인이 다음 에이전트 호출
 
-### 도구 권한 (최소 권한 원칙)
-- researcher: Read/Write/Grep/Glob/WebSearch/WebFetch/Bash(find용)
-- planner, designer: Read/Write/Grep/Glob (순수 스펙 작성)
-- developer: Read/Write/Edit/Bash/Grep/Glob (풀 코딩)
-- qa: Read/Bash/Grep/Glob/Write (검수만, 코드 수정 금지)
-- marketer: Read/Write/WebSearch/WebFetch/Grep/Glob
-- 전원: main 브랜치 접근·git push·파일 삭제 금지 룰 시스템 프롬프트에 명시
-
 ### 어디까지 됐나
 - 부트스트랩(문서 + 에이전트) 완료. 이제 Phase 2 "Planning" 실제 착수 가능.
-- 모든 에이전트 정의가 claude 브랜치 위에 있으며 main은 bootstrap 커밋 1개만 존재.
+- 커밋 d07f0f1.
 
-### 다음에 뭘 하나
-다음 세션 우선순위 (Kyle 결정 필요):
-
-1. **첫 dev-spec 착수 대상 결정** — Gateway Agent / De-ID Engine / Metadata Index DB 중.
-2. **기술 스택 확정 타이밍** — dev-spec 착수 전 또는 초안 작성 중.
-3. **파일럿 병원 물색 전략** — 비기술 트랙. 법률 자문·병원 접근·계약서 준비.
-4. **PRD §11 오픈 퀘스천 해소**.
-
-### 메모
-- feature_list.json (루트, 빈 파일) — 용도 미확인, 건드리지 않음.
-- radivault/ venv — .gitignore 처리됨.
-- 서브에이전트는 다른 에이전트를 직접 호출 불가 → 메인 대화가 NEXT_STEP 블록을 읽고 수동/자동 라우팅.
-
-## 2026-04-22 — Session 3 (Claude, @designer, Gateway Agent 디자인 명세, on claude branch)
+## 2026-04-22 — Session 3 (Claude, Gateway Agent v0.1 풀 파이프라인)
 
 ### 뭘 했나
-Gateway Agent는 GUI 없는 백엔드 CLI 도구지만 Kyle 요청으로 @designer를 강제 실행.
-UI가 아닌 "개발자/운영자가 마주하는 표면(CLI/Config/Log)"의 UX 디자인 명세를 작성.
+프로젝트명 RadiVault 확정. 5개 에이전트를 순차 가동하여 Gateway Agent v0.1 MVP를 기획→디자인→개발→검수까지 완주. Ubuntu 22.04 + Docker 타깃.
 
-- docs/specs/design-spec-gateway-agent.md — v0.1 Draft
-  - §0 Scope: CLI 도구 디자인 선언 (web UI N/A 명시)
-  - §3 CLI 명령 트리: start/sync-once/status/de-id-test/audit verify/version 의
-     --help, happy-path 출력, 에러 시나리오, 종료 코드 (dev-spec §7.4와 정합)
-  - §4 Config YAML 예시 + pydantic→사용자 친화 에러 UX + 시크릿 3종 참조 가이드
-  - §5 로그: console(human/JSON) 10-line + audit JSON-lines 5-line 예시, 에러 메시지 템플릿
-  - §6 status 출력: 80-column ASCII 박스 UI 전체 레이아웃 + --json 구조
-  - §7 설치 워크스루: 병원 IT 관점 8단계 + 장애 플레이북 (도커/systemd)
-  - §8 i18n: 콘솔 ko+en 병기, audit log 영어 고정
-  - §9 접근성: 색 의존 금지, --no-color, NO_COLOR 준수, --plain 폴백 제안
-  - §10 AC 12개 (디자인 측)
+#### Phase 1 — 보강 리서치 (@researcher)
+- docs/research/gateway-agent-technical-foundations.md (424줄)
+  DICOMweb vs DIMSE, Annex E De-ID Profile, Ubuntu/Docker 배포, 감사 로그
+  해시 체인, Orthanc 모킹 전략.
+
+#### Phase 2 — 개발지시서 (@planner)
+- docs/specs/dev-spec-gateway-agent.md (887줄, 44 FR, 32 binary-testable AC)
+  SQLite 상태 DB 스키마, YAML 설정 스키마, PACS/De-ID Protocol 인터페이스,
+  중앙 Upload API 계약, 완전 워크플로우 시퀀스, §9.4 기술 스택 확정 제안.
+
+#### Phase 3 — 디자인 명세 (@designer)
+- docs/specs/design-spec-gateway-agent.md (929줄)
+  GUI 없는 백엔드이지만 Kyle 요청으로 개발자/운영자-facing CLI/Config/Log
+  UX 명세 작성. 6개 서브커맨드 --help·happy-path·에러 시나리오·종료 코드,
+  80-col ASCII status UI, 병원 IT 8단계 설치 워크스루, i18n ko+en.
+  커밋 8c33deb (research + dev-spec + design-spec 체크포인트).
+
+#### Phase 4 — 코드 구현 (@developer round 1)
+- 10 커밋 (db55132..48ba21f)
+  scaffold, config, audit hash chain, SQLite state DB, De-ID engine,
+  DICOMweb client + staging + upload, orchestrator + mock central,
+  Click CLI, Docker + systemd, ruff pass, test suite (48 unit tests)
+- 기술 스택: Python 3.11, pydicom, httpx, Click, pydantic, FastAPI(mock),
+  pytest, python:3.11-slim-bookworm 베이스 Docker
+
+#### Phase 5 — 검수 (@qa round 1)
+- docs/qa/qa-report-gateway-agent.md
+- 판정: FAIL — Critical 2건
+  - C-1 (AC-8): 번인 격리 파일이 quarantine 이동 없이 rmtree로 삭제됨
+  - C-2 (AC-19): post_audit_anchor 정의만 있고 daemon 미연결
+- High/Medium 3건: HTTPS 강제, staging 3-depth 드리프트, stale_studies 미연결
+- 독립 검증: 48/48 테스트, ruff clean, 감사 체인 tamper 테스트 통과
+- 커밋 c4f698d
+
+#### Phase 4 재작업 (@developer round 2)
+- 6 fix 커밋 (f1309d2..2168a39)
+  burn-in 증거 보존, anchor 스케줄러, HTTPS 강제, staging 3-depth,
+  stale row, dev-spec 타이포 수정
+- 테스트 48 → 54 통과, ruff clean
+
+#### Phase 5 재검수 (@qa round 2)
+- docs/qa/qa-report-gateway-agent.md — Round 2 섹션 append
+- 판정: PASS with minor issues → N-1 수정 후 사실상 PASS
+- Round 1 발견 6건 전부 RESOLVED
+- N-1 (design-spec 1줄 typo) 메인 세션에서 수정 후 커밋 7a1fb23
 
 ### 어디까지 됐나
-- Phase 3 "Design" Gateway Agent slug 완료.
-- 다음 핸드오프 대상: @developer (claude 브랜치 구현 착수).
+Gateway Agent v0.1 MVP 전체 파이프라인 완주. claude 브랜치에 총 18 커밋 누적.
+- 기획: 887줄 dev-spec (44 FR, 32 AC)
+- 디자인: 929줄 design-spec
+- 구현: src/radivault_gateway/* 25 파일 + src/radivault_mock_central/*
+- 테스트: 54/54 unit 통과, 1 integration (Orthanc 필요 시 활성화)
+- 패키징: Dockerfile, docker-compose.yml, systemd 유닛, logrotate
+- 최종 판정: PASS. v0.1 병합 가능.
 
 ### 다음에 뭘 하나
-- Kyle 결정 대기: §11 오픈 질문 6건 (docs 사이트 호스팅, --plain v0.1 포함 여부,
-  status --watch에 rich/textual 허용, OK/FAIL 기호 스타일, error doc i18n 우선순위,
-  dry-run staging 정리 정책).
-- 병렬 가능: dev-spec-central-ingest 를 @planner 가 시작 — v0.1 mock central 계약을
-  실제 서버 스펙으로 승격하는 작업.
+Kyle 미결 결정 사항 (dev-spec §11에서 이관):
+1. Org Root OID 출처 (UID 재생성 시 필요).
+2. Salt 거버넌스·로테이션 정책.
+3. v0.1.1 백로그 확정: AC-28(GitHub Actions CI), AC-29(trivy CVE 스캔),
+   OCR 번인 v0.2 공식 분리, 법률 자문 타이밍.
+4. 파일럿 병원 PACS conformance statement 수집 계획.
+5. 중앙 인제스트 서버 dev-spec 착수 시점 (현재는 mock만).
+
+다음 우선순위 후보 (메인 세션 제안):
+- 옵션 A: @planner — dev-spec-central-ingest.md (mock central을 실제 서비스로)
+- 옵션 B: @planner — dev-spec-de-id-engine-v0.2.md (OCR + defacing)
+- 옵션 C: @planner — dev-spec-metadata-index.md (중앙 메타데이터 DB)
+- 옵션 D: 비기술 트랙 — 파일럿 병원 물색, 법률 자문
+
+### 메모
+- 서브에이전트는 서로 호출 불가 → 메인 세션이 순차 라우팅.
+- @developer round 2는 같은 세션에서 새 Agent 호출(이전 컨텍스트 참조 없음);
+  필요시 SendMessage로 이어가면 토큰 절약 가능하나 현 환경에선 미등록.
+- QA PASS 기준: Critical 0, Round 1/2 findings 전부 RESOLVED.
+- 모든 작업은 claude 브랜치에서만. main은 bootstrap 커밋 1개만 보유.
