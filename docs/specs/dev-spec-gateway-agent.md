@@ -335,7 +335,7 @@ logging:
   "deid": {
     "ruleset_version": "v0.1.0",
     "salt_version": 1,
-    "method_code_sequence": ["113100","113107","113108","113111"]
+    "method_code_sequence": ["113100","113107","113108","113105"]
   },
   "files": [
     { "filename": "0001.dcm", "sha256": "abcd...", "bytes": 513222 }
@@ -815,7 +815,7 @@ sequenceDiagram
 | (0028,0301) | BurnedInAnnotation | K | 유지 (값이 YES면 FR-11 격리) |
 | (0012,0062) | PatientIdentityRemoved | — | "YES" 설정 |
 | (0012,0063) | DeidentificationMethod | — | "RadiVault v<version> Annex E Basic + options" |
-| (0012,0064) | DeidentificationMethodCodeSequence | — | DCM 113100(Basic), 113107(Longitudinal Dates), 113108(Patient Char), 113111(Clean Descriptors) 등 해당 옵션 |
+| (0012,0064) | DeidentificationMethodCodeSequence | — | DCM 113100(Basic), 113107(Longitudinal Dates), 113108(Patient Char), 113105(Clean Descriptors) 등 해당 옵션 |
 | (0040,A124) | UID in SR content | U | pseudo_uid (v0.1 범위는 SR 미수집이나 스캐너는 처리) |
 | 모든 private tags | (FFFE,...) 외 모든 private group | X | 제거 (Retain Safe Private Option 미적용) |
 | SpecificCharacterSet (0008,0005) | — | K | 유지 (한국어 `ISO_IR 149` 보존) |
