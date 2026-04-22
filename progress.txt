@@ -125,3 +125,62 @@ Kyle 미결 결정 사항 (dev-spec §11에서 이관):
   필요시 SendMessage로 이어가면 토큰 절약 가능하나 현 환경에선 미등록.
 - QA PASS 기준: Critical 0, Round 1/2 findings 전부 RESOLVED.
 - 모든 작업은 claude 브랜치에서만. main은 bootstrap 커밋 1개만 보유.
+
+## 2026-04-22 — Session 4 (Claude, @planner, Central Ingest v0.1 dev-spec)
+
+### 뭘 했나
+@planner 에이전트로 Central Ingest(Zone 2 최초 프로덕션 서버) v0.1 MVP 개발지시서 작성.
+
+- docs/specs/dev-spec-central-ingest.md (1085줄, 75 FR, 36 AC, 13 섹션 + Annex)
+  - 엔드포인트 5종: POST /v1/ingest/studies, POST /v1/audit/anchor, GET /healthz, GET /readyz, GET /v1/version + POST /v1/studies/.../withdraw-stub (501 스텁)
+  - 인증: Bearer per hospital, argon2id 토큰 해시, kid prefix, DB auth_token 테이블
+  - Idempotency: Redis SETNX + (key, hospital_id) dedup, 24h TTL, DB 미러, 리플레이 시 Idempotency-Replayed 헤더
+  - Manifest preflight: pydantic v2, anonymization_flag 게이트(국외이전 차단), ruleset/salt_version 화이트리스트, 중복 pseudo_study_uid 거부, n_instances·total_bytes 상한
+  - 스토리지: S3 호환 boto3 추상, SSE-KMS, 버킷 레이아웃 hash2/hospital_id/pseudo_*_uid, MinIO for dev
+  - DB: PostgreSQL 15+ SQLAlchemy 2.0 + Alembic, surrogate BIGINT PK, 월 파티션(pg_partman), 감사 테이블 append-only GRANT
+  - 앵커 검증: 연속성(prev.hi+1==cur.lo), 단조성, 중복/해시 dup 거부, lag 메트릭(경보만, 차단은 v0.2)
+  - 관측성: JSON logs(python-json-logger) + Prometheus + OpenTelemetry SDK(OTLP endpoint 주입)
+  - 패키징: Docker multi-stage python:3.11-slim-bookworm non-root UID 10001, gunicorn+uvicorn workers, docker-compose dev(pg+redis+minio+ingest) vs prod
+  - §9.4 기술 스택 확정 제안: Python 3.11 + FastAPI + SQLAlchemy 2.0 + Alembic + Redis 7 + slowapi + boto3 + argon2-cffi
+  - §13 Annex: Gateway dev-spec §7.3과 교차 계약 검증, 델타 7건 (D-1 201 vs 202, D-2 Idempotency-Key 명문화, D-3 anonymization_flag 필수 필드 추가 등) → Gateway v0.1.1 보강 PR 권고
+
+### 어디까지 됐나
+Phase 2 "Planning" 완료. dev-spec Draft v0.1. Kyle 승인 대기.
+Gateway 측 계약 변경은 본 dev-spec §13.3에 정리 (Gateway v0.1.1 별도 트랙).
+
+### 다음에 뭘 하나
+메인 세션 결정:
+- 옵션 A: @designer — design-spec-central-ingest.md (운영자/개발자 UX, 런북)
+- 옵션 B: Kyle 결정사항 8건(§ Q1-Q12 주요 항목) 처리 후 @developer 직행
+- 옵션 C: Gateway v0.1.1 보강 dev-spec(@planner 재호출, anonymization_flag + Idempotency-Key 명문화) 선행
+
+## 2026-04-22 — Session N+1 (Claude, @designer, on claude branch)
+
+### 뭘 했나
+Phase 3 "Design" 착수. central-ingest v0.1 디자인 명세 작성.
+
+- docs/specs/design-spec-central-ingest.md (1,210 lines)
+  - §0 backend service 범위 선언 (GUI 아님, 대상 표면 6종)
+  - §1 Users: Gateway machine / SRE / 병원 IT / 향후 buyer-side integrator
+  - §2 HTTP API UX: OpenAPI 스타일 envelope 채택, 에러 페이로드 5필수+2optional 필드 스키마, 예시 3종(401/201 replay/400), Idempotency-Key 완전 계약(ERR_IDEMP_MISMATCH 신규), Rate-limit Retry-After, Anonymization gate 페이로드, Content-Type 규칙, 페이지네이션 cursor 플레이스홀더(v0.2)
+  - §3 Operator CLI `ingest-admin` 9 서브커맨드(token issue/revoke/list, anchor verify, study show, withdraw request, migrate up/down/current, version) — 각각 --help·exit codes·happy/fail 예시
+  - §4 JSON 로그 스키마 (필드 순서 규약, 5-line 실제 예시) + Prometheus 메트릭 18종(`radivault_central_*` 접두사, 라벨 카디널리티 규약) + Alertmanager 알람 12건 (anchor lag P1/P2, error rate, storage fail, DB pool, Redis down, auth storm, idempotency mismatch, chain break, manifest spike, readyz fail, mirror divergence) — 모든 임계 구체 숫자
+  - §5 Error Taxonomy UX — dev-spec §7.7의 모든 코드 테이블화 + 5-field 템플릿(code·ko·en·context·action·doc) Gateway design-spec §5.5와 정확히 동일 포맷 + 신규 6종·CLI 전용 5종 추가
+  - §6 Runbook 8편 (RB-1 auth storm, RB-2 manifest spike, RB-3 anchor chain break, RB-4 PG pool 고갈, RB-5 S3 장애, RB-6 Redis down, RB-7 disk full, RB-8 토큰 긴급 회전) + 선택 RB-9
+  - §7 Hospital onboarding 12 단계 (SRE ↔ 병원 IT 공동 절차, 각 단계별 화면·산출물·롤백)
+  - §8 i18n: API envelope ko+en, CLI 영어 우선, runbook 한국어
+  - §9 Accessibility: CLI --no-color, UTF-8 폴백. 반응형·색 대비·디자인 토큰은 N/A backend service 명시.
+  - §10 수용 기준 15건 (AC-D-1..AC-D-15)
+  - §11 오픈 질문 12건
+  - §12 변경 이력 + NEXT_STEP(@developer)
+
+### 어디까지 됐나
+Phase 3 "Design" for central-ingest 완료. Draft v0.1.
+Gateway design-spec과 스타일·에러 코드 네임스페이스·runbook 구조 일관성 유지.
+dev-spec §13 Gateway 델타 D-1..D-7는 별도 Gateway v0.1.1 트랙 가정.
+
+### 다음에 뭘 하나
+메인 세션 결정:
+- 옵션 A: @developer — central-ingest 구현 착수 (dev-spec + design-spec 두 문서 기반)
+- 옵션 B: Kyle 결정사항 처리 (특히 Gateway v0.1.1 착수 시점, docs.radivault.io 호스팅, 에러 코드 dev-spec 환류)
+- 옵션 C: @planner 재호출 — Gateway v0.1.1 보강 dev-spec
