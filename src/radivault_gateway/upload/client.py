@@ -136,6 +136,13 @@ class UploadClient:
                 "salt_version": salt_version,
                 "method_code_sequence": method_codes,
             },
+            # D-3: Central v0.1 enforces the cross-border transfer gate and
+            # rejects any manifest without ``anonymization_flag ==
+            # "fully_anonymized"``. Gateway v0.1 was shipped before this
+            # field was formalised; we emit the only value Central accepts.
+            # See docs/specs/dev-spec-central-ingest.md §13 D-3 and
+            # Gateway v0.1.1 doc-patch proposal (to be opened by @planner).
+            "anonymization_flag": "fully_anonymized",
             "files": files_meta,
             "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
