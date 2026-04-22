@@ -208,3 +208,53 @@ dev-spec §13 Gateway 델타 D-1..D-7는 별도 Gateway v0.1.1 트랙 가정.
 - 옵션 A: @developer — H-1/H-2/H-3 3건 보강 후 병합 (특히 H-3는 GA 전 필수).
 - 옵션 B: @marketer — 런칭 콘텐츠 병렬 착수 가능.
 - Kyle 결정: 호스팅 리전, Gateway v0.1.1 델타 반영 시점, quota(FR-45) v0.1 필수 여부.
+
+## 2026-04-22 — Session 5 (Claude, central-ingest round 2 병렬: @developer + @marketer, @qa 재검수)
+
+### 뭘 했나
+Kyle이 기술 트랙 계속 + 모든 에이전트 유기적 가동 요청. central-ingest의 남은 3개 High 이슈를 수정하면서 동시에 B2B 병원 대상 마케팅 콘텐츠를 병렬로 생성.
+
+#### @developer round 2 (H-1/H-2/H-3 fixes)
+- 3 fix 커밋 (b4399a1 → 519c24d → 261abcf)
+  - H-1: LocalFsObjectStore _safe_target path traversal 가드 (절대/`..`/backslash/NUL 거부)
+  - H-2: S3 SSE-KMS fail-closed (allow_unencrypted 플래그) + HTTPS 강제 (allow_insecure 플래그), 설정 schema 확장
+  - H-3: audit_ingest_event record_rejection 헬퍼, preflight 실패 시 ingest.rejected row 기록 (FR-56), raw manifest peek 시 gateway_id/pseudo_study_uid 2 필드만 절단 추출 (PHI leak 차단)
+- 테스트: central unit 34→50 (+16), integration 12→17 (+5), gateway 55 회귀 무영향
+- ruff clean
+
+#### @marketer (병렬 실행)
+- docs/marketing/onboarding-hospital-it-admin-ko.md (668줄) — 병원 전산실 실무자용 기술 설치 가이드
+- docs/marketing/proposal-summary-hospital-ko.md (261줄) — 병원 경영진용 제안서 요약
+- 자체 감사: 법률·인증 문구 모두 "준비 중"·"부합하도록 설계됨"으로 완곡, 허위 단정 없음, 파트너 병원·AI 구매자·구체 금액 미노출, placeholder 7종 Kyle 채움 대기
+- 커밋 13bc456
+
+#### @qa round 2 재검수
+- docs/qa/qa-report-central-ingest.md Round 2 섹션 append
+- Round 1 High 3건 전부 RESOLVED (증거: 신규 테스트 13건)
+- 새 발견 0건
+- Scope discipline 양호 (Medium/Low 전부 untouched, v0.1.1 backlog로 이관)
+- 판정: **PASS**
+
+### 어디까지 됐나
+- central-ingest v0.1 MVP 최종 판정 PASS. 병합 가능.
+- claude 브랜치에 20+ 커밋 누적 (central-ingest 기획~구현~fix~QA + 마케팅).
+- 테스트 총계: central 67 (unit 50 + integration 17) + gateway 55 = 122 통과, ruff clean.
+- 병원 대상 B2B 콘텐츠 Draft 2종 준비.
+
+### 다음에 뭘 하나
+v0.1 GA 배포 체크리스트:
+- prod 설정에서 `allow_unencrypted=false`, `allow_insecure=false` 확인 (QA 권고).
+- Alembic upgrade head 실제 Postgres 15에서 dry-run.
+- Docker build 실제 검증 (Gateway + Central 이미지).
+- 마케팅 placeholder 채우기 (연락처 5종, 인증 시점 2종).
+
+v0.1.1 백로그 (QA round 1 Medium/Low):
+- M-1..M-4, L-1..L-3 (상세 qa-report 참조).
+- FR-45 daily byte quota.
+- AC-33 Postgres GRANT 실환경 검증.
+
+다음 기능 후보 (Kyle 결정):
+- 옵션 B: @planner dev-spec-metadata-index (구매자 검색 API + DB) — Phase 2 핵심.
+- 옵션 C: @planner dev-spec-de-id-engine-v0.2 (OCR 번인 + defacing).
+- 옵션 D: Gateway v0.1.1 보강 dev-spec (D-1..D-7 공식화).
+- 비기술: 법률 자문, 파일럿 병원 물색 (이번 세션에서는 보류).

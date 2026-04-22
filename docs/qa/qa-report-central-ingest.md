@@ -1,6 +1,6 @@
 # QA 보고서 — Central Ingest v0.1 MVP
 
-> **Status**: Final · **Feature slug**: `central-ingest` · **Last updated**: 2026-04-22
+> **Status**: Final · **Feature slug**: `central-ingest` · **Last updated**: 2026-04-22 (Round 2)
 > **작성자**: @qa (Claude Opus 4.7) · **근거**:
 > - [dev-spec](../specs/dev-spec-central-ingest.md) — 75 FR / 36 AC
 > - [design-spec](../specs/design-spec-central-ingest.md) — 에러 envelope / CLI / 로그 / runbook
@@ -16,9 +16,9 @@
 | 검수 대상 | `claude` 브랜치, 커밋 범위 `70782e8..e874295` (central 15 커밋) + `c847e62` (Gateway D-3 bridge) |
 | 독립 검증 | `pytest tests/central/unit -q` → **34/34 PASS** (0.48s) · `pytest tests/central/integration -q` → **12/12 PASS** (1.32s) · `pytest tests/unit -q` → **55/55 PASS** (0.34s, gateway 회귀) · `ruff check src tests` → **clean** |
 | 선행 조건 | dev-spec·design-spec 전수 읽음. Gateway QA Round 2 PASS 확인. |
-| 최종 판정 | **PASS with minor issues** |
+| 최종 판정 | **PASS** (Round 2 재검수 반영, Round 1은 PASS with minor issues) |
 | Critical 이슈 | 0건 |
-| High 이슈 | 2건 (H-1 `LocalFsObjectStore` 경로 traversal, H-2 KMS/SSE 설정 미강제 + HTTP endpoint 허용) |
+| High 이슈 | Round 1 3건 모두 **RESOLVED** (H-1/H-2/H-3 재검수 §2 참조). 신규 High 0건. |
 | Medium 이슈 | 4건 (M-1 hospital_id 미매핑 경로 `except Exception` 광범위, M-2 storage 실패 후 audit.rejected 미기록, M-3 idempotency mirror 트랜잭션 분리, M-4 `get_engine` 전역 싱글톤) |
 | Low 이슈 | 3건 (L-1 `_central` 핸들러가 `_unhandled`로 위임되는 detail 노출 가능성, L-2 `study_exists` hospital_pk 미스코프, L-3 anchor router가 idempotency 리플레이 직전에 COMMIT) |
 
@@ -216,6 +216,155 @@
 | 버전 | 날짜 | 작성자 | 변경 |
 |------|------|--------|------|
 | 0.1 | 2026-04-22 | @qa (Claude Opus 4.7) | 최초 검수. 커밋 `70782e8..e874295` + `c847e62`. Unit 34/34 · Integration 12/12 · Gateway 회귀 55/55 PASS, ruff clean 독립 검증. AC 36건 매트릭스, Critical 0 · High 3 · Medium 6 · Low 3 발견. 개발자 자가보고 편차 4건 모두 수용. 판정 **PASS with minor issues** (병합 가능, H-3 감사 누락은 v0.1 GA 전 반영 강권장). |
+| 0.2 | 2026-04-22 | @qa (Claude Opus 4.7) | Round 2 재검수. 커밋 `25d720b..261abcf` (+docs only `13bc456`). Unit 50/50 · Integration 17/17 · Gateway 55/55 PASS, ruff clean. H-1/H-2/H-3 전부 RESOLVED. Medium/Low 미터치. 최종 판정 **PASS**. |
+
+---
+
+## 10. Round 2 Re-Verification (2026-04-22)
+
+> **검수 대상**: `25d720b..HEAD` (3 fix 커밋: `b4399a1` H-1, `519c24d` H-2, `261abcf` H-3 — docs commit `13bc456`은 @marketer 산출물로 본 재검수 스코프 외)
+> **검증 환경**: `.venv` 활성화, pytest + ruff 독립 실행.
+> **검증 결과 요약**:
+> - `pytest tests/central/unit -q` → **50 passed** (Round 1 34건 대비 +16: H-1 7건, H-2 7건, 기타 +2 보강).
+> - `pytest tests/central/integration -q` → **17 passed** (Round 1 12건 대비 +5: H-3 audit rejection 5건).
+> - `pytest tests/unit -q` → **55 passed** (Gateway 회귀 무변).
+> - `ruff check src tests` → **All checks passed!**
+
+### 2.1 요약 (verdict)
+
+**Round 2 판정: PASS**. Round 1에서 남긴 High 3건이 모두 스펙 의도대로 닫혔다. 픽스는 좁게 겨냥됐고(문제 파일 + 테스트 + 설정 외 번짐 없음), 테스트가 실제 공격 시나리오를 재현하며, 회귀 없음. H-3의 best-effort 쓰기 설계는 "DB down에도 4xx는 정상 리턴"이라는 운영 요구를 만족한다. Medium/Low 7건은 의도대로 v0.1.1 백로그로 유지됐다.
+
+### 2.2 Round 1 High 발견별 상태
+
+#### H-1 · LocalFsObjectStore 경로 traversal — **RESOLVED**
+
+- **픽스 확인**:
+  - `src/radivault_central/storage/base.py:12-20` 새 예외 `StoragePathTraversalError(ObjectStoreError)` + `code="ERR_STORE_PATH_TRAVERSAL"`.
+  - `src/radivault_central/storage/local.py:27` 생성자에서 `self._resolved_root = self.root.resolve()` 사전 계산.
+  - `src/radivault_central/storage/local.py:30-52` `_safe_target(key)` 헬퍼가 ① empty key 거부 ② NUL(`\x00`)·backslash(`\\`) 거부 ③ POSIX 절대 경로 거부 ④ `..` 세그먼트 거부 ⑤ `target.resolve().relative_to(self._resolved_root)` 검증으로 심볼릭 링크까지 커버.
+  - `src/radivault_central/storage/local.py:56,66` `put_object` + `delete_objects` 모두 `_safe_target` 진입. **`delete_objects`는 traversal 키를 만나면 `continue`(라인 67-69)로 조용히 스킵** — cleanup 경로에서 절대 따라가지 않음.
+- **공격 시나리오 재현**: manifest가 `filename="../../etc/evil"`을 제시할 때 `(self.root / "../../etc/evil").resolve()`는 루트 밖으로 나가고 `relative_to`가 `ValueError` → 가드가 `StoragePathTraversalError` raise. 어떤 우회 조합(`a/../../escape.dcm`, `/abs/escape.dcm`, `foo/../../bar.dcm`, 빈 문자열)도 `_safe_target`의 순서대로 걸린다.
+- **테스트 증거**: `tests/central/unit/test_storage_local.py:28-55` parametrized 7 bad-key 케이스(`test_put_rejects_path_traversal`), `:58-63` backslash/NUL 명시, `:66-72` sentinel 파일이 cleanup 경로에서 살아남음 확인. 센티넬 assertion `outside.read_bytes() == b"keep-me"`로 실효성 입증.
+- **결론**: 스펙 의도(manifest 제어 문자열이 FS 밖으로 쓰기 불가) 100% 충족.
+
+#### H-2 · S3 드라이버 SSE-KMS + HTTPS 가드 — **RESOLVED**
+
+- **픽스 확인**:
+  - `src/radivault_central/storage/s3.py:48-63` `kms_key_arn` 빈 값 + `allow_unencrypted=False` (기본) → **startup에서 `ObjectStoreError` raise로 fail-closed**. opt-in 시 `log.warning("s3_unencrypted_enabled", extra={"event": "storage.unencrypted_allowed", ...})`.
+  - `src/radivault_central/storage/s3.py:66-88` `urlsplit(endpoint_url).scheme`로 스킴 분리. `http` + 기본 거부 / `http` + opt-in WARN / 그 외(예: `ftp`) hard-reject. 구조적으로 오탐 없음.
+  - `src/radivault_central/config.py:58-59` `StorageConfig`에 `allow_unencrypted: bool = False`, `allow_insecure: bool = False` 필드 추가 — 둘 다 기본 `False`로 prod 기본 fail-closed.
+  - `src/radivault_central/app.py:127-128` 드라이버 생성 시 두 플래그 전달.
+  - `configs/central.example.yaml:26-33` 주석 "Leaving null requires allow_unencrypted=true (dev/test only)" + 두 플래그 `false`로 명시.
+  - `configs/central.docker.yaml:28-31` MinIO 로컬 스택 전용으로 `allow_unencrypted: true` + `allow_insecure: true` — Round 1 요구(dev 한정) 부합.
+- **공격 시나리오 재현**: 운영자가 `kms_key_arn`을 비워둔 채 프로덕션을 띄우면 즉시 기동 실패 → PHI 평문 저장이 조용히 발생할 수 없다. `endpoint_url=http://prod-s3.internal`도 동일 경로로 차단.
+- **테스트 증거**: `tests/central/unit/test_storage_s3.py:22-29` missing KMS 거부, `:32-45` opt-in + WARN 로그 확인, `:48-55` `http://` 거부, `:58-70` opt-in + WARN, `:73-80` `ftp://` hard-reject, `:86-114` 해피패스 PUT이 `ServerSideEncryption=aws:kms` + `SSEKMSKeyId` 보냄 (botocore Stubber `expected_params`), `:117-144` opt-in 경로는 SSE 헤더 생략. Stubber 기반이라 실제 AWS 없이도 contract 검증.
+- **경미 관찰**: `aws:SecureTransport` 버킷 정책은 여전히 배포 문서 책임(dev-spec AC-4). 본 픽스는 **클라이언트 측 TLS-only 가드**로 스펙 요구(§5 TLS 1.3 only)를 코드 레벨에서 추가 보증. Round 1의 운영자 실수 위험은 해소.
+- **결론**: FR-7 의도를 코드로 보증 + dev/prod 분리 명확.
+
+#### H-3 · Manifest preflight 거부 시 audit 미기록 — **RESOLVED**
+
+- **픽스 확인**:
+  - `src/radivault_central/audit/ingest_event.py:47-87` 새 헬퍼 `record_rejection(session_factory, ...)`가 **자체 세션을 열어** `ingest.rejected` row 작성 + commit. `except Exception: log.error(...)`(라인 77-87)로 DB 다운 시 swallow — 4xx 클라이언트 반환을 절대 방해하지 않는다 (double-fault 방지 요구 충족).
+  - `src/radivault_central/routers/ingest.py:43-54,57-68` `_peek_gateway_id` / `_peek_pseudo_study_uid` 헬퍼가 raw manifest 바이트에서 오직 두 필드만 pull하고 **64·256자 절단** (`val[:64]`, `val[:256]`). `json.loads` 실패는 `None` 반환. 다른 manifest 필드(환자명·원본 UID 등)는 전혀 참조하지 않는다 — PHI leak 경로 없음.
+  - `src/radivault_central/routers/ingest.py:104-174` preflight 전체 블록이 단일 `try/except CentralError`로 감싸짐. `raise` 지점: hospital row 미존재(AuthMismatch), manifest validator 실패(ManifestSchema/Anon/Version/Ruleset/Salt/Deid/Toomany), hospital_id mismatch(AuthMismatch), 중복 study(ManifestDuplicate), sha256 mismatch(ManifestSha256), file count mismatch(ManifestSha256), non-file part(ManifestSchema). 모두 `except CentralError:` 가 포착 → `record_rejection` 호출 후 `raise`로 중앙 핸들러에 넘긴다. 성공 경로는 기존 `record_ingest_event(event="ingest.accepted", ...)` 그대로 (`:237-248`).
+- **공격·운영 시나리오 재현**:
+  - `anonymization_flag="pseudonymized"` → validator가 `ManifestAnon` raise → `except CentralError` → `gateway_id` 는 `manifest is None`이므로 raw manifest peek으로 "gw_test" 추출 → `audit_ingest_event`에 `event='ingest.rejected'`, `error_code='ERR_MANIFEST_ANON'`, `status_code=403` row 남김. DPO가 "국외이전 게이트 발동 증적" 필요 시 DB 쿼리로 확인 가능.
+  - Audit DB down 가정 시: `record_rejection`의 `session_factory().commit()`에서 `Exception` 발생 → `log.error` 남김 → 라우터로 제어 반환 → `raise exc`로 원래 4xx envelope가 클라이언트에게 정상 도달. 더블 폴트 없음.
+- **테스트 증거**: `tests/central/integration/test_ingest_audit_rejection.py` 5건 전부 그린:
+  - `test_rejection_missing_anonymization_flag_writes_audit_row` (`:140-163`): 403 + DB row, `gateway_id=='gw_test'` · `pseudo_study_uid=='2.25.audit.anon.1'` · `request_id != 'unknown'` · `central_job_id is None` · `bytes_received is None` 확인 → **raw manifest peek 실효 입증**.
+  - `test_rejection_schema_error_writes_audit_row` (`:166-181`): `manifest_version` 제거로 schema 에러 유발 → 400 + row.
+  - `test_rejection_sha256_mismatch_writes_audit_row` (`:184-199`): sha256 조작 → 400 + row.
+  - `test_accepted_ingest_writes_accepted_not_rejected` (`:202-214`): 해피 경로가 **정확히** `ingest.accepted` row 1건, `ingest.rejected` leak 없음 — 이중 기록 회귀 없음 입증.
+  - `test_rejection_duplicate_study_writes_audit_row` (`:217-232`): 1차 accepted + 2차 `ERR_MANIFEST_DUP` 순서대로 2 row.
+- **결론**: FR-56 문자 그대로 ("**모든** Ingest 성공·실패 이벤트는 `audit_ingest_event`에 1 row 기록") 충족. AC-6의 "감사 이벤트 `ingest.rejected` 기록" 요건 PASS.
+
+### 2.3 새 발견 (Round 2)
+
+**없음** — 3 fix 코드와 테스트 스위트에서 신규 이슈 탐지되지 않음. 다음을 명시적으로 검증:
+
+- `record_rejection`이 `record_ingest_event` 호출부에 PHI 금지 필드를 삽입하지 않는다 (오직 `hospital_pk`, `gateway_id(SENTINEL "unknown" 폴백)`, `event`, `status_code`, `request_id`, `error_code`, `pseudo_study_uid`). 원본 UID·환자명·IP·manifest 바디 미포함.
+- `_peek_gateway_id`의 `[:64]` 절단 규칙은 실제로 로그·감사 row에도 안전한 길이. 다른 manifest 필드(`patient_*`, `original_uid` 등)에 접근하지 않음 — `json.loads` 결과 dict에서 key `gateway_id` 만 꺼낸다 (`:51`).
+- S3 드라이버에서 `allow_insecure=True` opt-in은 `http` 에서만 허용 — `ftp://`, `gopher://` 등은 여전히 거부(`:85-88`). 다른 프로토콜로 우회 불가.
+- `LocalFsObjectStore._safe_target`은 `symlink` 공격도 `Path.resolve()`의 symlink 추적 특성 덕분에 방어(symlink이 루트 밖을 가리키면 `relative_to` 실패).
+
+### 2.4 Scope discipline 평가
+
+**PASS** — 픽스 커밋 3개의 stat:
+
+```
+configs/central.docker.yaml                           |   4 +
+configs/central.example.yaml                          |   5 +
+src/radivault_central/app.py                          |   2 +
+src/radivault_central/audit/ingest_event.py           |  50 +
+src/radivault_central/config.py                       |   3 +
+src/radivault_central/routers/ingest.py               | 158 (+103/-55)
+src/radivault_central/storage/__init__.py             |  14 (+6/-3)
+src/radivault_central/storage/base.py                 |  22 (+17/-0)
+src/radivault_central/storage/local.py                |  51 (+48/-3)
+src/radivault_central/storage/s3.py                   |  75 (+69/-6)
+tests/central/integration/test_ingest_audit_rejection.py | 232 +
+tests/central/unit/test_storage_local.py              |  50 (+50/-0)
+tests/central/unit/test_storage_s3.py                 | 154 +
+```
+
+- 프로덕션 코드 침범: storage(3), routers/ingest.py, audit/ingest_event.py, config.py, app.py (드라이버 2라인 배선만). 예상 범위와 일치 — 다른 라우터·미들웨어·DB 모델·마이그레이션 무변동.
+- 테스트 스위트 3 파일 모두 순수 신규 / 추가. 기존 테스트 수정 없음 → 회귀 가능성 최소.
+- Medium(M-1~M-4) 및 Low(L-1~L-3)는 **모두 untouched**. 개발자가 "Medium 이하는 v0.1.1 백로그" 라운드 1 권고를 그대로 수용. 자기 스코프 확장 시도 없음.
+- 커밋 메시지가 "Resolves QA round 1 H-N" 형식으로 깔끔하게 각 발견에 1:1 매핑 — 추적성 양호.
+- `docs/marketing/*` 2개 파일은 `13bc456` @marketer 커밋으로, @developer 스코프 외. QA 대상 아님.
+
+### 2.5 테스트 커버리지 관찰
+
+- **Unit 추가 16건**:
+  - `test_storage_local.py` +5 (기존 3 → 8 함수. parametrized 테스트 1개가 7 케이스 생성하여 실제 +9 실행).
+  - `test_storage_s3.py` +7 (전부 신규 — 기존은 unit 영역에 없었음).
+  - 실제 unit count 34 → 50 증가는 parametrized 확장분 포함.
+- **Integration 추가 5건**: 전부 `test_ingest_audit_rejection.py`의 5 함수.
+- **커버리지 공백**:
+  - H-2 픽스는 `S3ObjectStore` 생성자 가드가 메인 — 그러나 `allow_insecure=True` 로 `http://` 허용된 상태에서 실제 PUT이 정상 동작하는지 Stubber 테스트는 없음. (현재는 `test_put_object_sends_sse_kms_headers`가 `https://` 경로만 스텁함). 실용상 MinIO 로컬 compose에서 커버되지만 단위 레벨 회귀는 미흡 — 경미.
+  - `record_rejection`의 **DB down swallow 경로**에 대한 unit 테스트가 없음. `pragma: no cover`로 마킹되어 있어 의도적 누락이나, round 1에서 개발자가 "double-fault 방지" 로 명시한 동작이므로 예방적 테스트 가치. v0.1.1 백로그 권고.
+  - `_peek_gateway_id`·`_peek_pseudo_study_uid`에 대한 직접 unit 테스트 부재. 비정상 JSON (`{"gateway_id": 12345}`, 길이 100자 문자열) 입력 시 동작은 integration 간접 검증만. 경미.
+
+### 2.6 Medium/Low v0.1.1 backlog 상태
+
+Round 1 §8 권고의 v0.1.1 이관 항목을 Round 2 diff 대비 확인:
+
+| 항목 | Round 1 위치 | Round 2 상태 |
+|------|------------|-------------|
+| M-1 `except Exception` 광범위 | `idempotency/middleware.py`, `ratelimit/middleware.py`, `routers/ingest.py:82,142`, `storage/s3.py:75-79` | **untouched** (의도대로 백로그). `routers/ingest.py`는 라운드 2에서 많이 바뀌었으나 `except Exception`은 line 190의 storage 실패 경로에 그대로 유지. |
+| M-2 storage.orphan 감사 미기록 | `routers/ingest.py:142-149` | **untouched**. 현재 `except Exception → raise StorageWriteError`만 있고 `record_rejection("storage.orphan", ...)` 호출 없음. v0.1.1 이관 확정. |
+| M-3 idempotency mirror 트랜잭션 분리 | `idempotency/middleware.py:121-130` | **untouched**. |
+| M-4 `get_engine` 전역 싱글톤 | `db/session.py:16-17` | **untouched**. |
+| L-1 `_unhandled` detail 노출 | `errors.py:367-371` / `routers/ingest.py:149` StorageWriteError `detail=str(exc)` | **untouched**. `routers/ingest.py:197` `StorageWriteError(detail=str(exc))` 여전. |
+| L-2 `study_exists` hospital_pk 미스코프 | `db/repository.py:55-61` | **untouched**. |
+| L-3 anchor commit 이후 response build | `routers/anchor.py:72-83` | **untouched**. |
+| M-5 일일/월간 byte quota 미구현 | `ratelimit/middleware.py` (FR-45) | **untouched**. 본 발견은 스펙 gap — Kyle 결정 대기. |
+| Q-1..Q-9 관찰 | 다수 | **untouched** (스트리밍 업로드·키 계층·test coverage 보강 등). |
+
+**판정**: 라운드 1 High 3건 이외 건드림 없음 — 스코프 규율 양호.
+
+### 2.7 Round 2 최종 판정
+
+**PASS**.
+
+- Critical 0건 (변동 없음).
+- High 0건 (Round 1의 3건 전부 RESOLVED, 신규 발견 없음).
+- Medium 4건 + Low 3건 + M-5 스펙 gap + Q-관찰 9건은 v0.1.1 백로그로 이월 확정.
+- 컴플라이언스: FR-56(모든 ingest 이벤트 audit row) + FR-7(SSE-KMS 기본) + FR-46/ObjectStore key 계약 3대 관문 충족. anonymization_flag 게이트 우회 경로 추가 탐지 없음.
+- 테스트: 신규 22건 포함 unit 50/50 + integration 17/17 + gateway 회귀 55/55, ruff clean. 모두 녹색.
+- 운영 안전성: (a) prod 기본 fail-closed (b) DB 다운 시 4xx 정상 반환 (c) cleanup이 traversal 키를 절대 추적 안 함 — 세 가지 operational invariant 모두 테스트로 보증.
+
+---
+
+### NEXT_STEP (Round 2)
+
+- 완료 산출물: `docs/qa/qa-report-central-ingest.md` §10 Round 2 재검수 섹션 추가. 최종 판정 **PASS**로 상단 메타 갱신.
+- 판정: **PASS** (High 0, Critical 0, 재검수 불필요).
+- 제안 다음 단계:
+  - **@marketer** — v0.1 MVP 런칭 콘텐츠 준비·공개 가능. 본 Round 2 PASS 결과를 보안·컴플라이언스 증적으로 인용 가능.
+  - **@developer** — v0.1.1 마일스톤에서 §8 권고의 M-1~M-5, L-1~L-3, Q-관찰 처리. Round 2가 닫은 H-1/H-2/H-3은 재개방 불필요.
+  - **Kyle** — v0.1 GA merge 승인 가능 수준. 배포 체크리스트에 "prod에서 `storage.allow_unencrypted`·`storage.allow_insecure` 둘 다 `false`임을 운영 전 확인" 항목 추가 권고.
+- Kyle 결정 필요 사항: Round 1 §NEXT_STEP의 5건 중 (1)(2)(3)(4)(5) 미해소 — 본 라운드 재검수 범위 외.
 
 ---
 
