@@ -16,11 +16,10 @@ import hashlib
 import json
 import os
 import threading
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 GENESIS_PREV_HASH = "sha256:" + "0" * 64
 
@@ -31,9 +30,7 @@ def canonicalize(record: dict[str, Any]) -> str:
     Excludes the ``hash`` field (which is the output). Spec: FR-23.
     """
     filtered = {k: v for k, v in record.items() if k != "hash"}
-    return json.dumps(
-        filtered, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
+    return json.dumps(filtered, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def compute_hash(record_without_hash: dict[str, Any]) -> str:
@@ -43,7 +40,7 @@ def compute_hash(record_without_hash: dict[str, Any]) -> str:
 
 
 def _utc_now_iso() -> str:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
 
 

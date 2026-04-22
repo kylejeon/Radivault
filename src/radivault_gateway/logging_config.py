@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+import typing
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -22,7 +23,7 @@ class JsonFormatter(logging.Formatter):
     per dev-spec §12.5 — callers are responsible.
     """
 
-    _RESERVED = {
+    _RESERVED: typing.ClassVar[set[str]] = {
         "args",
         "asctime",
         "created",
@@ -49,9 +50,10 @@ class JsonFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
-        )[:-4] + "Z"
+        ts = (
+            datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-4]
+            + "Z"
+        )
         # Strip the trailing 'Z' double; above trick produces e.g. 2026-04-22T01:03:22.341Z
         ts = ts.replace("ZZ", "Z")
         payload: dict[str, Any] = {
@@ -73,9 +75,7 @@ class HumanFormatter(logging.Formatter):
     """Human-readable line formatter matching design-spec §5.2."""
 
     def format(self, record: logging.LogRecord) -> str:
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        ts = datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         level = record.levelname.ljust(5)
         logger = record.name.ljust(22)
         return f"{ts}  {level}  {logger}  {record.getMessage()}"

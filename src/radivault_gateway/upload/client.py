@@ -11,12 +11,11 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-
 
 log = logging.getLogger("radivault.upload")
 
@@ -78,7 +77,7 @@ class UploadClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "UploadClient":
+    def __enter__(self) -> UploadClient:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -100,11 +99,13 @@ class UploadClient:
         total_bytes = 0
         for path in sorted(dcm_files):
             data = path.read_bytes()
-            files_meta.append({
-                "filename": path.name,
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "bytes": len(data),
-            })
+            files_meta.append(
+                {
+                    "filename": path.name,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "bytes": len(data),
+                }
+            )
             total_bytes += len(data)
         return {
             "manifest_version": 1,
@@ -120,7 +121,7 @@ class UploadClient:
                 "method_code_sequence": method_codes,
             },
             "files": files_meta,
-            "generated_at": datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
     def upload_study(
@@ -144,10 +145,12 @@ class UploadClient:
                 ("manifest", ("manifest.json", manifest_bytes, "application/json")),
             ]
             for path in sorted(dcm_files):
-                files.append((
-                    "files",
-                    (path.name, path.read_bytes(), "application/dicom"),
-                ))
+                files.append(
+                    (
+                        "files",
+                        (path.name, path.read_bytes(), "application/dicom"),
+                    )
+                )
             try:
                 resp = self._client.post(url, files=files)
             except httpx.HTTPError as exc:
@@ -202,7 +205,7 @@ class UploadClient:
             "gateway_id": gateway_id,
             "seq_range": [seq_range[0], seq_range[1]],
             "head_hash": head_hash,
-            "anchored_at": datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "anchored_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
         resp = self._client.post(url, json=body)
         if resp.status_code >= 400:

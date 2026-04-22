@@ -23,10 +23,10 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Iterable
 
 import pydicom
 from pydicom.dataset import Dataset
@@ -35,14 +35,16 @@ from pydicom.tag import Tag
 from radivault_gateway.config import RetainOptions
 from radivault_gateway.state import StateDB
 
-
 log = logging.getLogger("radivault.deid")
 
 
 # DICOM Method Code Sequence codes (PS3.16 CID 7050)
 METHOD_CODES = {
     "basic": ("113100", "Basic Application Confidentiality Profile"),
-    "longitudinal_dates": ("113107", "Retain Longitudinal Temporal Information Modified Dates Option"),
+    "longitudinal_dates": (
+        "113107",
+        "Retain Longitudinal Temporal Information Modified Dates Option",
+    ),
     "patient_characteristics": ("113108", "Retain Patient Characteristics Option"),
     "clean_descriptors": ("113105", "Clean Descriptors Option"),
     "clean_graphics": ("113109", "Retain Safe Private Option"),  # placeholder; real code differs
@@ -114,14 +116,24 @@ ANNEX_E_MATRIX: dict[tuple[int, int], str] = {
 
 
 # Date tags and time tags — applied after the matrix.
-DATE_TAGS = {(0x0008, 0x0020), (0x0008, 0x0021), (0x0008, 0x0022), (0x0008, 0x0023),
-             (0x0010, 0x0030)}
+DATE_TAGS = {
+    (0x0008, 0x0020),
+    (0x0008, 0x0021),
+    (0x0008, 0x0022),
+    (0x0008, 0x0023),
+    (0x0010, 0x0030),
+}
 TIME_TAGS = {(0x0008, 0x0030), (0x0008, 0x0031), (0x0008, 0x0032), (0x0008, 0x0033)}
 
 
 # UID tags that must always be pseudonymised (FR-8, AC-6).
-UID_TAGS = {(0x0020, 0x000D), (0x0020, 0x000E), (0x0008, 0x0018),
-            (0x0020, 0x0052), (0x0020, 0x0200)}
+UID_TAGS = {
+    (0x0020, 0x000D),
+    (0x0020, 0x000E),
+    (0x0008, 0x0018),
+    (0x0020, 0x0052),
+    (0x0020, 0x0200),
+}
 
 
 # Description whitelist (simple keyword match, case-insensitive). Anything not
@@ -221,7 +233,9 @@ class DeidEngine:
             ds.StudyInstanceUID = new_study
             ds.SeriesInstanceUID = new_series
             ds.SOPInstanceUID = new_sop
-            if hasattr(ds, "file_meta") and getattr(ds.file_meta, "MediaStorageSOPInstanceUID", None):
+            if hasattr(ds, "file_meta") and getattr(
+                ds.file_meta, "MediaStorageSOPInstanceUID", None
+            ):
                 ds.file_meta.MediaStorageSOPInstanceUID = new_sop
 
             pseudo_study_uid = new_study
@@ -296,9 +310,7 @@ class DeidEngine:
         # DICOM UID max 64 characters.
         if len(pseudo) > 64:
             pseudo = pseudo[:64]
-        self._db.upsert_uid_map(
-            str(original), pseudo, kind=kind, salt_version=self._salt_version
-        )
+        self._db.upsert_uid_map(str(original), pseudo, kind=kind, salt_version=self._salt_version)
         return pseudo
 
     def _ensure_patient_offset(self, ds: Dataset) -> int:
@@ -440,19 +452,19 @@ class DeidEngine:
 
     def _set_method_tags(self, ds: Dataset) -> None:
         ds.PatientIdentityRemoved = "YES"
-        ds.DeidentificationMethod = (
-            f"RadiVault v{self._version_string} Annex E Basic + options"
-        )
+        ds.DeidentificationMethod = f"RadiVault v{self._version_string} Annex E Basic + options"
         # Method code sequence (0012,0064)
         seq: list[Dataset] = []
         code_pairs = [
             ("113100", "Basic Application Confidentiality Profile"),
         ]
         if self._retain.longitudinal_dates:
-            code_pairs.append((
-                "113107",
-                "Retain Longitudinal Temporal Information Modified Dates Option",
-            ))
+            code_pairs.append(
+                (
+                    "113107",
+                    "Retain Longitudinal Temporal Information Modified Dates Option",
+                )
+            )
         if self._retain.patient_characteristics:
             code_pairs.append(("113108", "Retain Patient Characteristics Option"))
         if self._retain.clean_descriptors:

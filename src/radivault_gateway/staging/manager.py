@@ -7,15 +7,16 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
 
 log = logging.getLogger("radivault.staging")
 
 
 class StagingManager:
-    def __init__(self, root: str | Path, *, retention_hours: int = 72, max_disk_pct: int = 80) -> None:
+    def __init__(
+        self, root: str | Path, *, retention_hours: int = 72, max_disk_pct: int = 80
+    ) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.retention_hours = retention_hours
@@ -38,10 +39,13 @@ class StagingManager:
             shutil.rmtree(path)
             return True
         except OSError as exc:
-            log.error("staging cleanup failed", extra={
-                "pseudo_study_uid": pseudo_study_uid,
-                "error": str(exc),
-            })
+            log.error(
+                "staging cleanup failed",
+                extra={
+                    "pseudo_study_uid": pseudo_study_uid,
+                    "error": str(exc),
+                },
+            )
             return False
 
     def disk_usage_pct(self) -> float:
@@ -56,12 +60,12 @@ class StagingManager:
 
     def stale_studies(self) -> list[Path]:
         """FR-16: return study dirs older than retention_hours (warn, do not delete)."""
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=self.retention_hours)
+        cutoff = datetime.now(tz=UTC) - timedelta(hours=self.retention_hours)
         stale: list[Path] = []
         for child in self.root.iterdir():
             if not child.is_dir():
                 continue
-            mtime = datetime.fromtimestamp(child.stat().st_mtime, tz=timezone.utc)
+            mtime = datetime.fromtimestamp(child.stat().st_mtime, tz=UTC)
             if mtime < cutoff:
                 stale.append(child)
         return stale

@@ -12,7 +12,7 @@ import platform
 import shutil
 import sys
 import tempfile
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -21,7 +21,6 @@ from radivault_gateway import RULESET_VERSION, __version__
 from radivault_gateway.audit import AuditLogger, verify_chain
 from radivault_gateway.config import ConfigError, GatewayConfig, load_config
 from radivault_gateway.logging_config import configure_logging
-
 
 DEFAULT_CONFIG_PATH = os.environ.get("RADIVAULT_CONFIG", "/etc/radivault/gateway.yml")
 
@@ -93,7 +92,7 @@ def version(json_output: bool) -> None:
         import pydicom  # type: ignore[import-not-found]
 
         info["pydicom"] = pydicom.__version__
-    except Exception:  # noqa: BLE001
+    except Exception:
         info["pydicom"] = "unknown"
     if json_output:
         click.echo(json.dumps(info, indent=0).replace("\n", ""))
@@ -117,14 +116,15 @@ def audit() -> None:  # pragma: no cover - click group wrapper
 @click.argument("path", type=click.Path(exists=False, dir_okay=False, path_type=Path))
 def audit_verify(path: Path) -> None:
     if not path.exists():
-        click.echo(f"[ERR_AUD_001] 감사 로그 파일을 찾을 수 없습니다 / audit log not found: {path}", err=True)
+        click.echo(
+            f"[ERR_AUD_001] 감사 로그 파일을 찾을 수 없습니다 / audit log not found: {path}",
+            err=True,
+        )
         sys.exit(2)
     click.echo(f"Reading {path}...")
     result = verify_chain(path)
     if result.ok:
-        click.echo(
-            f"PASS  seq range [0, {result.head_seq}]  head_hash={result.head_hash}"
-        )
+        click.echo(f"PASS  seq range [0, {result.head_seq}]  head_hash={result.head_hash}")
         click.echo(f"      {result.lines} lines verified")
         sys.exit(0)
     click.echo(f"FAIL  chain broken at seq={result.first_mismatch_seq}", err=True)
@@ -142,7 +142,9 @@ def audit_verify(path: Path) -> None:
 
 @cli.command("de-id-test", help="Dry-run de-identification on a single DICOM (단일 파일 테스트)")
 @click.argument("input_path", type=click.Path(exists=False, dir_okay=False, path_type=Path))
-@click.option("-o", "--output", "output_path", type=click.Path(dir_okay=False, path_type=Path), default=None)
+@click.option(
+    "-o", "--output", "output_path", type=click.Path(dir_okay=False, path_type=Path), default=None
+)
 @click.option("--show-diff", is_flag=True, help="Show tag-by-tag before/after table")
 @click.pass_context
 def de_id_test(
@@ -161,10 +163,8 @@ def de_id_test(
         import pydicom
 
         ds_orig = pydicom.dcmread(input_path, force=False)
-    except Exception as exc:  # noqa: BLE001
-        click.echo(
-            f"[ERR_DEID_011] DICOM 파싱 실패 / invalid DICOM: {exc}", err=True
-        )
+    except Exception as exc:
+        click.echo(f"[ERR_DEID_011] DICOM 파싱 실패 / invalid DICOM: {exc}", err=True)
         sys.exit(1)
 
     cfg = _load_or_exit(ctx.obj["config_path"])
@@ -197,7 +197,7 @@ def de_id_test(
         out_dir = tmp / "out"
         try:
             result = engine.deidentify_study(src_dir, out_dir)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             click.echo(f"[ERR_DEID_020] 익명화 실패 / deid failed: {exc}", err=True)
             sys.exit(1)
         reverify = engine.reverify(out_dir)
@@ -208,7 +208,9 @@ def de_id_test(
         click.echo("")
         if show_diff:
             _print_diff(ds_orig, ds_after)
-        click.echo(f"Reverify: {'PASS' if reverify.ok else 'FAIL'}  ({len(reverify.offending)} offending)")
+        click.echo(
+            f"Reverify: {'PASS' if reverify.ok else 'FAIL'}  ({len(reverify.offending)} offending)"
+        )
         if not reverify.ok:
             for group, element, reason in reverify.offending:
                 click.echo(f"  ({group:04X},{element:04X}) {reason}", err=True)
@@ -226,7 +228,7 @@ def de_id_test(
     sys.exit(0)
 
 
-def _print_diff(ds_orig: "pydicom.Dataset", ds_after: "pydicom.Dataset") -> None:
+def _print_diff(ds_orig: object, ds_after: object) -> None:
     tags_of_interest = [
         (0x0010, 0x0010, "PatientName"),
         (0x0010, 0x0020, "PatientID"),
@@ -342,7 +344,7 @@ def status(ctx: click.Context, json_output: bool) -> None:
 
     try:
         db = StateDB(cfg.state.db_path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         click.echo(f"[ERR_DB_001] 상태 DB 접근 실패 / cannot access state DB: {exc}", err=True)
         sys.exit(1)
     counts = db.counts_by_state()
@@ -388,12 +390,13 @@ def status(ctx: click.Context, json_output: bool) -> None:
     click.echo("Pipeline counts")
     for state_name, n in sorted(counts.items()):
         click.echo(f"  {state_name:20s}{n}")
-    click.echo(f"Audit log  chain: {'OK' if chain_ok else 'FAIL' if audit_exists else 'ABSENT'}  head_seq={head_seq}")
+    click.echo(
+        f"Audit log  chain: {'OK' if chain_ok else 'FAIL' if audit_exists else 'ABSENT'}  head_seq={head_seq}"
+    )
     sys.exit(0)
 
 
 def _build_pipeline(cfg: GatewayConfig):
-    from radivault_gateway.audit import AuditLogger
     from radivault_gateway.deid import DeidEngine
     from radivault_gateway.orchestrator import Pipeline
     from radivault_gateway.pacs import DicomWebPacsClient

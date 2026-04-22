@@ -14,13 +14,13 @@ import logging
 import random
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import httpx
-
 
 log = logging.getLogger("radivault.pacs")
 
@@ -121,7 +121,7 @@ class DicomWebPacsClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "DicomWebPacsClient":
+    def __enter__(self) -> DicomWebPacsClient:
         return self
 
     def __exit__(self, *exc: Any) -> None:

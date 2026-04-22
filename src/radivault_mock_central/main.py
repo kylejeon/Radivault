@@ -11,12 +11,11 @@ import hashlib
 import json
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 
 from radivault_mock_central.schemas import (
     AnchorRequest,
@@ -24,7 +23,6 @@ from radivault_mock_central.schemas import (
     HealthResponse,
     IngestResponse,
 )
-
 
 EXPECTED_TOKEN = os.environ.get("MOCK_CENTRAL_TOKEN", "mock-upload-token")
 DUMP_ROOT = Path(os.environ.get("MOCK_CENTRAL_DUMP", "/tmp/mock-central"))
@@ -55,7 +53,7 @@ async def healthz() -> HealthResponse:
 async def ingest_studies(
     request: Request,
     manifest: Annotated[UploadFile, File(...)],
-    files: Annotated[list[UploadFile], File(...)] = None,
+    files: Annotated[list[UploadFile] | None, File(...)] = None,
     authorization: Annotated[str | None, Header()] = None,
 ):
     _auth(authorization)
@@ -87,7 +85,7 @@ async def ingest_studies(
         received.append(file.filename)
 
     job_id = "ingest_" + secrets.token_hex(6)
-    received_at = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    received_at = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return IngestResponse(job_id=job_id, received_at=received_at)
 
 

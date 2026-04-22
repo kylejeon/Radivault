@@ -15,11 +15,9 @@ import logging
 import shutil
 import tempfile
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
-from radivault_gateway import __version__
 from radivault_gateway.audit import AuditLogger
 from radivault_gateway.config import GatewayConfig
 from radivault_gateway.deid import DeidEngine, QuarantineRequired
@@ -27,7 +25,6 @@ from radivault_gateway.pacs import DicomWebPacsClient, PacsError, StudySummary
 from radivault_gateway.staging import StagingManager
 from radivault_gateway.state import StateDB, StudyState
 from radivault_gateway.upload import UploadClient, UploadError
-
 
 log = logging.getLogger("radivault.pipeline")
 
@@ -215,7 +212,7 @@ class Pipeline:
                     duration_ms=_elapsed_ms(started),
                     fetch_ms=fetch_ms,
                 )
-            except Exception as exc:  # noqa: BLE001 — broad to audit unknowns
+            except Exception as exc:
                 self._audit.append(
                     "deid.failed",
                     meta={"error": str(exc)},
@@ -332,12 +329,10 @@ class Pipeline:
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={"error": str(exc), "status_code": exc.status_code},
                 )
-                self._db.mark_state(
-                    pseudo_uid, StudyState.FAILED_UPLOAD, last_error=str(exc)
-                )
+                self._db.mark_state(pseudo_uid, StudyState.FAILED_UPLOAD, last_error=str(exc))
                 self._db.schedule_retry(
                     pseudo_uid,
-                    (datetime.now(tz=timezone.utc) + timedelta(minutes=5)).isoformat(),
+                    (datetime.now(tz=UTC) + timedelta(minutes=5)).isoformat(),
                 )
                 return StudyOutcome(
                     original_study_uid=original_uid,

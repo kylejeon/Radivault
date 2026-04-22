@@ -11,10 +11,10 @@ from __future__ import annotations
 import enum
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_identity (
@@ -82,7 +82,7 @@ INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 1);
 """
 
 
-class StudyState(str, enum.Enum):
+class StudyState(enum.StrEnum):
     QUEUED = "queued"
     FETCHING = "fetching"
     FETCHED = "fetched"
@@ -98,7 +98,7 @@ class StudyState(str, enum.Enum):
 
 
 def _utcnow() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class StateDB:
@@ -111,18 +111,14 @@ class StateDB:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(
-            self.path, isolation_level=None, check_same_thread=False
-        )
+        self._conn = sqlite3.connect(self.path, isolation_level=None, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         self._migrate()
 
     def _migrate(self) -> None:
         with self._lock:
-            self._conn.executescript(
-                "PRAGMA journal_mode=WAL;\nPRAGMA foreign_keys=ON;\n" + SCHEMA
-            )
+            self._conn.executescript("PRAGMA journal_mode=WAL;\nPRAGMA foreign_keys=ON;\n" + SCHEMA)
 
     def close(self) -> None:
         with self._lock:
@@ -217,9 +213,7 @@ class StateDB:
         last_error: str | None = None,
         central_job_id: str | None = None,
     ) -> None:
-        modalities_str = (
-            ",".join(sorted(set(modalities))) if modalities is not None else None
-        )
+        modalities_str = ",".join(sorted(set(modalities))) if modalities is not None else None
         with self._lock:
             self._conn.execute(
                 """
@@ -276,8 +270,7 @@ class StateDB:
     def increment_retry(self, pseudo_study_uid: str) -> int:
         with self._lock:
             self._conn.execute(
-                "UPDATE study_job SET retry_count = retry_count + 1 "
-                "WHERE pseudo_study_uid = ?",
+                "UPDATE study_job SET retry_count = retry_count + 1 WHERE pseudo_study_uid = ?",
                 (pseudo_study_uid,),
             )
             row = self._conn.execute(
@@ -305,8 +298,7 @@ class StateDB:
                 ).fetchall()
             else:
                 rows = self._conn.execute(
-                    "SELECT * FROM study_job WHERE state = ? "
-                    "ORDER BY first_seen_at DESC LIMIT ?",
+                    "SELECT * FROM study_job WHERE state = ? ORDER BY first_seen_at DESC LIMIT ?",
                     (state.value, limit),
                 ).fetchall()
         return [dict(r) for r in rows]

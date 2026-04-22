@@ -8,14 +8,12 @@ file_meta.
 from __future__ import annotations
 
 import os
-import tempfile
 from datetime import date
 from pathlib import Path
 
 import pytest
-import pydicom
-from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
-from pydicom.uid import ExplicitVRLittleEndian, generate_uid
+from pydicom.dataset import FileDataset, FileMetaDataset
+from pydicom.uid import ExplicitVRLittleEndian
 
 
 def _make_instance(

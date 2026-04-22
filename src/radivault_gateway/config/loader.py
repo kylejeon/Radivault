@@ -15,7 +15,6 @@ from pydantic import ValidationError
 
 from radivault_gateway.config.schema import GatewayConfig
 
-
 _SECRET_RE = re.compile(r"\$\{(file|env):([^}]+)\}")
 
 
@@ -47,9 +46,7 @@ class ConfigError(Exception):
             lines.append(f"  {key}: {value}")
         if self.suggestion:
             lines.append(f"  수정 / Fix: {self.suggestion}")
-        lines.append(
-            f"  문서 / Docs: https://docs.radivault.io/gateway-agent/errors/{self.code}"
-        )
+        lines.append(f"  문서 / Docs: https://docs.radivault.io/gateway-agent/errors/{self.code}")
         return "\n".join(lines)
 
 
@@ -94,18 +91,18 @@ def resolve_secret(raw: str, *, env: dict[str, str] | None = None) -> str:
             f"환경변수가 설정되지 않았습니다: {target}",
             f"Environment variable not set: {target}",
             details={"variable": target},
-            suggestion=f"해당 환경변수를 export 하거나 ${{file:...}} 참조로 전환하세요.",
+            suggestion="해당 환경변수를 export 하거나 ${file:...} 참조로 전환하세요.",
         )
     return source[target]
 
 
-def _expand_tree(node: Any) -> Any:
+def _expand_tree(node: Any, env: dict[str, str] | None = None) -> Any:
     if isinstance(node, dict):
-        return {k: _expand_tree(v) for k, v in node.items()}
+        return {k: _expand_tree(v, env) for k, v in node.items()}
     if isinstance(node, list):
-        return [_expand_tree(v) for v in node]
+        return [_expand_tree(v, env) for v in node]
     if isinstance(node, str):
-        return resolve_secret(node)
+        return resolve_secret(node, env=env)
     return node
 
 
@@ -214,7 +211,7 @@ def load_config(
     raw = _env_override(raw, env_map)
     if interpolate_secrets:
         try:
-            raw = _expand_tree(raw)
+            raw = _expand_tree(raw, env_map)
         except ConfigError:
             raise
     try:
