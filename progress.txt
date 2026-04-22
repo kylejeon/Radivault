@@ -184,3 +184,27 @@ dev-spec §13 Gateway 델타 D-1..D-7는 별도 Gateway v0.1.1 트랙 가정.
 - 옵션 A: @developer — central-ingest 구현 착수 (dev-spec + design-spec 두 문서 기반)
 - 옵션 B: Kyle 결정사항 처리 (특히 Gateway v0.1.1 착수 시점, docs.radivault.io 호스팅, 에러 코드 dev-spec 환류)
 - 옵션 C: @planner 재호출 — Gateway v0.1.1 보강 dev-spec
+
+---
+
+## 2026-04-22 — @qa central-ingest 검수
+
+### 뭘 했나
+- central-ingest v0.1 MVP 검수 (커밋 `70782e8..e874295` + Gateway D-3 브릿지 `c847e62`).
+- 독립 검증: central unit 34/34, central integration 12/12, gateway 회귀 55/55, ruff clean.
+- AC 36건 전수 매트릭스, 보안 High 3건 / Medium 4건 / Low 3건 / Critical 0건 식별.
+- 산출물: `docs/qa/qa-report-central-ingest.md`.
+
+### 판정
+**PASS with minor issues** (병합 가능).
+
+### 주요 발견
+- H-1 LocalFsObjectStore path traversal (dev/test 한정, 프로덕션 S3는 영향 없음).
+- H-2 SSE-KMS 기본값 None + HTTP endpoint 허용.
+- H-3 preflight 실패 시 `audit_ingest_event` 미기록 (FR-56 명시 요구; v0.1 GA 전 반영 강권장).
+- Gateway D-3 브릿지 정확 구현, Gateway 회귀 무영향.
+
+### 다음에 뭘 하나
+- 옵션 A: @developer — H-1/H-2/H-3 3건 보강 후 병합 (특히 H-3는 GA 전 필수).
+- 옵션 B: @marketer — 런칭 콘텐츠 병렬 착수 가능.
+- Kyle 결정: 호스팅 리전, Gateway v0.1.1 델타 반영 시점, quota(FR-45) v0.1 필수 여부.
