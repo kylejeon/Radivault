@@ -394,3 +394,82 @@ v0.1.1 백로그 (QA round 1 Medium/Low + 이번 세션 잔여):
   10건, v0.1 CLI/로그 형식 하위 호환 확인.
 - 다음: Kyle 결정 긴급 3건 (doc 링크 호스팅 / pixel-selftest 네이밍 /
   ERR_CFG_020 번호 예약). 그 후 @developer 구현 착수 가능.
+
+## 2026-04-22 — Session 7 (Claude, de-id-pixel v0.2 풀 파이프라인)
+
+### 뭘 했나
+옵션 C 선택. 6 에이전트 가동하여 de-id-pixel v0.2(Gateway 픽셀 수준 de-ID 확장) 완주.
+
+#### Phase 1–3 기획 산출물
+- docs/research/de-id-pixel-technical-foundations.md — 번인 트리아지 4단, OCR 엔진 비교 (Tesseract vs PaddleOCR), pydeface + mridefacer, 의료 보존 가드레일, NEJM 2019 재식별 공격 맥락
+- docs/specs/dev-spec-de-id-pixel.md (992줄, 48 FR, 35 AC, 8 ERR + 1 WARN)
+- docs/specs/design-spec-de-id-pixel.md (1044줄, CLI 확장, pixel-selftest, status 새 섹션, 10 Prometheus 메트릭, 6 알람, 6 런북)
+- 커밋 500e45d
+
+#### Phase 4 개발 Round 1
+- 6 커밋 (c39e526..26c9d47)
+- gateway unit 55→122 (+67), integration +3 skipped, ruff clean
+- pyproject.toml [pixel] extras, 신규 deid/pixel/ 모듈 6종, Dockerfile.pixel, Alembic 0003
+
+#### Phase 5 검수 Round 1 — FAIL
+- Critical 2건
+  - C-1: BurnedInAnnotation=YES가 orchestrator에서 무조건 quarantine, pixel engine 우회 → 기능 핵심 실패
+  - C-2: AC-28 Defaced DICOM 태그 미기록 (_mark_dicom_defaced 호출 부재)
+- High 3건: 크래시 복구 미구현, Prometheus 미wiring, fallback audit append 누락
+- 판정: FAIL, 커밋 ba2def2
+
+#### Phase 4 Round 2 — 5 fix 커밋 (35ea203..a4d8e4c)
+- F-1 pipeline burn-in/face-risk 라우팅이 pixel 엔진으로 흐르게 수정
+- F-2 DICOM 태그 스탬핑 (0012,0063 + 0012,0064)
+- F-3 startup orphan pixel_processing recovery (FR-36 dev-spec 대로 deided 롤백)
+- F-4 10 Prometheus 메트릭 + metrics dump CLI (HTTP /metrics 서버는 스코프 외)
+- F-5 fallback 경로 AuditLogger + audit_seq 전파
+- gateway unit 122→143 (+21)
+
+#### Phase 5 Round 2 — PASS with minor
+- Round 1 Critical/High 전건 RESOLVED
+- 279 passed, 4 skipped, ruff clean
+- 새 발견 3건 Low non-blocking
+- 커밋 4eecb91
+
+#### Phase 6 런칭 콘텐츠
+- docs/marketing/changelog-v02-pixel-deid-ko.md (336줄) — 병원 대상 v0.2 공지
+- docs/marketing/compliance-upgrade-buyer-en.md (184줄) — 구매자 DPO 컴플라이언스 브리프
+- 자체 감사 통과: 단정 0건, SOC 2/ISO 27001 "in preparation", NEJM "for context not proof" 명시
+- 커밋 5c74c4b
+
+### 어디까지 됐나
+de-id-pixel v0.2 풀 파이프라인 완주, PASS with minor.
+claude 브랜치 누적 feature: gateway-agent + central-ingest + metadata-index + de-id-pixel (4).
+
+이번 세션 통계:
+- 커밋 15+개
+- 테스트 총계: gateway 143 + central 50/17 + search 49/20 = 279 통과, 4 skipped
+- ruff clean
+- 기획 산출물 3종 + QA 보고서 1 + 마케팅 2 = 문서 6종
+
+### v0.2 배포 전 의무 체크리스트 (QA 권고 + 법무 flag)
+1. FSL 상업 라이선스 법무 자문 (pydeface 의존, blocking)
+2. 임상의 10-20% 샘플 QA 파일럿 (over-redaction/over-defacing 검증)
+3. Korean medical exclusion regex 파일럿 수집
+4. DICOM→NIfTI 변환 레이어 (pydeface 실경로, QA Low L-1)
+5. Docker 이미지 2종 실제 빌드 (default + -pixel)
+6. FSL + dcm2niix + tesseract-ocr-kor apt 패키지 호환성 실 우분투 검증
+
+### 다음에 뭘 하나
+
+누적 남은 기능 후보:
+- 옵션 D: Gateway v0.1.1 보강 dev-spec (D-1..D-7 공식 문서화)
+- 옵션 E: @planner dev-spec-order-orchestrator (구매 확정 → Gateway 영상 전송 — 매출 루프 완성 핵심)
+- 옵션 F: Buyer Portal Web UI (구매자가 클릭 가능한 페이지 — 현재 API-only)
+- 옵션 G: @planner dev-spec-billing-revenue-share (구매자 과금 + 병원 수익 정산)
+- 옵션 H: @planner dev-spec-order-download (주문 확정 후 구매자가 실제 DICOM 다운로드)
+- 비기술: 법률 자문 · 파일럿 병원 물색 (계속 보류)
+
+v0.2.1 백로그 (QA Medium/Low):
+- FR-37 fine-grained audit events
+- PIXEL_DEIDED state 전이 polish
+- CLI 이중 언어 help text
+- env var naming 3자 불일치 통일
+- DICOM→NIfTI 변환 (L-1)
+- pixel-selftest help 텍스트
