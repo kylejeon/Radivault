@@ -73,6 +73,18 @@ def upgrade() -> None:
         op.create_index(name, table, cols)
 
     if bind.dialect.name == "postgresql":
+        # H-5 — promote ``search_audit`` PK to ``(audit_pk, created_at)`` so
+        # the table can be PARTITIONed BY RANGE(created_at) in v0.1.1 without
+        # a data migration. SQLAlchemy emits a single-column PK by default
+        # (necessary for SQLite autoincrement); here we swap it on PG.
+        op.execute(
+            "ALTER TABLE search_audit DROP CONSTRAINT IF EXISTS search_audit_pkey;"
+        )
+        op.execute(
+            "ALTER TABLE search_audit "
+            "ADD CONSTRAINT search_audit_pkey PRIMARY KEY (audit_pk, created_at);"
+        )
+
         # Role creation + GRANTs (dev-spec §6.2). Wrapped in DO blocks so
         # re-running the migration is idempotent.
         op.execute(
@@ -130,6 +142,22 @@ def downgrade() -> None:
     for name, _table, _cols in _STUDY_INDEXES:
         if name in existing:
             op.drop_index(name, table_name="study")
+
+    # H-5 — if the composite PK was installed, revert to single-column PK
+    # before dropping the table. This is best-effort on PG because the
+    # table is being dropped anyway; explicit DROP CONSTRAINT keeps the
+    # downgrade symmetric with the upgrade and observable in logs.
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "DO $$ BEGIN "
+            "IF EXISTS (SELECT 1 FROM information_schema.table_constraints "
+            "WHERE table_name='search_audit' AND constraint_name='search_audit_pkey') THEN "
+            "ALTER TABLE search_audit DROP CONSTRAINT search_audit_pkey; "
+            "ALTER TABLE search_audit ADD CONSTRAINT search_audit_pkey PRIMARY KEY (audit_pk); "
+            "END IF; "
+            "EXCEPTION WHEN OTHERS THEN NULL; "
+            "END $$;"
+        )
 
     # Drop tables in FK-safe order.
     cascade = " CASCADE" if bind.dialect.name == "postgresql" else ""

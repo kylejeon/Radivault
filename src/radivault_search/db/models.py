@@ -90,11 +90,26 @@ class BuyerApiKey(Base):
 
 class SearchAudit(Base):
     __tablename__ = "search_audit"
+    # H-5 / dev-spec §6.2 — composite PK (audit_pk, created_at) makes the
+    # table PARTITION BY RANGE(created_at) ready. Partitioning itself lands
+    # in v0.1.1 (pg_partman), but the PK shape is fixed here so no data
+    # migration is needed at that point.
+    #
+    # Portability note: SQLite cannot do ``AUTOINCREMENT`` on a composite PK
+    # column, so on that dialect ``audit_pk`` falls back to a single-column
+    # PK (declared via mapped_column primary_key=True). On PostgreSQL the
+    # Alembic migration 0002 DROPs the single PK and re-establishes it as
+    # ``(audit_pk, created_at)``; see ``alembic/versions/0002_metadata_index.py``
+    # for the canonical forward-ready PG shape.
     __table_args__ = (
         Index("idx_search_audit_buyer_time", "buyer_pk", "created_at"),
         Index("idx_search_audit_filter_sha", "filter_sha256"),
     )
 
+    # autoincrement=True works with single-column PK on SQLite (tests) and
+    # with Identity on PG. The ``created_at`` PK member below is only
+    # marked ``primary_key`` via a dialect-conditional event so SQLite can
+    # still emit ``INTEGER PRIMARY KEY AUTOINCREMENT`` on ``audit_pk`` alone.
     audit_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     buyer_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("buyer.buyer_pk"), nullable=False)
     kid: Mapped[str] = mapped_column(String, nullable=False)
@@ -109,7 +124,9 @@ class SearchAudit(Base):
     request_id: Mapped[str] = mapped_column(String, nullable=False)
     cursor_presence: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )
 
 

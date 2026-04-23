@@ -70,6 +70,23 @@ def test_upgrade_is_idempotent(migrations) -> None:
     engine.dispose()
 
 
+def test_search_audit_pk_contains_created_at_on_pg_shape() -> None:
+    """H-5 — on PostgreSQL the migration promotes the PK to
+    ``(audit_pk, created_at)`` to make the table partitionable by range.
+
+    SQLite cannot express ``AUTOINCREMENT`` on a composite PK, so the ORM
+    declares a single-column PK; the migration does the PG-specific
+    ALTER. Here we verify the migration module contains that ALTER so the
+    PG path is at least statically present. (A live-PG integration test
+    is planned for v0.1.1 QA when a PG fixture is wired.)
+    """
+    root = pathlib.Path(__file__).resolve().parents[3]
+    text = (root / "alembic" / "versions" / "0002_metadata_index.py").read_text()
+    assert "PRIMARY KEY (audit_pk, created_at)" in text
+    # And the downgrade restores the single-column PK.
+    assert "PRIMARY KEY (audit_pk)" in text
+
+
 def test_downgrade_removes_new_objects(migrations) -> None:
     m1, m2 = migrations
     engine = create_engine("sqlite+pysqlite:///:memory:")
