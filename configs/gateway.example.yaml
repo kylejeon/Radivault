@@ -39,6 +39,39 @@ deid:
     institution_identity: false
     device_identity: "partial"                  # full | partial | none
 
+  # ─────────── De-ID Pixel (v0.2 opt-in; 기본 OFF) ───────────
+  # 번인 텍스트 OCR 마스킹 + 두경부 CT/MR 얼굴 defacing.
+  # true 로 바꾸려면 반드시 radivault-gateway:0.2.0-pixel 이미지 사용.
+  pixel:
+    enabled: false                              # 마스터 킬 스위치
+    quarantine_on_failure: true                 # 엔진 실패 시 격리 폴백
+    ocr:
+      enabled: true
+      engine: tesseract                         # tesseract | paddleocr
+      languages: ["kor", "eng"]
+      confidence_threshold: 0.60
+      redaction_fill: solid_black               # solid_black | mean_pixel | gaussian_blur
+      box_padding_px: 2
+      residual_recheck: true
+      modality_allowlist: ["SC", "OT", "US", "XA", "MG"]
+    defacing:
+      enabled: true
+      library: pydeface                         # pydeface | mridefacer
+      fallback: true
+      on_missing: disable                       # disable | fail_start
+      modalities: ["CT", "MR"]
+      body_parts: ["HEAD", "BRAIN", "NEURO", "STROKE"]
+      exclusion_patterns:
+        - "(?i)dental"
+        - "(?i)\\bENT\\b"
+        - "(?i)facial[ _-]?trauma"
+        - "(?i)maxillofacial"
+        - "(?i)sinus"
+        - "(?i)orbit"
+        - "(?i)ophthalm"
+      min_removed_ratio: 0.05
+      residual_voxel_check: true
+
 # ─────────── Staging 영역 (로컬 임시 저장) ───────────
 staging:
   root: "/var/lib/radivault/staging"

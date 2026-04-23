@@ -95,6 +95,20 @@ search-test = [
     "httpx>=0.27",
     "fakeredis>=2.20",
 ]
+# v0.2 de-id-pixel: OCR + 3D defacing (opt-in; included in :0.2.0-pixel image).
+pixel = [
+    "pytesseract>=0.3.13",
+    "pydeface>=2.0",
+    "nibabel>=5.2",
+    "numpy>=1.26",
+    "Pillow>=10.3",
+    "opencv-python-headless>=4.9",
+]
+# Optional PaddleOCR path (:0.2.0-pixel-paddle image).
+pixel-paddle = [
+    "paddleocr>=2.7",
+    "paddlepaddle>=2.6",
+]
 
 [project.scripts]
 radivault-gateway = "radivault_gateway.cli.main:cli"

@@ -1,0 +1,70 @@
+# RadiVault Gateway Agent — pixel variant (radivault-gateway:0.2.0-pixel).
+#
+# BUILD_STRATEGY: extends the slim base image with Tesseract 5 + Korean/English
+# language packs, FSL flirt via apt (``fsl-flirt`` in Debian 12 ``contrib``),
+# dcm2niix, and the ``[pixel]`` Python extras. This image is ~1.1 GB vs the
+# slim 150 MB base (dev-spec §9.6). Build via GitHub Actions on tag push.
+# `trivy image` HIGH = 0 required before push (dev-spec NFR, design-spec §5).
+
+############################
+# Stage 1 — builder
+############################
+FROM python:3.11-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+COPY src ./src
+COPY README.md ./
+
+RUN python -m venv /opt/radivault-venv \
+ && /opt/radivault-venv/bin/pip install --upgrade pip \
+ && /opt/radivault-venv/bin/pip install ".[mock,pixel]"
+
+############################
+# Stage 2 — runtime (pixel)
+############################
+FROM python:3.11-slim-bookworm AS runtime
+
+ARG APP_UID=10001
+ARG APP_GID=10001
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/radivault-venv/bin:${PATH}" \
+    RADIVAULT_CONFIG=/etc/radivault/gateway.yml \
+    RADIVAULT_IMAGE_TAG="radivault-gateway:0.2.0-pixel"
+
+# apt packages:
+#   tesseract-ocr, tesseract-ocr-kor, tesseract-ocr-eng — Tesseract 5 + kor/eng.
+#   fsl-5.0-flirt — FSL FLIRT binary that pydeface calls (Debian non-free).
+#   dcm2niix — DICOM→NIfTI conversion used by the defacing adapter.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng \
+      fsl-5.0-flirt dcm2niix \
+      libxrender1 libice6 libsm6 \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid ${APP_GID} radivault \
+ && useradd --system --uid ${APP_UID} --gid ${APP_GID} \
+      --home-dir /var/lib/radivault --shell /sbin/nologin radivault \
+ && mkdir -p /etc/radivault /var/lib/radivault/staging /var/log/radivault \
+ && chown -R radivault:radivault /var/lib/radivault /var/log/radivault
+
+COPY --from=builder /opt/radivault-venv /opt/radivault-venv
+COPY configs/gateway.pixel.example.yaml /etc/radivault/gateway.pixel.example.yaml
+
+USER radivault:radivault
+WORKDIR /var/lib/radivault
+
+ENTRYPOINT ["radivault-gateway"]
+CMD ["--help"]

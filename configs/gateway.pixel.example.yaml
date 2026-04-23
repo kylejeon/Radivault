@@ -1,0 +1,91 @@
+# RadiVault Gateway Agent — pilot preset with de-id-pixel v0.2 ON.
+# Drop-in replacement for gateway.example.yaml on the :0.2.0-pixel image.
+# 최초 48시간은 모달리티·신뢰도 임계를 보수적으로 고정하고, 임상 리뷰어 sign-off 후
+# Preset C(gateway.example.yaml + pixel 기본값)로 졸업한다.
+version: 1
+
+agent:
+  gateway_id: "${file:/run/credentials/gateway_id}"
+  hospital_id: "hosp_abc"
+  org_root_oid: "2.25.140737488355328"
+
+pacs:
+  base_url: "https://pacs.hospital.local/dicom-web"
+  auth:
+    type: "bearer"
+    token: "${file:/run/credentials/pacs_token}"
+  ca_bundle: "/etc/radivault/ca.pem"
+  max_concurrency: 4
+  poll_interval_seconds: 300
+  query:
+    modalities: ["CR", "CT", "MR", "DX", "US"]
+    lookback_days: 7
+
+deid:
+  ruleset_version: "v0.1.0"
+  salt: "${file:/run/credentials/salt}"
+  salt_version: 1
+  burnin_quarantine_modalities: ["SC", "OT"]  # US now handled by pixel OCR.
+  retain_options:
+    longitudinal_dates: true
+    patient_characteristics: true
+    clean_descriptors: true
+    clean_graphics: true
+    safe_private: false
+    uids: false
+    institution_identity: false
+    device_identity: "partial"
+
+  # ───────── De-ID Pixel (v0.2, opt-in pilot) ─────────
+  pixel:
+    enabled: true
+    quarantine_on_failure: true
+    ocr:
+      enabled: true
+      engine: tesseract
+      languages: ["kor", "eng"]
+      confidence_threshold: 0.70       # Pilot: 0.60 → 0.70 보수적.
+      redaction_fill: solid_black
+      box_padding_px: 2
+      residual_recheck: true
+      modality_allowlist: ["SC", "OT", "US"]  # XA/MG는 2주 후 확장.
+    defacing:
+      enabled: true
+      library: pydeface
+      fallback: true
+      on_missing: disable
+      modalities: ["MR"]               # CT는 2주 후 open Q #11 결정 이후 확장.
+      body_parts: ["HEAD", "BRAIN", "NEURO"]
+      exclusion_patterns:
+        - "(?i)dental"
+        - "(?i)\\bENT\\b"
+        - "(?i)facial[ _-]?trauma"
+        - "(?i)maxillofacial"
+        - "(?i)sinus"
+        - "(?i)orbit"
+        - "(?i)ophthalm"
+      min_removed_ratio: 0.05
+      residual_voxel_check: true
+
+staging:
+  root: "/var/lib/radivault/staging"
+  retention_hours: 72
+  max_disk_pct: 80
+
+state:
+  db_path: "/var/lib/radivault/state.sqlite3"
+
+audit:
+  path: "/var/log/radivault/audit.log"
+  anchor_interval_seconds: 3600
+
+central:
+  base_url: "https://ingest.radivault.io"
+  upload_token: "${file:/run/credentials/upload_token}"
+  upload_timeout_seconds: 600
+  max_upload_retries: 10
+
+logging:
+  level: "INFO"
+  json: true
+  console_color: "auto"

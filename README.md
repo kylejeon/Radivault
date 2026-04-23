@@ -56,6 +56,25 @@ docker compose logs -f gateway-agent
 
 `docker-compose.yml`은 `gateway-agent`, `mock-central`, `orthanc` 세 서비스를 포함해 로컬 end-to-end 검증이 가능하다.
 
+### v0.2 de-id-pixel (opt-in)
+
+번인 OCR 마스킹 + 3D defacing 기능은 옵션이다. Python 측은 `[pixel]` extra,
+컨테이너 측은 별도 태그로 분리된다.
+
+```bash
+# 파이썬 의존성 (host 개발용; macOS는 tesseract/pydeface 추가 설치 필요)
+pip install -e ".[dev,pixel]"
+
+# 전용 Docker 이미지 (CI로 빌드; 로컬 빌드는 tesseract/FSL apt 패키지 필요)
+docker build -f Dockerfile.pixel -t radivault-gateway:0.2.0-pixel .
+
+# 의존성 자체 점검
+radivault-gateway pixel-selftest        # exit 0/1/2/3
+```
+
+설정: `configs/gateway.pixel.example.yaml` (Preset B — pilot). 기본 이미지에서는
+`deid.pixel.enabled=false`로 두어 v0.1과 바이트 동등하게 동작한다.
+
 ## 테스트
 
 - 단위 테스트: `pytest tests/unit -q` (의존성 없이 실행)

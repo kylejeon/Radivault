@@ -16,6 +16,11 @@ from radivault_gateway.config.schema import (
     StagingConfig,
     StateConfig,
 )
+from radivault_gateway.deid.pixel.config import (
+    PixelDefacingConfig,
+    PixelDeidConfig,
+    PixelOcrConfig,
+)
 
 __all__ = [
     "AgentConfig",
@@ -27,6 +32,9 @@ __all__ = [
     "LoggingConfig",
     "PacsAuthConfig",
     "PacsConfig",
+    "PixelDefacingConfig",
+    "PixelDeidConfig",
+    "PixelOcrConfig",
     "RetainOptions",
     "StagingConfig",
     "StateConfig",

@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from radivault_gateway.deid.pixel.config import PixelDeidConfig
+
 
 class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -79,6 +81,8 @@ class DeidConfig(BaseModel):
     salt_version: int = Field(default=1, ge=1)
     burnin_quarantine_modalities: list[str] = Field(default_factory=lambda: ["SC", "US", "OT"])
     retain_options: RetainOptions = Field(default_factory=RetainOptions)
+    # v0.2 de-id-pixel extension (opt-in, default OFF).
+    pixel: PixelDeidConfig = Field(default_factory=PixelDeidConfig)
 
 
 class StagingConfig(BaseModel):
