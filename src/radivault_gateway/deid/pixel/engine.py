@@ -315,6 +315,12 @@ class PixelDeidEngine:
                     f"< {self._cfg.defacing.min_removed_ratio:.4f}"
                 ),
             )
+        # AC-28 / dev-spec §6.4: stamp every DICOM in the study with the
+        # defacing de-identification method tags so downstream consumers can
+        # tell the study has been defaced. We mark all staged files because
+        # the defaced 3D volume was reconstructed from the series and the
+        # tags are study-level provenance (FR-18).
+        _stamp_defacing_tags(staged_dir)
         return result, library
 
 
@@ -404,6 +410,32 @@ def _mark_dicom_defaced(ds) -> None:
     tag = "RadiVault-Defaced"
     if tag not in comment:
         ds.ImageComments = (comment + f" {tag}").strip()
+
+
+def _stamp_defacing_tags(staged_dir: Path) -> None:
+    """AC-28 / FR-18: append defacing tags to every DICOM under ``staged_dir``.
+
+    Called on successful defacing return paths (primary library or fallback).
+    Failures to open an individual DICOM are logged and skipped rather than
+    aborting the whole study — the study has already been defaced in the
+    pixel domain and partial tag updates are safer than a crash.
+    """
+    import pydicom
+
+    for path in sorted(Path(staged_dir).rglob("*.dcm")):
+        try:
+            ds = pydicom.dcmread(path, force=False)
+        except Exception as exc:
+            log.warning(
+                "pixel.deface.mark_tag_skipped",
+                extra={
+                    "event": "pixel.deface.mark_tag_skipped",
+                    "pixel": {"stage": "deface", "path": str(path), "error": str(exc)},
+                },
+            )
+            continue
+        _mark_dicom_defaced(ds)
+        ds.save_as(path, enforce_file_format=False)
 
 
 def _pick_defacing_volume(staged_dir: Path) -> Path | None:  # pragma: no cover - live only
