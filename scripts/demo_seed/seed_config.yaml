@@ -1,0 +1,46 @@
+# TCIA demo seed config (dev-spec buyer-portal-demo §8.1).
+# Edit carefully — target_count too high will blow out the demo window.
+# Licenses flagged "Restricted" require Kyle confirmation before use.
+
+cache_dir: ./demo_data/cache
+logs_dir: ./demo_data/logs
+
+collections:
+  - name: LIDC-IDRI
+    modality: CT
+    body_part: CHEST
+    target_count: 100
+    license: RESTRICTED
+    notes: Kyle must confirm restricted license before demo use.
+  - name: CPTAC-PDA
+    modality: CT
+    body_part: ABDOMEN
+    target_count: 50
+    license: CC-BY
+  - name: QIN-BRAIN-DSC-MRI
+    modality: MR
+    body_part: BRAIN
+    target_count: 100
+    license: CC-BY
+  - name: CBIS-DDSM
+    modality: MG
+    body_part: BREAST
+    target_count: 50
+    license: CC-BY
+  - name: Spine-Mets-CT-SEG
+    modality: CT
+    body_part: SPINE
+    target_count: 100
+    license: CC-BY
+
+gateway:
+  config: ./configs/demo_gateway.yaml
+  batch_size: 500
+
+central:
+  base_url: http://localhost:8001
+
+orthanc:
+  url: http://localhost:8042
+  username: orthanc
+  password: orthanc
