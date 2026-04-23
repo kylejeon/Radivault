@@ -32,6 +32,26 @@ def validate_filter(req: SearchRequest) -> None:
             )
 
 
+def _extract_exclude_hospitals(scope_json: dict | None) -> list[int]:
+    """FR-75/76 — pull ``scope_json.exclude_hospitals`` (list of hospital_pk).
+
+    Never raises; a malformed value (non-list, non-int members) is coerced
+    to an empty list so a broken scope can never widen access.
+    """
+    if not scope_json:
+        return []
+    raw = scope_json.get("exclude_hospitals")
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out: list[int] = []
+    for v in raw:
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 @dataclass
 class CostEstimate:
     estimated_rows: int
@@ -45,6 +65,7 @@ def estimate_cost(
     *,
     max_rows: int = 10_000_000,
     facet_suppress_rows: int = 2_000_000,
+    scope_json: dict | None = None,
 ) -> CostEstimate:
     """Estimate the rows matched by the filter.
 
@@ -54,7 +75,7 @@ def estimate_cost(
     preserved.
     """
     dialect = session.bind.dialect.name if session.bind is not None else "sqlite"
-    clauses = _build_where(req)
+    clauses = _build_where(req, scope_json=scope_json)
 
     if dialect == "postgresql":
         try:
@@ -85,10 +106,15 @@ def estimate_cost(
     )
 
 
-def _build_where(req: SearchRequest) -> list:
+def _build_where(req: SearchRequest, *, scope_json: dict | None = None) -> list:
     """Return a list of SQLAlchemy clauses for the ``study`` table filter.
 
     Used by both the cost estimator and the executor.
+
+    FR-75/76 — when ``scope_json.exclude_hospitals`` is non-empty, an
+    ``AND study.hospital_pk NOT IN (:excluded)`` clause is appended. The
+    buyer cannot set this field via the request body (dev-spec FR-76); it
+    comes exclusively from the buyer context attached at auth time.
     """
     out: list = []
     if req.modality:
@@ -100,5 +126,8 @@ def _build_where(req: SearchRequest) -> list:
     if req.study_date_shifted is not None:
         out.append(Study.study_date_shifted >= req.study_date_shifted.date_from)
         out.append(Study.study_date_shifted < req.study_date_shifted.date_to)
+    excluded = _extract_exclude_hospitals(scope_json)
+    if excluded:
+        out.append(Study.hospital_pk.notin_(excluded))
     # age_bucket, sex live on patient_pseudo — filtered via join in executor.
     return out

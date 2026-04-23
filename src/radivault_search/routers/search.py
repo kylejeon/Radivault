@@ -42,6 +42,7 @@ async def search_studies(
     start = time.perf_counter()
     settings = request.app.state.settings
     factory = request.app.state.session_factory
+    scope_json = getattr(request.state, "scope_json", {}) or {}
 
     # Stage 1 — filter length gates (FR-17).
     validate_filter(body)
@@ -57,6 +58,7 @@ async def search_studies(
             body,
             max_rows=settings.cost.max_estimated_rows,
             facet_suppress_rows=settings.cost.facet_auto_suppress_rows,
+            scope_json=scope_json,
         )
         if estimate.estimated_rows > settings.cost.max_estimated_rows:
             QUERY_TOO_BROAD_TOTAL.inc()
@@ -91,6 +93,7 @@ async def search_studies(
             buyer_pk=buyer_pk,
             global_salt=settings.auth.global_filter_salt,
             facets_suppressed=estimate.suppressed_facets,
+            scope_json=scope_json,
         )
 
     payload = result.response.model_dump(mode="json")

@@ -13,6 +13,7 @@ from radivault_search.auth.middleware import require_buyer
 from radivault_search.errors import ScopeForbidden
 from radivault_search.query.executor import compute_hospital_opaque_id
 from radivault_search.query.schema import HospitalItem, HospitalsResponse
+from radivault_search.query.validator import _extract_exclude_hospitals
 
 log = logging.getLogger("radivault_search.hospitals")
 
@@ -35,26 +36,34 @@ async def list_hospitals(
     settings = request.app.state.settings
     factory = request.app.state.session_factory
 
+    # FR-75/76 — exclude hospitals the buyer has opted out of. The list
+    # comes solely from scope_json (admin-controlled, never buyer input).
+    excluded_hospitals = _extract_exclude_hospitals(scope_json)
+
     with factory() as session:
-        rows = list(
-            session.execute(
-                select(
-                    Study.hospital_pk,
-                    func.count(Study.study_pk),
-                    func.min(Study.study_date_shifted),
-                    func.max(Study.study_date_shifted),
-                ).group_by(Study.hospital_pk)
-            ).all()
+        rows_stmt = select(
+            Study.hospital_pk,
+            func.count(Study.study_pk),
+            func.min(Study.study_date_shifted),
+            func.max(Study.study_date_shifted),
         )
+        mod_stmt = select(Study.hospital_pk, Study.modality).distinct()
+        if excluded_hospitals:
+            rows_stmt = rows_stmt.where(Study.hospital_pk.notin_(excluded_hospitals))
+            mod_stmt = mod_stmt.where(Study.hospital_pk.notin_(excluded_hospitals))
+        rows = list(session.execute(rows_stmt.group_by(Study.hospital_pk)).all())
         modalities_by_hospital: dict[int, list[str]] = {}
-        mod_rows = session.execute(select(Study.hospital_pk, Study.modality).distinct()).all()
+        mod_rows = session.execute(mod_stmt).all()
         for hpk, mod in mod_rows:
             if mod is None:
                 continue
             modalities_by_hospital.setdefault(hpk, []).append(mod)
         hospital_name_map: dict[int, str] = {}
         if include_names:
-            for row in session.scalars(select(Hospital)).all():
+            name_stmt = select(Hospital)
+            if excluded_hospitals:
+                name_stmt = name_stmt.where(Hospital.hospital_pk.notin_(excluded_hospitals))
+            for row in session.scalars(name_stmt).all():
                 hospital_name_map[row.hospital_pk] = row.name
 
     items: list[HospitalItem] = []

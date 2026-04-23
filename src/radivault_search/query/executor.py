@@ -87,6 +87,7 @@ def run_search(
     global_salt: str,
     include_facets_override: bool | None = None,
     facets_suppressed: bool = False,
+    scope_json: dict | None = None,
 ) -> ExecutorResult:
     """Execute the main search — keyset page + facets + total."""
     start = time.perf_counter()
@@ -113,7 +114,7 @@ def run_search(
         cursor_d = cur.d
         cursor_p = cur.p
 
-    where_clauses = _build_where(req)
+    where_clauses = _build_where(req, scope_json=scope_json)
 
     # Main page query.
     stmt = select(Study).where(*where_clauses)
