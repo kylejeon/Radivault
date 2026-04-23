@@ -1,0 +1,62 @@
+# Dev compose stack for radivault_search (dev-spec FR-63).
+#
+# Brings up postgres + redis + radivault_search. Reuses postgres/redis images
+# compatible with docker-compose.central.yml so you can run both stacks
+# together against the same data.
+#
+# Migrations are applied by `ingest-admin migrate up` (central image) or
+# `search-admin migrate up` (search image) — both point at the same alembic
+# tree (dev-spec §4.13, FR-68).
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: central_migrator
+      POSTGRES_PASSWORD: central_migrator
+      POSTGRES_DB: radivault_central
+    ports:
+      - "5432:5432"
+    volumes:
+      - search_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U central_migrator -d radivault_central"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  search:
+    build:
+      context: .
+      dockerfile: Dockerfile.search
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    environment:
+      RV_SEARCH_CONFIG: /etc/radivault-search/search.yml
+      DATABASE_URL: postgresql+psycopg://radivault_buyer_ro:radivault_buyer_ro@postgres:5432/radivault_central
+      ADMIN_DATABASE_URL: postgresql+psycopg://search_admin:search_admin@postgres:5432/radivault_central
+      MIGRATION_DATABASE_URL: postgresql+psycopg://central_migrator:central_migrator@postgres:5432/radivault_central
+      REDIS_URL: redis://redis:6379/1
+      FILTER_HASH_GLOBAL_SALT: "replace-me-in-prod"
+      WORKERS: "5"
+
+volumes:
+  search_pgdata:
