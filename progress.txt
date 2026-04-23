@@ -370,3 +370,27 @@ v0.1.1 백로그 (QA round 1 Medium/Low + 이번 세션 잔여):
 - 옵션 E: @planner dev-spec-order-orchestrator (구매 확정 → Gateway 영상 전송)
 - 옵션 F: @planner dev-spec-buyer-portal (웹 UI, 지금까지 API-only)
 - 비기술: 법률 자문, 파일럿 병원 물색 (보류 상태)
+
+2026-04-22 @researcher: de-id-pixel 리서치 초안 작성.
+- 완료: docs/research/de-id-pixel-technical-foundations.md (번인 트리아지,
+  OCR 엔진 비교 Tesseract/PaddleOCR/EasyOCR, redaction 전략, pydeface 1차 +
+  mridefacer 폴백, 의료 ROI 제외 리스트, 파이프라인 통합, QA 게이트).
+- 다음: @planner → dev-spec-de-id-pixel.md. Kyle 결정 — v0.2 범위(OCR only
+  vs OCR+defacing), 이미지 분리 배포, FreeSurfer 배제 재확인, 과redaction
+  판매 면책 법무 자문.
+
+2026-04-22 @designer: design-spec-de-id-pixel.md 작성 완료.
+- 완료: docs/specs/design-spec-de-id-pixel.md (1044 라인, 20 AC-D).
+  CLI — `de-id-test --pixel/--ocr-only/--deface-only/--both/--show-boxes/
+  --show-voxel-stats`, 신규 `pixel-selftest`(exit 0/1/2/3/70), `status`에
+  Pixel stage 섹션 + pipeline_24h 2라인 추가. Config — §3.1 주석 예시 +
+  3단계 프리셋(A 기본/B 파일럿/C 프로덕션) + §3.3 검증 에러 4예시(ERR_CFG
+  재사용 + 신규 ERR_CFG_PIXEL_ENGINE_MISSING). Log/관측 — pipeline log
+  11 필드(PHI 금지), 5 JSON 예시, Prom 메트릭 10종, 알림 6종(A4/A5
+  critical). 에러 택사노미 — 8 ERR + 1 WARN + 1 CFG 를 8필드 테이블로.
+  Runbook — RB-PX-1..6 (증상/첫5분/격리/복구/사후검토). Docker 온보딩
+  — 7 스텝 + Rollback. 임상 QA — 10–20% 샘플링, 스프레드시트 스키마,
+  sign-off 기준 5항(under_redaction=0, under_deface=0 필수). Open Q
+  10건, v0.1 CLI/로그 형식 하위 호환 확인.
+- 다음: Kyle 결정 긴급 3건 (doc 링크 호스팅 / pixel-selftest 네이밍 /
+  ERR_CFG_020 번호 예약). 그 후 @developer 구현 착수 가능.
