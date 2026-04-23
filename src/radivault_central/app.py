@@ -34,6 +34,7 @@ from radivault_central.logging_config import configure_logging
 from radivault_central.ratelimit.middleware import RateLimitMiddleware
 from radivault_central.routers import (
     anchor_router,
+    hospital_portal_router,
     ingest_router,
     probes_router,
     version_router,
@@ -170,6 +171,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     app.include_router(ingest_router)
     app.include_router(anchor_router)
     app.include_router(withdraw_router)
+    app.include_router(hospital_portal_router)
 
     @app.get("/metrics", include_in_schema=False)
     def metrics() -> Response:
