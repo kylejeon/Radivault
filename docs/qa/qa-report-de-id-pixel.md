@@ -1,8 +1,11 @@
 # QA 리포트 — de-id-pixel v0.2 (Gateway Agent v0.2)
 
-> **Status**: Draft v1 · **Feature slug**: `de-id-pixel` · **검수 일자**: 2026-04-22
+> **Status**: Round 2 · **Feature slug**: `de-id-pixel` · **검수 일자**: 2026-04-22 (Round 1), 2026-04-22 (Round 2)
 > **작성자**: @qa (Claude Opus 4.7, 1M ctx)
-> **대상 커밋 범위**: `c39e526..26c9d47` (6 commits, claude 브랜치)
+> **Round 1 커밋 범위**: `c39e526..26c9d47` (6 commits)
+> **Round 2 커밋 범위**: `ba2def2..a4d8e4c` (5 fix commits, claude 브랜치)
+> **Round 1 판정**: FAIL (Critical 2 + High 3 + Medium 5 + Low 1)
+> **Round 2 판정**: **PASS with minor issues** — 5 타깃 결함 모두 해소, v0.2.1 백로그로 이월되는 사전합의 Medium/Low만 남음
 > **근거 스펙**: [dev-spec-de-id-pixel](../specs/dev-spec-de-id-pixel.md) (47 FR / 35 AC), [design-spec-de-id-pixel](../specs/design-spec-de-id-pixel.md) (20 AC-D)
 
 ---
@@ -320,3 +323,139 @@
   - 환경변수 네이밍(`RADIVAULT_DEID_PIXEL_*` vs `RADIVAULT_DEID__PIXEL__*`) 통일 방향.
   - 한국어 exclusion 패턴 기본 포함 여부(오픈 질문 #4).
   - FSL 상업 라이선스 법무 재확인(오픈 질문 #3) — 미해소 시 pilot 배포 보류.
+
+---
+
+## Round 2 Re-Verification (2026-04-22)
+
+> **Round 2 대상**: `ba2def2..a4d8e4c` (5 commits) · **검수자**: @qa (Claude Opus 4.7, 1M ctx)
+> **Round 1 FAIL 건**: Critical 2 + High 3 = 5 P0/P1 건 재수정 대상
+> **Round 2 최종 판정**: **PASS with minor issues**
+
+### 2.1 요약 (verdict)
+
+Round 1에서 지적된 5건(Critical #1 pipeline routing, Critical #2 defacing DICOM 태그, High #1 crash recovery, High #2 Prometheus 메트릭, High #3 fallback audit)은 모두 타깃된 수정·테스트와 함께 **RESOLVED** 처리된다. `git diff ba2def2..HEAD --stat`은 `deid/engine.py`, `deid/pixel/engine.py`, `deid/pixel/metrics.py`(신규), `orchestrator/pipeline.py`, `orchestrator/recovery.py`(신규), `cli/main.py` 및 5개 신규 test 모듈로 범위가 제한되어 있어 **스펙 외 리팩토링 없음**을 확인. 전체 회귀(gateway 143 + central 50/17 + search 49/20) 및 ruff clean. Round 1 Medium/Low 6건은 v0.2.1 backlog로 이월한다(아래 §2.6).
+
+### 2.2 Round 1 Findings 상태
+
+| ID | Round 1 판정 | Round 2 상태 | 증거 |
+|----|-------------|-------------|------|
+| **C-1** (pipeline burn-in 라우팅, FR-31/AC-1) | FAIL | **RESOLVED** | `deid/engine.py:345-372` — `_check_quarantine`가 `_pixel_enabled + _pixel_ocr_modalities`를 주입받아 조건부로 raise. `cli/main.py:_build_pipeline`이 config.pixel.enabled를 DeidEngine 생성자에 전달. 6개 신규 회귀: `tests/unit/test_pipeline_pixel_routing.py::test_pipeline_routes_burn_in_to_pixel_when_enabled`, `test_pipeline_still_quarantines_burn_in_when_pixel_disabled`(AC-15 bit-eq 보존), `test_pipeline_quarantines_burn_in_on_low_confidence`, `test_pipeline_routes_head_ct_to_pixel_when_defacing_enabled`, `test_pipeline_still_uploads_non_burn_study_when_pixel_disabled`, `test_pipeline_quarantines_head_ct_on_low_removed_ratio`. Pipeline.run_once() 레벨에서 pixel 경로 실행 증명. |
+| **C-2** (AC-27/28 DICOM tag stamping) | FAIL | **RESOLVED** | `_stamp_defacing_tags`(`deid/pixel/engine.py:484-507`)가 `_run_defacing` 성공 경로(primary + fallback 둘 다, line 392)에서 호출된다. 3개 신규 회귀가 pydicom.dcmread로 출력 DICOM을 **실제로 재읽어** `(0012,0063)`에 `PixelRedacted`/`Defaced` 서브스트링 + `(0012,0064)`에 `113101`/`RV_DEFACE_01` CodeValue 존재를 assert: `tests/unit/test_pixel_method_tags.py::test_ocr_success_stamps_pixel_redacted_tag:135`, `test_defacing_success_stamps_defaced_tag:166`, `test_defacing_fallback_also_stamps_defaced_tag:208`. |
+| **H-1** (AC-18/FR-36 crash recovery) | FAIL | **RESOLVED** | 신규 `src/radivault_gateway/orchestrator/recovery.py:39-93` (`recover_orphaned_pixel_processing`)가 `db.list_study_jobs(state=PIXEL_PROCESSING, limit=1000)`로 **모든 orphan** 스캔 → partial staging 디렉터리 삭제 → `mark_state(..., DEIDED, last_error="startup_crash_recovery")` → `pixel_audit_event(op=recovery)` + hash-chained `pixel.recovery.applied` audit event. `cli/main.py:475-494`가 daemon 기동 루프 진입 전에 호출. 테스트: `tests/unit/test_pixel_recovery.py::test_recovery_rolls_back_orphaned_pixel_processing:29`, `test_recovery_noop_when_no_orphans:61`. |
+| **H-2** (AC-D-12 Prometheus 메트릭) | NOT IMPLEMENTED | **RESOLVED (with acceptable compromise)** | 신규 `src/radivault_gateway/deid/pixel/metrics.py:41-133`에 10개 metric families 등록(`studies_total`, `ocr_duration_seconds`, `deface_duration_seconds`, `ocr_confidence`, `ocr_redaction_regions`, `deface_removed_voxel_ratio`, `residual_text_found_total`, `residual_face_voxels_total`, `engine_unavailable_total`, `medical_exclusion_hit_total`). `PixelDeidEngine.__init__(metrics=...)` + `record_*` 헬퍼가 triage/OCR success&fail/deface success&fail/quarantine/residual/exclusion 결정점마다 incremented. CLI `python -m radivault_gateway metrics dump --format prom` 실행 검증(10 HELP lines). 라벨에 PHI 유출 없음 — 라벨 값은 engine/library/stage/result/reason 카테고리칼만 (개별 study 식별자 없음). HTTP `/metrics` 서버는 v0.2 out-of-scope로 확인(task description에서 허용). 테스트 5건 `tests/unit/test_pixel_metrics.py`. |
+| **H-3** (AC-14/AC-21 fallback audit + audit_seq cross-ref) | PARTIAL | **RESOLVED** | `pipeline.py:588-654`: 성공 경로에서 `pixel.completed` audit append의 반환 record.seq를 `pixel_audit_event.audit_seq`로 전달(triage/ocr/deface 3개 행). Quarantine fallback 경로(line 501-516, 550-565)도 같은 패턴. Fallback 사용 시 전용 `pixel.deface.fallback_used` audit event + 별도 pixel_audit_event(op=deface, outcome=fallback)를 기록(line 638-654). 테스트 `tests/unit/test_pixel_audit_events.py`가 5 시나리오(low-conf OCR, residual face, medical exclusion, fallback, clean success)에서 audit.log JSONL을 직접 읽고 pixel_audit_event 행과 `audit_seq` 매칭을 assert(e.g. line 453: `r["audit_seq"] == fb[-1]["seq"]`). |
+
+### 2.3 새 발견 (must be actually new)
+
+Round 2 scope에서 새로 식별된 이슈 없음. `_pick_defacing_volume`의 DICOM→NIfTI 변환 부재(Round 1 Low #1), FR-37 세분 audit 이벤트 축소(Round 1 Medium #1), `PIXEL_DEIDED` state 미사용(Round 1 Medium #3), 환경변수 네이밍 편차(Round 1 Medium #5), bilingual flag help(Round 1 Medium #4)는 **Round 1에서 이미 로그된 건**이며 v0.2.1 backlog로 이월. 5건 수정 이외의 새 리그레션/보안 이슈는 없다.
+
+경미 관찰(non-blocking, 신규 코드 품질):
+
+- **O-1 (품질)**: `recovery.py:49`가 `limit=1000` 상한으로 orphan을 조회한다. 실운영 환경에서 1000건을 초과하는 크래시는 비현실적이지만 방어적으로는 loop + continue 구조가 안전. 현재 조용히 잘림 가능. 우선순위 Low.
+- **O-2 (품질)**: `metrics.py:dump_text()`가 `CollectorRegistry`를 모듈 import 시 매번 새로 생성(CLI `metrics dump`)해 0-값 dump만 노출한다. v0.2 MVP 범위 내에서는 스펙대로의 동작(HTTP 서버 부재 + CLI 스냅샷). 실사용 시 in-process long-running daemon의 registry를 공유하는 수단이 부재한 점은 Prometheus 풀링 연동 시 별건 이슈.
+- **O-3 (품질)**: `pipeline.py:608`에서 triage op 의 `audit_seq`를 `completed_record.seq`로 설정한다. 논리적으로 triage는 OCR보다 앞서 있지만 pipeline은 한 번의 `pixel.completed` 이벤트에만 append하므로 triage/ocr/deface 3 row가 동일 seq를 공유한다. 해석 여부는 dev-spec §6.2 스키마 의도와 일치(조회 시 "이 completed 이벤트에 속하는 sub-op" 그룹핑).
+
+### 2.4 Scope Discipline
+
+`git diff ba2def2..HEAD --stat` 결과 12개 파일, 1991 insertions / 12 deletions:
+
+```
+ src/radivault_gateway/cli/main.py              |  63 ++++
+ src/radivault_gateway/deid/engine.py           |  33 +-
+ src/radivault_gateway/deid/pixel/__init__.py   |  10 +
+ src/radivault_gateway/deid/pixel/engine.py     | 124 ++++++-
+ src/radivault_gateway/deid/pixel/metrics.py    | 233 (신규)
+ src/radivault_gateway/orchestrator/pipeline.py |  38 +-
+ src/radivault_gateway/orchestrator/recovery.py |  93 (신규)
+ tests/unit/test_pipeline_pixel_routing.py      | 437 (신규)
+ tests/unit/test_pixel_audit_events.py          | 481 (신규)
+ tests/unit/test_pixel_method_tags.py           | 208 (신규)
+ tests/unit/test_pixel_metrics.py               | 215 (신규)
+ tests/unit/test_pixel_recovery.py              |  68 (신규)
+```
+
+- 생산 코드 변경은 C-1/C-2/H-1/H-2/H-3 경로에 **정확히 한정**. 승인되지 않은 Medium/Low 수정 없음.
+- 신규 모듈 2개(`metrics.py`, `recovery.py`)는 기존 모듈을 확장하는 대신 격리된 헬퍼로 추가 — diff 리뷰성과 롤백 가능성 양호.
+- `state/db.py` 건드림 없음(`limit=` 파라미터는 기존 `list_study_jobs` 시그니처 재활용). `alembic` 마이그레이션 신규 없음(recovery는 `audit_seq` 컬럼이 이미 Round 1에서 생성된 것 사용).
+
+### 2.5 테스트 커버리지
+
+| 스위트 | 기대 | 실제 | 결과 |
+|-------|-----|------|------|
+| `tests/unit` | 143 | 143 | PASS |
+| `tests/central/unit` | 50 | 50 | PASS |
+| `tests/central/integration` | 17 | 17 | PASS |
+| `tests/search/unit` | 49 | 49 | PASS |
+| `tests/search/integration` | 20 | 20 | PASS |
+| 전체 | — | **279 passed, 4 skipped** | PASS |
+| `ruff check src tests` | clean | All checks passed | PASS |
+| `ruff format --check src tests` | clean | 169 files already formatted | PASS |
+
+신규 테스트 21건(routing 6 + method_tags 3 + recovery 2 + metrics 5 + audit_events 5). 핵심 attack 시나리오 커버 상태:
+
+- **C-1 공격(pixel=false & burn-in=YES → v0.1 quarantine 유지)**: `test_pipeline_still_quarantines_burn_in_when_pixel_disabled` (PASS).
+- **C-2 강검증(pydicom.dcmread → (0012,0063)/(0012,0064) 재읽기 assert)**: 3 테스트 전부 실제 재파싱 수행(method_tags.py:128-136, 160-166, 205-208).
+- **H-1 edge(0 orphan)**: `test_recovery_noop_when_no_orphans` PASS. 다중 orphan은 production code의 `list_study_jobs` 루프로 커버되지만 **명시적 multi-row 테스트는 부재** — 우선순위 Low, v0.2.1 backlog.
+- **H-2 sanity(PHI in labels)**: 라벨 값은 `engine ∈ {tesseract, paddleocr}`, `library ∈ {pydeface, mridefacer}`, `stage ∈ {triage, ocr, deface}`, `result ∈ {success, fail, quarantine}`, `reason` (exclusion 패턴 리터럴). `pseudo_study_uid`·`PatientID`·좌표·bbox 좌표 전부 라벨 밖. `metrics dump --format prom` 출력 실측 — PHI 유출 없음.
+- **H-3 attack(low-conf OCR → audit + pixel_audit_event 둘 다)**: `test_low_confidence_ocr_writes_audit_and_pixel_row:315` + `test_defacing_fallback_used_writes_hash_chained_audit_event:422`가 audit.log JSONL에서 이벤트 추출 + pixel_audit_event 행을 list_pixel_audit_events로 조회하여 **두 저장소 동시 확인**.
+
+CLI 실증 검증:
+- `python -m radivault_gateway metrics dump --format prom`: 10 metric families 노출 확인, 라벨은 PHI-safe.
+- `python -m radivault_gateway pixel-selftest --json`: v0.1 대비 회귀 없음, exit_code=3 유지(기본 이미지, FSL/Tesseract 없음).
+
+### 2.6 Medium/Low v0.2.1 Backlog 확인
+
+Round 1 권고 §8 P2/P3 항목 중 Round 2 범위 밖으로 유예된 항목 확인:
+
+| Round 1 ID | 내용 | Round 2 상태 |
+|-----------|-----|-----|
+| M-1 (FR-37) | 세분 audit 이벤트(triage/ocr/deface started + completed 분리) | **미수정** — 여전히 `pixel.completed`로 묶임. v0.2.1 backlog. |
+| M-2 (AC-21) | audit_seq 교차 참조 | **해소됨 via H-3** (Round 2 scope 내). |
+| M-3 (AC-16) | `PIXEL_DEIDED` state 전이 | **미수정** — `UPLOADED`로 직행. status 화면 카운터 0 문제 지속. v0.2.1 backlog. |
+| M-4 (AC-D-1) | bilingual flag help | **미수정** — `de-id-test --help`가 여전히 영어 단독. v0.2.1 backlog. |
+| M-5 (AC-25) | 환경변수 네이밍 편차 | **미수정** — Kyle 결정 대기. v0.2.1 backlog. |
+| L-1 | `_pick_defacing_volume` NIfTI 변환 부재 | **미수정** — live-only 경로, mock 테스트로 우회. pilot 배포 전 해결 필요. |
+| L-2 | FR-28 DICOM→NIfTI→DICOM 재인코딩 | **미수정** — L-1과 함께 연기. |
+| L-3 | `pixel-selftest --help` exit codes inline | **미수정**. |
+| L-4 | Dockerfile.pixel FSL 패키지 CI 빌드 | **미확인** — CI 로그 없음. |
+
+→ Round 2 커밋이 Medium/Low에 손대지 않은 것은 **스코프 디스시플린 준수**로 긍정적으로 평가. Round 2 기각 사유 아님.
+
+### 2.7 Round 2 판정
+
+**PASS with minor issues**
+
+근거:
+1. Round 1의 5 P0/P1 결함 모두 코드·테스트·CLI 실증 레벨에서 해소됨.
+2. Scope discipline 준수 — 생산 코드 변경이 타깃 5건에 한정.
+3. 회귀 0건 — 279/279 테스트 + ruff clean.
+4. PHI 오염(FR-38) 무결 — metrics 라벨, recovery 감사, fallback 감사 모두 hash/카테고리칼 식별자만.
+5. 잔여 Medium/Low 6건은 Round 1에서 이미 공시된 v0.2.1 backlog로 수용 가능. 파일럿 배포 전 반드시 해결이 필요한 항목은 Round 1 Low #1(DICOM→NIfTI 변환 부재) 하나이며 이는 live-only 경로로 MVP 파일럿 스코프 내에서 조건부 허용 가능(Kyle 승인 전제).
+6. AC-29/30/31 성능·메모리 NOT VERIFIABLE 상태는 Round 1과 동일 — 파일럿 실측이 필요하며 Round 2 재판정 대상 아님.
+
+**Kyle 결정 필요 사항 (Round 2 시점)**:
+- Medium/Low 6건의 v0.2.1 이관 승인.
+- `_pick_defacing_volume` NIfTI 변환 공백의 파일럿 조건부 승인 여부(파일럿에서 CT/MR head 투입 시점 이전 필수).
+- 환경변수 네이밍 통일 방향(AC-25).
+- Prometheus `/metrics` HTTP 서버 별건 feature 착수 시점.
+
+| 버전 | 날짜 | 작성자 | 변경 |
+|-----|------|-------|-----|
+| 1 | 2026-04-22 | @qa (Claude Opus 4.7 1M) | 최초 검수. 35 dev AC + 20 design AC 전수. FAIL 판정 (Critical 2건). |
+| 2 | 2026-04-22 | @qa (Claude Opus 4.7 1M) | Round 2 재검수. 5 fix commits(`ba2def2..a4d8e4c`) 확인. C-1/C-2/H-1/H-2/H-3 전원 RESOLVED. Scope clean. **PASS with minor issues** 판정. |
+
+### NEXT_STEP (Round 2)
+
+- **완료 산출물**: `docs/qa/qa-report-de-id-pixel.md` (Round 2 섹션 추가)
+- **판정**: **PASS with minor issues**
+- **Critical 이슈**: 0건
+- **제안 다음 단계**:
+  - @developer — v0.2.1 backlog(M-1, M-3, M-4, M-5, L-1, L-2, L-3, L-4) 착수 계획 제출. L-1은 파일럿 배포 전 필수.
+  - @marketer 병렬 진행 가능 — 핵심 기능 PASS, 런칭 콘텐츠 준비 해금.
+  - Kyle — Medium/Low 이관 승인 및 환경변수 네이밍 방향 결정.
+- **Kyle 결정 필요**:
+  - v0.2.1 backlog 6건 이관 승인.
+  - 환경변수 네이밍 `RADIVAULT_DEID_PIXEL_*` vs `RADIVAULT_DEID__PIXEL__*` 통일.
+  - Prometheus `/metrics` HTTP 서버 별건 feature 착수 시점.
+  - `_pick_defacing_volume` DICOM→NIfTI 구현 일정(파일럿 head CT/MR 투입 이전 필수).
