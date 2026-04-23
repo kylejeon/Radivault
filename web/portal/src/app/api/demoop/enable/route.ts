@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     );
   }
   const header = req.headers.get("X-Demoop-Token");
-  if (header && header !== env.demoopToken) {
+  if (!header || header !== env.demoopToken) {
     return NextResponse.json(
       { error: "ERR_DEMOOP_INVALID", detail: "Demo token mismatch" },
       { status: 403 },
