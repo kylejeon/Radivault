@@ -258,3 +258,31 @@ v0.1.1 백로그 (QA round 1 Medium/Low):
 - 옵션 C: @planner dev-spec-de-id-engine-v0.2 (OCR 번인 + defacing).
 - 옵션 D: Gateway v0.1.1 보강 dev-spec (D-1..D-7 공식화).
 - 비기술: 법률 자문, 파일럿 병원 물색 (이번 세션에서는 보류).
+
+## 2026-04-22 — @researcher metadata-index 기술 기반 리서치
+
+### 뭘 했나
+- docs/research/metadata-index-technical-foundations.md 작성 (371 lines).
+- 7개 영역 커버: buyer 인증, 키셋 커서, PG 패싯 카운트, DoS 다층 방어, 병원-buyer 멀티테넌시, 검색 관측성, 경쟁 API UX(Gradient·Segmed·TCIA·OpenNeuro).
+- central-ingest 리서치·스키마와 중복 회피, envelope·에러 taxonomy 는 design-spec-central-ingest 계승.
+
+### 다음에 뭘 하나
+- @planner 가 dev-spec-metadata-index.md 작성. Kyle 결정 6건 (hospital opt-out 정책, SDK 타이밍, pricing tier, filter hash salt, NLP 필드 노출, 법률 자문 트리거).
+
+## 2026-04-22 — @planner dev-spec-metadata-index v0.1
+
+### 뭘 했나
+- docs/specs/dev-spec-metadata-index.md 작성 (1,191 lines, 77 FR, 34 AC).
+- Buyer-facing 검색 API 7 엔드포인트 (POST /v1/search/studies, GET /v1/search/studies/{uid}, /facets, /hospitals, /healthz, /readyz, /v1/version) 스펙 확정.
+- 신규 테이블 3종 (buyer, buyer_api_key, search_audit) + 신규 study 인덱스 3종 (idx_study_date_keyset, idx_study_filter_keyset, idx_study_ingested_keyset).
+- 신규 에러 코드 11종 (ERR_AUTH_FORMAT, ERR_REQUEST_SCHEMA, ERR_FILTER_TOO_MANY, ERR_CURSOR_FILTER_CHANGED, ERR_CURSOR_VERSION, ERR_QUERY_TOO_BROAD, ERR_QUERY_TIMEOUT, ERR_BUYER_QUOTA, ERR_BUYER_CONCURRENCY, ERR_SCOPE_FORBIDDEN, ERR_STUDY_NOT_FOUND).
+- Alembic 은 central-ingest repo 동일 트리 공유 (v0.1 결정, 역전 가능성 문서화).
+- READ-only PG role radivault_buyer_ro (statement_timeout=10s) + search_admin 분리.
+- Python SDK 는 v0.2 지연 권고 (REST + OpenAPI + curl 5종 + Postman 컬렉션).
+- Hospital opt-out 은 scope_json.exclude_hospitals 스키마만 준비, 기술 집행은 v0.1.1 백로그.
+- Kyle 결정 12건 정리 (§11).
+
+### 다음에 뭘 하나
+- @designer dev-spec-metadata-index.md 읽고 design-spec-metadata-index.md 작성.
+  - 6표면: HTTP API UX·search-admin CLI·로그/메트릭 네이밍·에러 taxonomy 이중언어 표·Runbook·Buyer onboarding walkthrough.
+- Kyle 결정 선행 권고: opt-out 정책 단계, SDK 타이밍, pricing tier 실값, filter hash salt 전략.
