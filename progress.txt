@@ -921,3 +921,279 @@ script 스켈레톤.
   TTL, 암호화 key 는 SESSION_PASSWORD env (≥48 char) 필수.
 - Demo Operator Mode 는 DEMOOP_TOKEN 서버 env 가 설정됐을 때만 BFF 가
   쿠키를 발급 (AC-D-2 충족).
+
+
+## 2026-04-24 — Session 10 (Claude @qa, buyer-portal-demo v0.1 검수)
+
+### 뭘 했나
+Phase 5 검수. dev-spec AC 47 + design-spec AC-DG 20 = **67 전수 매트릭스**.
+5 공격 시나리오 실측. 회귀 407 + Vitest 10 + next build 22 routes 재실행.
+
+### 판정: PASS with minor issues
+- Critical 0, High 1 (H-1 Demo Operator Mode 인증 bypass), Medium 3, Low 3
+- 회귀 영향 0건 (기존 363 + 신규 44 = 407 passed)
+- 공격 시나리오 5건 실측: 하드코딩 키 0건 / cross-hospital 격리 PASS /
+  demoop bypass 1 path FAIL (H-1) / buyer_phase exhaustiveness PASS /
+  presigned URL 만료 trace PASS
+- 데모 화면 캡처 1080p 공개 관점 전수 통과: PHI 0건, 병원 로고 0건,
+  경쟁사 로고 0건, "certified/guaranteed" 0건, TCIA CC-BY attribution
+  Home footer 부착, revenue disclaimer 하드코딩 + assertion
+
+### H-1 (High) — 필수 후속
+- 위치: web/portal/src/app/api/demoop/enable/route.ts:19-25
+- DEMOOP_TOKEN env 설정 + X-Demoop-Token 헤더 부재 시 cookie 발급됨
+  (FR-D-5 위반). `if (header && ...)` short-circuit bug.
+- 수정: `if (!header || header !== env.demoopToken) return 403`
+- v0.1 데모 localhost 에선 non-blocking. 파일럿 배포 전 fix 필수.
+
+### 어디까지 됐나
+Phase 5 검수 완료. qa-report-buyer-portal-demo.md 산출 (§0 meta / §1 summary /
+§2 AC 67 matrix / §3 findings / §4 공격 5건 / §5 회귀 로그 / §6 spec 갭 /
+§7 백로그 14 / §8 NEXT_STEP / §9 changelog).
+
+RadiVault 누적 6 feature 전부 검수 완료:
+- gateway-agent PASS
+- central-ingest PASS
+- metadata-index PASS with minor
+- de-id-pixel PASS with minor
+- order-fulfillment PASS with minor
+- buyer-portal-demo PASS with minor (본 세션)
+
+### 다음 뭐 해야 해
+- @developer — H-1 즉시 fix (< 10분) + minor 묶음 PR (0.5일):
+  - M-3 Downloads Copy 버튼 + toast
+  - M-5 Hospital B-5 phase 한국어 매핑
+  - M-12 session/delete redirect URL 환경변수화
+- @marketer — 병렬 착수 가능. 피치덱 PPT 3 슬라이드 초안
+  (장면 1/2/7), Home headline / Hospital disclaimer 카피 재사용
+- Rehearsal R-1 (데모 3 영업일 전) — Kyle + @developer:
+  - TCIA fetch NotImplementedError 블록 연결
+  - Canned JSON 10종 실 캡처
+  - Lighthouse/perf 실측 (AC-A-14/AC-DG-14)
+  - pino JSON logger 도입 (FR-X-4)
+  - 한국어 i18n 확장 여부 최종 결정
+
+### 메모
+- ruff 6 pre-existing 에러는 metadata-index / order-fulfillment 이전
+  커밋부터 존재 (RUF100 × 4, RUF002 × 1, SIM105 × 1). 본 feature 회귀
+  0건. 별 PR 로 auto-fix 권고 (M-9).
+- iron-session cookie Secure flag 가 production only 인 점은 localhost
+  dev 관행. 배포 체크리스트에 NODE_ENV=production 명시 필요.
+- Hospital admin token 이 sha256 (spec D-5 는 argon2id) — v0.1 stub
+  의도적 선택, v0.1.5 SSO 이관 예정. progress 기록으로 유지.
+
+
+## 2026-04-24 — Session 11 (@marketer, 피치덱 + 통합 1-pager + leave-behind 큐레이션)
+
+### 뭘 했나
+Phase 6 마케터. 대표님(투자자+병원 경영진 겸임) 데모 미팅용 3종 산출물 작성.
+
+- docs/marketing/pitch-deck-ceo-meeting-kr.md (Braided 구조, 18 슬라이드):
+  S1~S2 Hook · S3~S5 Architecture+경쟁 quadrant · S6~S7 Hospital/Buyer
+  live backup · S8~S9 Compliance (PIPA §28-8 + 2026 CEO 개인책임 + 해시
+  체인) · S10~S12 Numbers (TAM $22.5M, pricing 3 tier, unit economics) ·
+  S13~S16 Dual Ask + Segmed-Advocate precedent + team + closing · S17~S18
+  appendix. 각 슬라이드 ASCII mock + talking points 2 스타일 [겸손-안정]/
+  [자신감-단호] + Braided hook + objections + response. §10 법무 flag 6건.
+- docs/marketing/one-pager-ceo-meeting-kr.md + one-pager-ceo-meeting-en.md:
+  A4 1장. 투자자 렌즈 + 병원 경영진 렌즈 병치표. "One signature, two
+  decisions" hook. Unit economics illustrative simulation 명시. footer 에
+  컴플라이언스 disclosure + 4 법무 flag.
+- docs/marketing/leave-behind-curation-kr.md (3-tier 독서 경로 16+ 자료):
+  Tier 1 (15분, 3건) → Tier 2 (1시간, +6건) → Tier 3 (반나절, +7건).
+  시나리오 A/B/C/D 4종 권장 독서 경로. §6 follow-up 이메일 템플릿.
+  §7 문서 교차참조 지도. §8 법무 flag 6건.
+
+### 컴플라이언스 셀프-체크 통과
+- "certified"/"HIPAA-compliant"/"guaranteed" 단정 0건. 모두
+  "designed to align with"/"in preparation"/"aligned with".
+- 모든 수치(TAM/pricing/revenue share/MG)에 "illustrative simulation"
+  배지 + footer disclaimer 반복.
+- 경쟁사 (Segmed/Gradient/Truveta/Rhino/Flywheel) 모두 공개 자료 (PR
+  Newswire, Fierce Healthcare, 공식 블로그) 인용. "No disparagement
+  intent" footnote.
+- 파일럿 병원·구매자 모두 "in discussions" placeholder.
+- PIPA §28-8 · 2026 CEO 개인책임 인용은 IAPP/Kim&Chang 2차 자료 명시 +
+  "법률 자문 진행 중, 최종 해석 아님" 반복.
+
+### 법률 검토 flag (Kyle 외부 자문 필요, 공통)
+1. 경쟁사 비교 표현 — 공정거래법 표시광고법 준수 (특히 피치덱 S5).
+2. PIPA §28-8 + "3% 벌금" 수치 정확성 법무 재검증.
+3. "파일럿 병원 in discussions" placeholder — 허위 표시 리스크 기준.
+4. 가격·revenue share 수치 공개 수준 (MG ₩500~1,000만, tier 25~50%).
+5. MSA 초안 leave-behind 첨부 여부 (법무 자문 완료 전 배포 시 구속력 암시).
+6. Leave-behind 자체 배포 범위 — 외부 유출 시 buyer/hospital 반응.
+
+### 어디까지 됐나
+Phase 6 CEO 미팅 자료 3종 완성. Draft v0.1 전부. Kyle 승인 대기.
+기존 마케팅 자산 톤·컴플라이언스 언어 일관성 유지.
+RadiVault 누적 마케팅 문서: 기존 9 + 본 세션 4 = **총 13종**.
+
+### 다음 뭐 해야 해
+- **Kyle 리뷰 필수**:
+  1. 피치덱 S13 Dual Ask — 시드 `[X]M` 금액 + 목표 close `Q[?]` 확정
+  2. S15 Team — Kyle 프로필 세부 (경력·학력·advisor 후보 이름)
+  3. S5 경쟁사 로고 사용 여부 결정 (현재 wordmark/ASCII만)
+  4. S11 MG·revenue share 공개 수치 최종 결정
+  5. Talking points [겸손-안정] vs [자신감-단호] 장면별 택일 또는 믹스
+  6. Leave-behind §6 이메일 템플릿 본인 스타일 수정
+- **@designer 2차 세션 (선택)**: 피치덱 ASCII mock → Keynote/Figma 실물
+  PPT 변환. 색상 토큰 (Buyer blue #1D4ED8 / Hospital teal #0F766E /
+  amber #F59E0B) 일관 적용. 또는 Kyle 본인 Keynote 작업.
+- **리허설 R-1~R-9** (demo-script §4):
+  본 피치덱 기반 17분 드라이런 2회 이상. 각 장면 talking points 본인
+  낭독 → 스타일 택일. 장면 7 closing 3초 침묵 연습 5회.
+- **미팅 D-1**: 피치덱 PDF export (redacted) + 1-pager KR/EN PDF +
+  Leave-behind 자료 패키지 (Google Drive 72h 공유 링크).
+
+### 메모
+- 본 3종 산출물은 기존 dev-spec-buyer-portal-demo + design-spec +
+  demo-script v0.2 + research/demo-pitch-references 위에 얹힌 "세일즈
+  인에이블먼트" 레이어. 기술 명세와 마케팅 카피의 single source 연결.
+- "Braided" 구조 선택 근거: 대표님 = 한 사람 = 두 모자. Sandwich/
+  Lens-switch는 1인 청중에 과장. Braided가 가장 자연스러움.
+- 피치덱은 ASCII mock 으로만 제공 (실 PPT는 별도 트랙). 본 문서가
+  시각 디자이너의 brief 역할. 16 + 2 appendix 슬라이드.
+- Unit economics 숫자는 PRD §8 (25~50% revenue share, MG ₩500~1,000만)
+  과 proposal-summary-hospital-ko.md 완전 일치. 공개 수치 일관성.
+- Kyle 미결정 placeholder (시드 금액, close 분기, advisor 이름, team
+  세부) 는 전 문서에 `[X]M`, `Q[?]`, "in discussions" 형태로 통일.
+
+
+## 2026-04-24 — Session 12 (Claude 메인, buyer-portal-demo v0.1 풀 파이프라인 마감)
+
+### 뭘 했나
+Kyle이 "대표님(투자자+병원 경영진 겸임) 데모용 시각 제품 보여주고 싶음,
+@.claude/agents 모든 에이전트 가동" 요청. 6-Phase 파이프라인 완주 + 최종
+fix + 커밋 정리.
+
+### 파이프라인 요약 (Session 9~12 누적)
+
+**Phase 1 — Research (병렬 2건)**
+- docs/research/demo-pitch-references-radivault.md
+  Segmed/Gradient/Truveta/Rhino/Flywheel 연출 패턴, Braided+Sandwich
+  17분, Live+Canned Hybrid, PIPA 2026 CEO 개인책임 설득 결정타,
+  스토리보드 A/B/C, Anti-patterns 23건.
+- docs/research/buyer-portal-ux-competitive.md
+  Gen3 3-pane(TCIA·IDC·MIDRC), Must-have §10, DICOM viewer v0.1 제외
+  권고, 12-state FSM → 5-phase 축약, Hospital Dashboard 6-tile.
+
+**Phase 2 — Planning**
+- docs/specs/dev-spec-buyer-portal-demo.md v0.1 (15 섹션, FR 120+,
+  AC 47, Contract deltas D-1..D-5, 15 영업일 분해, Kyle 결정 18건)
+- docs/specs/demo-script-radivault.md v0.1 skeleton
+
+**Phase 3 — Design**
+- docs/specs/design-spec-buyer-portal-demo.md v0.1 (디자인 토큰
+  Buyer cool blue / Hospital teal 이원화, 컴포넌트 23종, 화면 9 + 타일 6,
+  에러 21 코드 UI 렌더 규칙, AC-DG 20건)
+- docs/specs/demo-script-radivault.md v0.2 (프레젠터 대사, Q&A 20건,
+  런북 5건, R-1~R-9 리허설 세부)
+
+**Phase 4 — Development (5 커밋 7ad1dec..df265a3)**
+- D-2 central-ingest hospital 엔드포인트 3종 (/stats /gateway-health /audit)
+- D-2 part 2 fulfillment /v1/hospital/me/orders
+- D-3 order-fulfillment buyer_phase 필드 + exhaustiveness guard
+- D-4 central-ingest /v1/hospital/me/audit (whitelist 5 event_type)
+- Next.js 14 portal scaffold + 9 화면 + 6 타일 + BFF + iron-session +
+  Demo Operator Mode 배지 + TCIA seed 스켈레톤
+- 테스트: Python 407 (baseline 363 + 신규 44), Vitest 10, tsc clean,
+  next build 22 routes, ruff clean
+
+**Phase 5 — QA**
+- docs/qa/qa-report-buyer-portal-demo.md
+- 판정: PASS with minor (Critical 0, High 1, Medium 3, Low 3)
+- H-1: Demo Operator Mode header 부재 시 short-circuit bypass
+- 공격 시나리오 5건 중 1/4 FAIL (H-1), 나머지 PASS
+- 회귀 영향 0건, 1080p 공개 관점 전수 통과
+
+**Phase 6 — Marketing**
+- docs/marketing/pitch-deck-ceo-meeting-kr.md (18 슬라이드, Braided 17분,
+  프레젠터 대사 2 스타일 [겸손-안정]/[자신감-단호])
+- docs/marketing/one-pager-ceo-meeting-kr.md / .en.md (A4 1장, 한/영)
+- docs/marketing/leave-behind-curation-kr.md (3-tier 독서 경로)
+- 컴플라이언스 셀프-감사 PASS, 법률 flag 6건
+
+**메인 세션 직접 fix (Session 3 N-1 선례)**
+- H-1 fix 커밋 93facf1 — 1-line conditional 수정
+  web/portal/src/app/api/demoop/enable/route.ts:19-25
+  `if (header && ...)` → `if (!header || ...)` — header 부재면 403.
+  tsc --noEmit clean 확인.
+
+### 최종 커밋 (이번 세션 7개)
+- 7ad1dec feat(central-ingest): hospital dashboard endpoints (D-2/D-4)
+- c562c6c feat(order-fulfillment): buyer_phase + hospital orders (D-2/D-3)
+- 2b9d7fb feat(portal): Next.js 14 buyer + hospital portal scaffold
+- e6809a0 feat(demo-seed): TCIA seed script + reset helpers (P3)
+- df265a3 chore: progress.txt — Session 9 buyer-portal-demo P1+P2
+- b772b67 docs(buyer-portal-demo): research + dev-spec + design-spec + demo-script
+- a66f981 docs(qa): buyer-portal-demo v0.1 review — PASS with minor
+- 19292fe docs(marketing): CEO meeting pitch deck + one-pagers + leave-behind
+- 93facf1 fix(portal): H-1 Demo Operator Mode header bypass
+
+### 어디까지 됐나
+- RadiVault 누적 **6 feature 완료**: gateway-agent + central-ingest +
+  metadata-index + de-id-pixel + order-fulfillment + **buyer-portal-demo**.
+- 첫 웹 UI 레이어 등장. API-only에서 visual MVP로 진입.
+- claude 브랜치 본 세션 9 커밋. 이전 포함 누적 100+ 커밋.
+- 테스트: Python 407 + Vitest 10 + next build 22 routes + ruff clean.
+
+### 매출 루프 시각화 완성도
+기술 + 시각 둘 다 돌아감:
+- 병원 Gateway → Central ingest → Metadata index (기존 상시)
+- Hospital Dashboard 한국어 6-tile: 제공 스터디 · 예상 수익(시뮬) ·
+  한국 지도 · Gateway 상태 · 최근 주문 · 감사 이벤트 (PIPA §28-8 증거)
+- Buyer Portal 영어: Home → Search 3-pane → Review modal → Order tracker
+  5-phase → Downloads (presigned + SHA-256 + curl snippet)
+- Demo Operator Mode 배지 + canned output 준비 (데모 실패 백업)
+
+### v0.1 데모 배포 전 Kyle 결정·실측 체크리스트
+**즉시 결정**
+1. DEMOOP_TOKEN 실 값 (32자 랜덤)
+2. RV_HOSPITAL_ADMIN_TOKENS 해시 (데모용 sha256:<hex>)
+3. HOSPITAL_UPSTREAM_BEARER — central-ingest auth_token 실 값
+4. Revenue 시뮬 파라미터 ($5 unit_price, 35% share, 1350 KRW/USD)
+5. 피치덱 대사 스타일 [겸손-안정] vs [자신감-단호] 장면별 택일
+6. 피치덱 S13 시드 금액, S15 team 세부
+
+**법률 자문 flag 6건**
+1. 경쟁사 비교 슬라이드 (S5 quadrant) 공정거래법
+2. PIPA §28-8 + 3% 벌금 인용 법리 정확성
+3. "파일럿 병원 in discussions" placeholder 표시 리스크
+4. 가격·revenue share 공개 수치
+5. MSA 초안 leave-behind 첨부 여부
+6. Leave-behind 배포 범위
+
+**Rehearsal R-1 (데모 D-3 영업일 전)**
+1. TCIA fetch NotImplementedError 블록 연결 (실 네트워크)
+2. Canned JSON 10종 실 캡처
+3. Lighthouse/perf 실측 (AC-A-14/AC-DG-14)
+4. pino JSON logger 도입 (FR-X-4)
+5. Playwright e2e 3 시나리오 (Search flow / Order flow / Hospital)
+6. 실패 런북 5건 실전 리허설
+
+### v0.1.1 백로그 (누적 잔여)
+- buyer-portal-demo: M-1..M-14 (QA §7), Study detail drawer,
+  Dark mode, 한국어 ErrorBanner catalog, Hospital admin token → argon2id,
+  session redirect env화
+- 기존 누적: metadata-index M-1..M-5, central-ingest M-1..M-5, gateway
+  AC-28 CI + AC-29 trivy, de-id-pixel Medium 5, order-fulfillment M-2
+  스케줄러
+
+### 다음 기능 후보 (Kyle 결정)
+- **옵션 G**: dev-spec-billing-revenue-share — 실제 결제(Stripe/PG) + 정산
+- **옵션 V**: DICOM Viewer 통합 (OHIF embedded, v0.2 Buyer Portal 확장)
+- **옵션 P**: Pilot Readiness — MSA 초안 · PIPA 자문 · 파일럿 병원 물색
+- **옵션 D**: Gateway v0.1.1 보강 (D-1..D-7 + G-1 공식화)
+- 비기술: 대표님 미팅 D-day 확정 → 리허설 R-1~R-9 실행
+
+### 메모
+- 본 세션은 첫 "visual-product" 세션. 모든 이전 세션이 CLI/API 한정이었던
+  반면 처음으로 브라우저에서 클릭 가능한 제품이 등장.
+- "대표님 = 한 사람, 두 모자" 해석이 Braided 구조 선택의 유일한 근거.
+  해석 틀리면 피치덱·데모 구조 전면 재설계 필요 (대표님 = 2인이면
+  Sandwich 또는 별도 데크 2종).
+- H-1 fix 를 메인 세션에서 직접 처리한 이유: 1-line conditional,
+  Session 3 N-1 선례, developer agent 재호출 오버헤드 대비 이익 낮음.
+  QA round 2 생략 — 변경 scope가 기존 PASS 조건의 복원일 뿐, 새 공격
+  면 없음.
