@@ -74,6 +74,32 @@ CREATE TABLE IF NOT EXISTS upload_retry (
     attempt_count     INTEGER NOT NULL DEFAULT 0
 );
 
+-- v0.2 de-id-pixel: structured pixel stage events (dev-spec §6.2, FR-39).
+-- Forbidden columns per FR-38: plaintext OCR text, absolute pixel coords,
+-- original SOP/patient identifiers.
+CREATE TABLE IF NOT EXISTS pixel_audit_event (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    pseudo_study_uid     TEXT NOT NULL,
+    sop_instance_uid     TEXT,
+    op                   TEXT NOT NULL,
+    outcome              TEXT NOT NULL,
+    library              TEXT,
+    library_version      TEXT,
+    duration_ms          INTEGER,
+    box_count            INTEGER,
+    avg_confidence       REAL,
+    min_confidence       REAL,
+    max_confidence       REAL,
+    removed_voxel_ratio  REAL,
+    reason               TEXT,
+    audit_seq            INTEGER,
+    created_at           TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pixel_audit_study   ON pixel_audit_event(pseudo_study_uid);
+CREATE INDEX IF NOT EXISTS idx_pixel_audit_op      ON pixel_audit_event(op);
+CREATE INDEX IF NOT EXISTS idx_pixel_audit_outcome ON pixel_audit_event(outcome);
+CREATE INDEX IF NOT EXISTS idx_pixel_audit_created ON pixel_audit_event(created_at);
+
 CREATE TABLE IF NOT EXISTS schema_version (
     id  INTEGER PRIMARY KEY CHECK (id = 1),
     version INTEGER NOT NULL
@@ -95,6 +121,10 @@ class StudyState(enum.StrEnum):
     FAILED_DEID = "failed_deid"
     FAILED_REVERIFY = "failed_reverify"
     FAILED_UPLOAD = "failed_upload"
+    # v0.2 de-id-pixel extension (dev-spec §6.1, FR-32).
+    PIXEL_PROCESSING = "pixel_processing"
+    PIXEL_DEIDED = "pixel_deided"
+    PIXEL_FAILED = "pixel_failed"
 
 
 def _utcnow() -> str:
@@ -352,3 +382,84 @@ class StateDB:
                 "DELETE FROM upload_retry WHERE pseudo_study_uid = ?",
                 (pseudo_study_uid,),
             )
+
+    # ---- pixel audit (v0.2) ----
+
+    def add_pixel_audit_event(
+        self,
+        *,
+        pseudo_study_uid: str,
+        op: str,
+        outcome: str,
+        sop_instance_uid: str | None = None,
+        library: str | None = None,
+        library_version: str | None = None,
+        duration_ms: int | None = None,
+        box_count: int | None = None,
+        avg_confidence: float | None = None,
+        min_confidence: float | None = None,
+        max_confidence: float | None = None,
+        removed_voxel_ratio: float | None = None,
+        reason: str | None = None,
+        audit_seq: int | None = None,
+    ) -> int:
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO pixel_audit_event (
+                    pseudo_study_uid, sop_instance_uid, op, outcome,
+                    library, library_version, duration_ms,
+                    box_count, avg_confidence, min_confidence, max_confidence,
+                    removed_voxel_ratio, reason, audit_seq, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    pseudo_study_uid,
+                    sop_instance_uid,
+                    op,
+                    outcome,
+                    library,
+                    library_version,
+                    duration_ms,
+                    box_count,
+                    avg_confidence,
+                    min_confidence,
+                    max_confidence,
+                    removed_voxel_ratio,
+                    reason,
+                    audit_seq,
+                    _utcnow(),
+                ),
+            )
+        return int(cursor.lastrowid or 0)
+
+    def list_pixel_audit_events(
+        self,
+        *,
+        pseudo_study_uid: str | None = None,
+        op: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            sql = "SELECT * FROM pixel_audit_event"
+            params: list[Any] = []
+            clauses: list[str] = []
+            if pseudo_study_uid is not None:
+                clauses.append("pseudo_study_uid = ?")
+                params.append(pseudo_study_uid)
+            if op is not None:
+                clauses.append("op = ?")
+                params.append(op)
+            if clauses:
+                sql += " WHERE " + " AND ".join(clauses)
+            sql += " ORDER BY created_at DESC LIMIT ?"
+            params.append(limit)
+            rows = self._conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def pixel_counts_by_outcome(self) -> dict[str, int]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT outcome, COUNT(*) as n FROM pixel_audit_event GROUP BY outcome"
+            ).fetchall()
+        return {row["outcome"]: int(row["n"]) for row in rows}
