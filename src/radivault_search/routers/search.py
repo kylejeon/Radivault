@@ -97,11 +97,6 @@ async def search_studies(
         )
 
     payload = result.response.model_dump(mode="json")
-    # Surface the hint if the executor flagged facet suppression.
-    if getattr(result.response, "__pydantic_extra__", None):
-        extra = result.response.__pydantic_extra__
-        if extra and extra.get("hint"):
-            payload["hint"] = extra["hint"]
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     SEARCH_DURATION.labels(

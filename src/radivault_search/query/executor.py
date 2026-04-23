@@ -226,9 +226,8 @@ def run_search(
         has_next=has_more,
         page_size=len(items),
         response_truncated=False,
+        hint=hint_str,
     )
-    # Keep hint available via meta / a separate field — inject as attribute.
-    response.__pydantic_extra__ = {"hint": hint_str} if hint_str else None
     # attach cursor_presence for audit
     response.__dict__["_cursor_presence"] = cursor_presence
 

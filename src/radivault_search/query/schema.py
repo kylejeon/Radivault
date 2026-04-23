@@ -91,6 +91,8 @@ class SearchResponse(BaseModel):
     has_next: bool = False
     page_size: int
     response_truncated: bool = False
+    # FR-22 — populated when facet_auto_suppress fires (cohort too large).
+    hint: str | None = None
 
 
 class SeriesSummary(BaseModel):

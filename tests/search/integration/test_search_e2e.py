@@ -125,6 +125,30 @@ def test_filter_too_many(app_client, seeded_buyer, synthetic_studies) -> None:
 
 
 @pytest.mark.integration
+def test_facets_suppressed_hint_surfaced(app_client, seeded_buyer, synthetic_studies) -> None:
+    """FR-22 / AC-18 — when the estimator flags auto-suppress, the response
+    body must contain ``facets: null`` AND a real ``hint`` string."""
+    _buyer, bundle = seeded_buyer
+    app_state = app_client.app.state
+    original = app_state.settings.cost.facet_auto_suppress_rows
+    # Drop threshold so the 120-row seed trips suppression.
+    app_state.settings.cost.facet_auto_suppress_rows = 10
+    try:
+        resp = app_client.post(
+            "/v1/search/studies",
+            headers={"Authorization": f"Bearer {bundle.plaintext}"},
+            json={"limit": 10, "include_facets": True},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["facets"] is None
+        assert "hint" in body, body.keys()
+        assert body["hint"] == "facets suppressed: cohort too large"
+    finally:
+        app_state.settings.cost.facet_auto_suppress_rows = original
+
+
+@pytest.mark.integration
 def test_query_too_broad(app_client, seeded_buyer, synthetic_studies) -> None:
     """With the test settings ``max_estimated_rows=1000`` the 120-row dataset
     comfortably fits. We lower the threshold for this test via scope override."""
