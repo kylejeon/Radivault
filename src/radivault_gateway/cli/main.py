@@ -822,6 +822,8 @@ def _build_pipeline(cfg: GatewayConfig):
         burnin_quarantine_modalities=cfg.deid.burnin_quarantine_modalities,
         ruleset_version=cfg.deid.ruleset_version,
         version_string=__version__,
+        pixel_enabled=cfg.deid.pixel.enabled,
+        pixel_ocr_modalities=cfg.deid.pixel.ocr.modality_allowlist,
     )
     pacs = DicomWebPacsClient(
         cfg.pacs.base_url,

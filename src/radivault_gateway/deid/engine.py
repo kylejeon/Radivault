@@ -190,6 +190,8 @@ class DeidEngine:
         burnin_quarantine_modalities: Iterable[str] = ("SC", "US", "OT"),
         ruleset_version: str = "v0.1.0",
         version_string: str = "0.1.0",
+        pixel_enabled: bool = False,
+        pixel_ocr_modalities: Iterable[str] = (),
     ) -> None:
         self._salt_bytes = salt.encode("utf-8")
         self._salt_version = salt_version
@@ -199,6 +201,13 @@ class DeidEngine:
         self._blacklist_mods = {m.upper() for m in burnin_quarantine_modalities}
         self._ruleset_version = ruleset_version
         self._version_string = version_string
+        # v0.2 de-id-pixel (FR-31): when the pixel stage is enabled, the pipeline
+        # is responsible for handling burn-in / face-risk studies via OCR +
+        # defacing instead of short-circuiting to quarantine. We keep v0.1
+        # bit-equivalence (AC-15) when ``pixel_enabled=False`` by leaving the
+        # legacy quarantine behaviour untouched.
+        self._pixel_enabled = bool(pixel_enabled)
+        self._pixel_ocr_modalities = {m.upper() for m in pixel_ocr_modalities}
 
     # ---- public API ----
 
@@ -334,11 +343,31 @@ class DeidEngine:
         return offset
 
     def _check_quarantine(self, ds: Dataset, src: Path) -> None:
-        """FR-11: burn-in detection → QuarantineRequired."""
+        """FR-11 / FR-31: burn-in detection → QuarantineRequired.
+
+        When the pixel stage is enabled (v0.2 de-id-pixel, ``pixel_enabled=True``),
+        burn-in and pixel-eligible modality studies are **not** raised here —
+        they are instead routed to ``PixelDeidEngine`` by the pipeline. The
+        pixel engine handles the burn-in via OCR and triggers quarantine
+        fallback internally on low-confidence / engine failure. The legacy
+        behaviour (v0.1, ``pixel_enabled=False``) is preserved for AC-15
+        bit-equivalence.
+        """
         burned = str(ds.get("BurnedInAnnotation", "")).upper().strip()
+        modality = str(ds.get("Modality", "")).upper().strip()
+        if self._pixel_enabled:
+            # Pixel stage will handle both burn-in and OCR-eligible modalities.
+            if burned == "YES":
+                return
+            if modality and modality in self._pixel_ocr_modalities:
+                return
+            # Still quarantine modalities outside the pixel allowlist that the
+            # operator explicitly listed in ``burnin_quarantine_modalities``.
+            if modality in self._blacklist_mods:
+                raise QuarantineRequired("blacklist_modality", [str(src.name)])
+            return
         if burned == "YES":
             raise QuarantineRequired("burned_in_yes", [str(src.name)])
-        modality = str(ds.get("Modality", "")).upper().strip()
         if modality in self._blacklist_mods:
             raise QuarantineRequired("blacklist_modality", [str(src.name)])
 
