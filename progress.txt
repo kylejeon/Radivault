@@ -368,7 +368,7 @@ v0.1.1 백로그 (QA round 1 Medium/Low + 이번 세션 잔여):
 - 옵션 C: @planner dev-spec-de-id-engine-v0.2 (OCR 번인 + defacing)
 - 옵션 D: Gateway v0.1.1 보강 dev-spec (D-1..D-7 공식화)
 - 옵션 E: @planner dev-spec-order-orchestrator (구매 확정 → Gateway 영상 전송)
-- 옵션 F: @planner dev-spec-buyer-portal (웹 UI, 지금까지 API-only)
+- 옵션 F: Buyer Portal Web UI (웹 UI, 지금까지 API-only)
 - 비기술: 법률 자문, 파일럿 병원 물색 (보류 상태)
 
 2026-04-22 @researcher: de-id-pixel 리서치 초안 작성.
@@ -578,3 +578,346 @@ v0.1.1 백로그 (누적):
 - order-fulfillment M-2 scheduler, M-3 burst, L-1..L-3
 
 비기술: 법률 자문 · 파일럿 병원 물색 (계속 보류)
+
+## 2026-04-24 — @researcher buyer-portal-ux-competitive 리서치
+
+### 뭘 했나
+Buyer Portal MVP(웹 UI) 2~3주 스코프 확정 목적. 경쟁사 11종 + 인접 산업
+2종(AWS Data Exchange, Snowflake Marketplace)의 Buyer-facing 웹 UI 패턴
+수집. API UX 리서치(metadata-index §7)와 중복 회피, 마케팅 톤 일관.
+
+- docs/research/buyer-portal-ux-competitive.md (14 섹션):
+  §1 scope / §2 competitor inventory / §3 검색·필터 / §4 결과 카드 /
+  §5 상세 / §6 장바구니·주문 / §7 상태 추적 (5-phase 매핑) /
+  §8 다운로드 / §9 공통 shell / §10 MVP must-have vs nice-to-have /
+  §11 DICOM 뷰어 판정(v0.1 미포함 권고) / §12 Hospital Dashboard 6-tile /
+  §13 Kyle 결정 13건 / §14 change history.
+- 핵심 권고: Next.js + shadcn/ui + Tailwind 스택, Gen3-style 3-pane
+  (좌 패싯 / 중앙 테이블 / 우 cohort), 12-state FSM→5-phase buyer UI
+  매핑, 뷰어 v0.2로 보류, Hospital Dashboard 별도 3~4일 스프린트.
+
+### 다음에 뭘 하나
+- @planner dev-spec-buyer-portal.md 작성 (본 리서치 §10·§11·§12·§13
+  근거로 FR/AC). 병렬로 @designer 컨셉 목업(디자인 토큰·Top nav·Search
+  레이아웃 3 화면) 가능.
+- Kyle 결정 13건 (§13): 법률 4 · UX 5 · 기술 4. 특히 (a) viewer 보류
+  확정 (b) Hospital Dashboard 포함 여부 (c) 한국어 i18n 타이밍.
+
+## 2026-04-24 — @researcher demo-pitch-references 리서치 (Auto mode)
+
+### 뭘 했나
+대표님(투자자+병원 경영진 겸임) 1인 15~20분 데모용 피치·연출 레퍼런스
+리서치. 시장/기술 중복 피하고 "데모·스토리텔링 실행"만 집중.
+
+- docs/research/demo-pitch-references-radivault.md (10 섹션):
+  §1 scope / §2 Segmed·Gradient·Truveta·Rhino·Flywheel 5사 공개 연출
+  패턴 / §3 dual-audience 3 구조(Braided·Sandwich·Lens-switch) + 권장
+  Braided+Sandwich 하이브리드 17분 / §4 Live vs Recorded 매트릭스 +
+  Hybrid Live+Canned Output 권장 + 실패 런북 / §5 병원 경영진 8
+  proof points (PIPA CEO 개인책임 강화 반영) + 금기 코드 6건 / §6
+  투자자 8 proof points + marketplace 지표(GMV·take rate·CM1) /
+  §7 스토리보드 변형 A/B/C (권장 A "Revenue Loop Proof") 장면별
+  시간 배분·시각 자산·프레젠터 멘트 / §8 anti-pattern 23건(실 PHI
+  노출, 과장 컴플라이언스, 미구현 은폐, 한국 병원 금기 6건) /
+  §9 Kyle 결정 30+건 (§9.4 dev-spec 환류 D-1..D-10 포함) /
+  §10 change history + PRD/ARCH 갱신 제안 4건.
+
+### 핵심 권고
+- 데모 변형 A + Hybrid Live+녹화 백업.
+- 투자자=공급자 겸임 구조 = Segmed(Advocate Health) + Truveta
+  (17 health systems) 선례와 동일한 가장 강력한 세팅.
+- v0.1에 Buyer Portal 최소 UI(옵션 D-1b 정적 HTML+fetch 2~3일) 추가
+  검토 — 현재 API-only는 시각적 임팩트 약함. 결정 Kyle.
+- PIPA 개정(CEO 개인책임 최대 10%)이 병원 경영진 설득의 핵심 변수.
+
+### 다음에 뭘 하나
+- 메인 세션: Kyle에게 §9.1~9.6 결정 항목 우선순위화. 특히
+  Q-미팅-1~5(미팅 성격·모자 순서·배석자) + Q-데모-1~7(변형·모드·
+  데이터 소스) 먼저 확정. 이 결정 없이는 planner 착수 불가.
+- 확정 후 @planner dev-spec-demo-kit.md 또는 dev-spec-buyer-portal-
+  demo.md. 본 리서치 §9.4 D-1..D-10을 기능 요구로 수용, 투입 일정
+  최소 5일 ~ 최대 15일 중 택일.
+- @designer·@marketer 병렬 가능(덱 + leave-behind 큐레이션).
+
+## 2026-04-24 — @planner dev-spec-buyer-portal-demo v0.1 (Auto mode)
+
+### 뭘 했나
+Kyle이 합리적 기본값 전체 수용 조건으로 @planner 에게 Buyer Portal + Hospital
+Dashboard + Demo Kit v0.1 MVP 개발지시서 작성 지시. 선행 리서치 2건
+(demo-pitch-references-radivault + buyer-portal-ux-competitive) 및 기존
+dev-spec 5개 (gateway/central/metadata/de-id-pixel/order-fulfillment) 모두
+반영하여 단일 feature slug `buyer-portal-demo` 로 통합.
+
+- docs/specs/dev-spec-buyer-portal-demo.md v0.1 Draft (15 섹션):
+  §0 scope+out-of-scope 16건 / §1 context+SC-1..4 / §2 persona 4종
+  (Buyer Dana / Hospital Exec Prof.Kim / Hospital IT / Demo Operator)
+  / §3 screens inventory Buyer A-1..A-9 + Hospital B-1..B-6 + 공통
+  상태 7종 + Demo Operator Mode 오버레이 5종 / §4 FR 120+건 (FR-A-71
+  + FR-B-18 + FR-S-15 + FR-D-9 + FR-X-8) / §5 AC 47건 binary-testable
+  (AC-A-17 + AC-B-13 + AC-S-6 + AC-D-6 + AC-X-5) / §6 비기능 (성능·
+  접근성·브라우저·법적 L-1..L-10 PIPA/HIPAA/TCIA/경쟁사 로고) / §7
+  Contract deltas D-1..D-5 (central-ingest 신규 3 endpoint, order-
+  fulfillment buyer_phase field, portal BFF hospital admin stub) /
+  §8 Seed pipeline TCIA 400 study 5 collection + download/inject/verify/
+  reset script / §9 Demo script outline 17분 장면 7 + Canned output
+  경로 맵 + 실패 런북 5 + 리허설 체크 R-1..9 / §10 비기능 상세 /
+  §11 Kyle 오픈 결정 18건 (법무 4 + 데모 5 + UX 4 + 기술+보안 5 +
+  브랜딩 3) / §12 Risk 12건 / §13 15일 milestone 분해 (Week 1 D-2/3/4
+  blocker, Week 2 화면, Week 3 Hospital+Demo mode+QA+리허설) /
+  §14 Annex contract delta 표 + 기술 스택 확정 제안 (ARCHITECTURE.md
+  §9 TBD 해소) / §15 change history.
+
+- docs/specs/demo-script-radivault.md v0.1 skeleton (7 섹션):
+  §0 meta / §1 사전 준비 H-day/D-1/D-0 체크리스트 / §2 장면 1~7
+  상세 표 (각 장면: 시각 자산·프레젠터 한국어 대사 초안·조작 절차·
+  예상 소요·Canned 경로·예상 질문·실패 시) / §3 실패 런북 5건 /
+  §4 리허설 체크 R-1..R-9 / §5 Q&A 예상 20건 placeholder (병원
+  경영진 8 + 투자자 6 + 기술 6) / §6 follow-up 템플릿 (leave-behind
+  패키지 + 이메일 한국어 템플릿) / §7 change history. 프레젠터
+  영어 대사와 청중 반응 연출 상세는 @designer 작성 대기.
+
+### 합리적 기본값 수용 (Kyle 사전 승인)
+- 스토리보드 변형 A "Revenue Loop Proof" 17분 (Braided+Sandwich hybrid)
+- Live + Canned Hybrid 모드 (Demo Operator Mode `?demoop=1` + Ctrl+1~7)
+- Buyer Portal 영어 + Hospital Dashboard 한국어 분리
+- DICOM 뷰어 v0.2 로 이관 (Zone 2 DICOMweb gateway 미구축 + 프리뷰 법률 결정 미완)
+- 가격 마스킹 (`—` 또는 "Contact for pricing")
+- 2.5~3주 15 영업일 분해
+- 샘플 데이터 TCIA 400 study CC-BY, 5 컬렉션 (CT Chest/Abdomen/Spine, MR Brain, MG)
+- 기술 스택 Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui + TanStack Query + Recharts + iron-session + pino
+
+### 어디까지 됐나
+Phase 2 "Planning" for buyer-portal-demo 완료. dev-spec + demo-script skeleton
+2 파일. Draft v0.1. Kyle 승인 대기.
+
+Annex C 기술 스택 확정 제안은 ARCHITECTURE.md §9 "Zone 3 Web Portal TBD"
+항목 해소 대상 — Kyle 승인 시 별 PR 로 ARCHITECTURE.md 갱신 필요.
+
+PRD §4.3 "구매자 포털 Phase 2" → 본 dev-spec 이 v0.1.5 로 분리 승격 —
+Kyle 승인 시 PRD 갱신.
+
+### 다음에 뭘 하나
+- **@designer** — design-spec-buyer-portal-demo.md 작성. 5 화면 midfi
+  (Home, Signin, Search 3-pane, Review modal, Hospital Dashboard 6-tile)
+  + 디자인 토큰 + Top nav + 에러/Empty/Loading 상태 + Demo Operator Mode
+  배지. 본 dev-spec 과 동일 feature slug 유지. 동 세션에서
+  demo-script-radivault.md 장면별 프레젠터 영어 대사·연출 상세도 갱신.
+- **@developer (backend 병렬)** — D-2, D-3, D-4 contract delta 3건을
+  별 PR 로 central-ingest / order-fulfillment 에 선-반영. Week 1 D2~D3
+  크리티컬 패스. 블로커 해소 없이는 Hospital Dashboard + 5-phase tracker
+  진행 불가.
+- **@marketer 병렬** — 피치덱 PPT placeholder 장면 1/2/7 슬라이드 초안.
+  dev-spec §9 장면 표 참조.
+- **Kyle 결정** 18건 (§11) — 특히 Q-Legal-1 TCIA 출처 문구, Q-Demo-1
+  라이선스 확정, Q-Demo-2 revenue tile 숫자, Q-Tech-1 호스팅 (Vercel
+  vs 자체 docker-compose + PIPA), Q-Sec-1 hospital admin token 파일럿
+  이관 경로, Annex C 기술 스택 확정 수용 여부.
+- **D-day 역산 필요** — Kyle 이 미팅 날짜 확정 후 최소 3주 전 dev-spec
+  승인 필요. 더 늦으면 Week 3 리허설 버퍼 소실 → Risk R-9 (1인 시연자
+  피로) 악화.
+
+## 2026-04-24 — @designer design-spec-buyer-portal-demo v0.1 + demo-script v0.2 (Auto mode)
+
+### 뭘 했나
+Phase 3 "Design" 착수. Kyle 요청: dev-spec-buyer-portal-demo 기반 design-spec
+작성 + demo-script 를 skeleton 에서 v0.2 상세화. Auto mode 연속 실행.
+
+- docs/specs/design-spec-buyer-portal-demo.md v0.1 (15 섹션):
+  §0 scope (6 표면: Buyer UI · Hospital Dashboard · 디자인 시스템 · 상태
+  taxonomy · Demo Op · demo script 동반) + platform desktop-only + 기술
+  스택 dev-spec Annex C 승계 / §1 7 디자인 원칙 (신뢰 · 밀도 · 감사
+  가시성 · 이중언어 분리 · WCAG AA · 5-phase 축약 · PIPA 출처) / §2
+  디자인 토큰 CSS 변수 (Buyer cool blue + Hospital teal 분리, modality
+  7색, 타이포 Inter+Pretendard, spacing/shadow/radius/motion) — UI_GUIDE
+  승격 제안 / §3 컴포넌트 인벤토리 23종 (shadcn 12 + 커스텀 C-1..C-23
+  Brand/TopNav/HospitalHeader/PhaseStepper/FacetGroup/CohortSidebar/
+  StudyRow/ModalityBadge/TileCard/RevenueDisclaimer/KoreaHeatmap/
+  EmptyState/ErrorBanner/DemoOperatorBadge/PhaseBadge/ChecksumCell/
+  ExpirationCountdown/ApiSnippetTab/AuditRow/GatewayStatusDot/LoginCard/
+  PriceMask/CannedOverlay) / §4 사용자 플로우 7개 (happy/permission/
+  error/network/hospital-happy/hospital-offline/demo-operator) / §5.A
+  Buyer 9 화면 ASCII 와이어 · 상태 매트릭스 · i18n 카피 · 접근성 · 데모
+  연결 / §5.B Hospital 6-tile + signin + gateway-offline empty 상세 /
+  §6 Demo Operator Mode 5 오버레이 (배지/shortcut panel/reset/canned
+  overlay/scene progress) / §7 에러 taxonomy 21 코드 UI 렌더 규칙 + 로딩
+  스켈레톤 패턴 + Empty 3종 + partial failure + PHI-suspect variant / §8
+  URL 구조 (Buyer + Hospital) + 라우팅 가드 / §9 i18n 분리 정책 (Buyer
+  en / Hospital ko, 한국어 30% 짧음 규칙, 날짜·통화 포맷) / §10 WCAG 2.1
+  AA 체크리스트 + 키보드 탐색 순서 + 색 대비 핫스팟 수정 (modality-MG
+  text #9d174d 로 어둡게) + 다크모드 v0.1.1 연기 / §11 반응형 (desktop
+  ≥1280, tablet best-effort, mobile fallback) / §12 AC-DG-1..20 binary-
+  testable / §13 open questions (dev-spec 승계 10 + 디자이너 신규 4) /
+  §14 assets 13종 / §15 change history + demo-script v0.2 동반 + UI_GUIDE
+  승격 제안 + NEXT_STEP.
+
+- docs/specs/demo-script-radivault.md v0.2 갱신 (7 → 8 섹션):
+  §0 meta 언어 정책 추가 (한국어 80% / 영어 20%) / §1 사전 준비 (H-day
+  / D-1 / D-0) 체크 확장 / §2 장면 1~7 상세화:
+  * 각 장면 프레젠터 대사 한국어 주도 대본 + 영어 핵심 quote 병기
+  * 연출 지침 추가 — Pause (총 13 지점), Eye contact (총 9 지점),
+    손동작, body language, 속도 변화, 금기
+  * 예상 청중 질문 → 즉답 가능한 단문 형태로 정리
+  * 실패 시 런북 참조 + 복구 멘트
+  / §3 실패 런북 5건 세부화 (증상 · 첫 5초 액션 단계 · 복구 · 멘트 ·
+  주의/사후 대응) / §4 리허설 체크 R-1..R-9 측정 기준 추가 + RS-1..RS-4
+  추가 시나리오 / §5 Q&A 20건 상세 답변 채움 — 병원 경영진 8 + 투자자 6
+  + 기술 6. placeholder 0건. Q-10 파일럿 없음 대응, Q-13 margin 60-70%
+  근거, Q-14 TAM $22.5M 계산 등 Kyle 결정 플래그 / §6 follow-up 한국어
+  + 영어 템플릿 2종 / §7 현장 연출 팁 신규 섹션 (시선/목소리/호흡/손
+  동작/body language 금기/런북 발동 자세/Q&A 진입) / §8 change history.
+
+### 디자인 결정 하이라이트
+- **두 서피스 색채 분리**: Buyer cool blue (#2563eb) + Hospital teal
+  (#0d9488) — 동일 톤 위에서 "다른 모드" 인상, "다른 제품" 인상 회피.
+- **폰트 분리**: Inter (en) + Pretendard Variable (ko) self-hosted,
+  Pretendard medium 이 Inter regular 와 비주얼 등가 규칙.
+- **5-phase stepper = 핵심 커스텀 컴포넌트**: Buyer A-7 수평 + Hospital
+  B-5 inline 배지 양쪽 재사용. 12-state FSM 은 "View timeline" 드로어
+  에서만 노출.
+- **접근성 대비 보정**: modality-MG (#ec4899) 배지 텍스트가 WCAG 3.3:1
+  FAIL → `#9d174d` (pink-800) 로 일괄 보정 액션 지정.
+- **Demo Operator Mode 활성 조건 엄격**: `DEMOOP_TOKEN` env 설정 + 쿼리
+  둘 다 있어야. 프로덕션에서는 DOM 에 DEMO MODE 배지 자체가 없음 (hidden
+  이 아니라 존재 X).
+- **PHI-suspect variant**: `<ErrorBanner variant="phi-suspect">` 풀 화면
+  overlay + 3초 auto close + SRE 자동 알림. 데모 런북 Cmd+W 와 일치.
+
+### UI_GUIDE 승격 제안
+- §1 7 원칙 → UI_GUIDE §2 (현재 placeholder)
+- §2 디자인 토큰 → UI_GUIDE §3 (현재 TBD)
+- §3.1 shadcn 표 → UI_GUIDE §4
+- §7 에러 UI 규약 → UI_GUIDE §5
+- §10 접근성 체크 → UI_GUIDE §6
+- §11 반응형 → UI_GUIDE §7
+Kyle 승인 시 별 PR.
+
+### 어디까지 됐나
+Phase 3 "Design" for buyer-portal-demo 완료. design-spec Draft v0.1 +
+demo-script v0.2. Kyle 승인 대기. 기존 design-spec 5개 (gateway / central /
+metadata / de-id-pixel / order-fulfillment) 톤·에러 코드·ASCII·Runbook
+포맷 일관성 유지.
+
+누적 5 feature 문서 + 1 feature (buyer-portal-demo) Phase 3 완료.
+Phase 4 "Dev" 착수 가능 상태.
+
+### 다음에 뭘 하나
+
+- **@developer (포털 구현)** — `claude` 브랜치에서 buyer-portal-demo
+  구현 착수. dev-spec + design-spec 두 문서 기반. Week 1 D1 scaffold 부터.
+  - D1: Next.js 14 App Router + TS + Tailwind + shadcn/ui init, apps/portal/
+  - D2-3: Contract delta D-2/D-3/D-4 별 PR — central-ingest 신규 3 endpoint
+    (/v1/hospital/me/stats, /gateway-health, /orders, /audit) + order-fulfillment
+    buyer_phase 필드
+  - D4: BFF scaffold (iron-session, pino, route handlers 기본 구조)
+  - D5: Shell 컴포넌트 (TopNav, HospitalHeader, Empty/Loading/Error)
+  - D6-10: Buyer 9 화면 순차
+  - D11-12: Hospital 6 tile + 한국어 i18n
+  - D12: Demo Operator Mode
+  - D13: Canned output 캡처 + 1차 녹화
+  - D14: QA + Playwright e2e 3 시나리오
+  - D15: Fix round + 최종 리허설 2회
+- **@marketer 병렬** — demo-script v0.2 §2 장면 1/2/7 기반 피치덱 PPT
+  slide 초안 3장 (title+tagline / architecture dual / dual ask). design-spec
+  §5.A-1 Home wire 톤 일관.
+- **Kyle 결정 긴급**:
+  1. design-spec §13 Q-UI-1 다크 모드 v0.1 포함 (권고 v0.1.1)
+  2. design-spec §13 Q-UI-3 bar chart 6m vs 12m (권고 6m)
+  3. demo-script §5 Q-10 파일럿 답변에서 지인 병원 이름 언급 여부
+  4. demo-script §5 Q-13/Q-14 margin·TAM 숫자 공개 수준
+  5. UI_GUIDE 승격 PR 수용 여부
+  6. demo-script §2 장면 1 한국어 대사 Kyle 본인 발화 스타일로 낭독 후 수정
+
+### 메모
+- 본 design-spec 은 RadiVault 최초의 GUI 레이어 UI 명세.
+- Buyer + Hospital 두 서피스의 톤 통일 ("같은 신뢰 산업"), 기능 분리
+  (영어 vs 한국어, 밀도 vs 1-scroll) 동시 달성 의도.
+- Figma source file 제작은 v0.1.5 별 트랙 (현재는 ASCII + CSS 변수).
+- 본 세션 산출물은 `apps/portal/` 구현 가능 수준.
+
+
+## 2026-04-24 — Session 9 (Claude @developer, buyer-portal-demo v0.1 구현 착수)
+
+### 뭘 했나
+Phase 4 개발. 선행 산출물 dev-spec-buyer-portal-demo.md + design-spec + demo-script
+기반으로 P1 백엔드 델타 전수 구현 + P2 포털 스캐폴드 전체 화면 + P3 seed
+script 스켈레톤.
+
+#### P1 — Backend Contract Deltas (완료)
+- **7ad1dec** feat(central-ingest): D-2/D-4 엔드포인트
+  - GET /v1/hospital/me/stats (studies.today/cumulative/monthly_12m +
+    modality_distribution + gateway_health)
+  - GET /v1/hospital/me/gateway-health (<5m online / <30m warning / else offline)
+  - GET /v1/hospital/me/audit (whitelist 5 event_type, PHI-safe projection)
+  - 15 integration tests (scope isolation × 2 hospital, stale heartbeat
+    label mapping, PHI 0건 assertion)
+- **c562c6c** feat(order-fulfillment): D-2 part 2 + D-3
+  - buyer_phase field (12-state → 5-phase mapping) on all order responses
+  - GET /v1/hospital/me/orders (buyer identity 완전 마스킹)
+  - GatewayAuthMiddleware + BuyerAuthMiddleware 가 /v1/hospital/* path 공유
+  - 17 unit + 8 integration tests (exhaustive state coverage + scope
+    isolation between hospitals)
+- 기존 363 → 403 tests passed, 기존 API 스키마 0건 breaking (additive only).
+
+#### P2 — Next.js Portal Scaffold (핵심 전수)
+- **2b9d7fb** feat(portal): web/portal/ Next.js 14 App Router 신규
+  - 버이어 surface (영어, 파랑): /, /signin, /search (3-pane facets +
+    cohort + Review Order modal), /orders, /orders/[id] (5-phase stepper +
+    5s polling), /orders/[id]/downloads (browser / curl / python tab +
+    TTL countdown), /docs
+  - 병원 surface (한국어, 티얼): /hospital (6-tile 2×3 grid + Korea SVG
+    heatmap placeholder + revenue 시뮬레이션), /hospital/signin
+  - 12종 BFF route handler — iron-session cookie 암호화, upstream API
+    key 브라우저 노출 0건
+  - Demo Operator Mode (Cmd+Shift+D 토글, scene counter, DEMOOP_TOKEN
+    서버측 gate)
+  - 23종 컴포넌트 + design tokens (buyer cool blue / hospital teal CSS
+    변수 swap)
+  - 10 Vitest smoke tests + tsc --noEmit clean + next build 22 routes 성공
+
+#### P3 — Seed Pipeline (스켈레톤)
+- **e6809a0** feat(demo-seed): scripts/demo_seed/ 신규
+  - seed_config.yaml (5 TCIA 컬렉션, 400 study target)
+  - download_tcia.py (--plan-only / --dry-run / --accept-restricted,
+    license gate)
+  - reset.sh (soft/hard) + truncate_demo.sql
+  - 4 unit tests (plan-only JSON, RESTRICTED 스킵, config missing exit 2)
+
+### 어디까지 됐나
+- P1 완료 (D-2/D-3/D-4 전수 서버 구현 + 40 new tests)
+- P2 완료 (9 pages + 12 API routes + 23 components + smoke tests, next
+  build 통과)
+- P3 스켈레톤 완료 — 실제 TCIA 네트워크 fetch 는 rehearsal R-1 시점에
+  연결 예정 (dev-spec §8.4)
+- 전체 테스트: 363 기존 + 44 신규 = 407 passing + 10 Vitest = 417
+- 커밋 해시: 7ad1dec, c562c6c, 2b9d7fb, e6809a0
+
+### 다음 뭐 해야 해
+- **@qa** — buyer-portal-demo v0.1 검수.
+  - 백엔드 엔드포인트 3종 (D-2/D-4) 계약 합치, scope isolation,
+    PHI 비노출, buyer_phase 매핑 완전성 확인
+  - 포털 next build 아티팩트 기반 Route Handler 응답 엔빌로프 일관성
+  - Demo Operator Mode 서버 gate 동작 (DEMOOP_TOKEN 미설정 시 cookie
+    거부 확인)
+- **@marketer** 병렬 — 피치덱 PPT 3 슬라이드 초안
+- **Rehearsal R-1 (3 영업일 전)**: seed 스크립트의 NotImplementedError
+  블록에 tcia_utils 연결, canned JSON 파일 10종 실 캡처
+- **Kyle 결정 대기**:
+  1. DEMOOP_TOKEN 실제 값 (개발 stub OK, 데모 시 고유 32-char)
+  2. RV_HOSPITAL_ADMIN_TOKENS 실제 해시 (sha256:<hex>) — sales 담당자
+     manual 전달
+  3. HOSPITAL_UPSTREAM_BEARER — 데모용 central-ingest auth_token 값
+  4. 포털 도메인 (v0.1 localhost:3000, 데모/프로덕션 TBD)
+  5. revenue 시뮬 파라미터 (unit_price $5, hospital_share 35%,
+     KRW/USD 1,350 현재 placeholder)
+  6. dark mode v0.1 포함 여부 (권고: v0.1.1)
+
+### 메모
+- P1 구현은 기존 service 코드에 **additive only**. 기존 API 응답 필드
+  제거·변경 0건. Alembic 신규 마이그레이션 미필요 (D-2/D-4 는 기존
+  study / audit_ingest_event 테이블 SELECT 만, D-3 는 응답 필드 추가).
+- 포털은 monorepo 스타일 (`web/portal/`) 로 Python 서비스와 격리.
+  node_modules, .next 는 .gitignore 처리.
+- iron-session v8 기반으로 cookie는 HttpOnly+Secure+SameSite=Lax, 12h
+  TTL, 암호화 key 는 SESSION_PASSWORD env (≥48 char) 필수.
+- Demo Operator Mode 는 DEMOOP_TOKEN 서버 env 가 설정됐을 때만 BFF 가
+  쿠키를 발급 (AC-D-2 충족).
