@@ -89,9 +89,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     detail=f"rate limit {limits.rpm}/min exceeded",
                     retry_after=60,
                 )
-                return _envelope_response(
-                    exc, request, self._rate_headers(buyer_pk, limits)
-                )
+                return _envelope_response(exc, request, self._rate_headers(buyer_pk, limits))
         except RedisDown:
             return _envelope_response(IdempUnavailable(), request)
 
@@ -111,9 +109,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     detail=(f"daily quota exhausted: {limits.daily}/{limits.daily} requests used"),
                     retry_after=max(retry_after, 60),
                 )
-                return _envelope_response(
-                    exc, request, self._rate_headers(buyer_pk, limits)
-                )
+                return _envelope_response(exc, request, self._rate_headers(buyer_pk, limits))
         except RedisDown:
             return _envelope_response(IdempUnavailable(), request)
 

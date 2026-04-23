@@ -71,13 +71,9 @@ def test_paid_buyer_at_cap_200_ok(app_client, seeded_buyer, synthetic_studies) -
 
 
 @pytest.mark.integration
-def test_scope_json_override_raises_cap(
-    app_client, engine_and_factory, synthetic_studies
-) -> None:
+def test_scope_json_override_raises_cap(app_client, engine_and_factory, synthetic_studies) -> None:
     _, factory = engine_and_factory
-    bundle = _seed_buyer(
-        factory, tier="preview", scope_json={"max_limit_per_page": 150}
-    )
+    bundle = _seed_buyer(factory, tier="preview", scope_json={"max_limit_per_page": 150})
     app_client.app.state.redis.flushdb()
     resp = app_client.post(
         "/v1/search/studies",

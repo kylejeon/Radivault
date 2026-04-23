@@ -50,10 +50,7 @@ async def search_studies(
     effective_cap = _resolve_page_cap(scope_json, tier_cap)
     if body.limit > effective_cap:
         raise PageLimit(
-            detail=(
-                f"limit {body.limit} exceeds tier cap {effective_cap} "
-                f"(tier={tier})"
-            ),
+            detail=(f"limit {body.limit} exceeds tier cap {effective_cap} (tier={tier})"),
             hint=f"use limit <= {effective_cap}",
         )
 
@@ -108,9 +105,7 @@ async def search_studies(
             facets_suppressed=estimate.suppressed_facets,
             scope_json=scope_json,
             buyer_tier=tier,
-            buyer_quota_remaining=getattr(
-                request.state, "buyer_quota_remaining", None
-            ),
+            buyer_quota_remaining=getattr(request.state, "buyer_quota_remaining", None),
         )
 
     payload = result.response.model_dump(mode="json")

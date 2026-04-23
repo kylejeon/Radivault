@@ -142,7 +142,7 @@ class BuyerAuthMiddleware(BaseHTTPMiddleware):
             try:
                 row.last_used_at = datetime.now(tz=UTC)
                 session.commit()
-            except Exception as exc:  # noqa: BLE001 — defense-in-depth
+            except Exception as exc:  # defense-in-depth
                 log.warning(
                     "ERR_LAST_USED_UPDATE_FAILED",
                     extra={

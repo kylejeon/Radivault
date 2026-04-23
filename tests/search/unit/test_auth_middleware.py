@@ -55,7 +55,7 @@ def app_and_factory():
     app = FastAPI()
 
     @app.get("/me")
-    async def me(request: Request):  # noqa: ANN201
+    async def me(request: Request):
         return {
             "buyer_id": getattr(request.state, "buyer_id", None),
             "tier": getattr(request.state, "tier", None),
@@ -123,9 +123,7 @@ def test_auth_last_used_update_ok(app_and_factory) -> None:
         assert row.last_used_at is not None
 
 
-def test_auth_last_used_update_permission_denied_soft_fail(
-    app_and_factory, caplog
-) -> None:
+def test_auth_last_used_update_permission_denied_soft_fail(app_and_factory, caplog) -> None:
     """C-1: simulated PG ``permission denied`` on UPDATE(last_used_at) must
     NOT fail authentication. Middleware emits ``ERR_LAST_USED_UPDATE_FAILED``
     WARN, auth returns 200."""

@@ -53,9 +53,7 @@ def test_success_response_has_all_headers_and_meta(
 
 
 @pytest.mark.integration
-def test_rate_limited_response_has_headers(
-    app_client, seeded_buyer, synthetic_studies
-) -> None:
+def test_rate_limited_response_has_headers(app_client, seeded_buyer, synthetic_studies) -> None:
     _buyer, bundle = seeded_buyer
     # Shrink rpm cap.
     for m in app_client.app.user_middleware:

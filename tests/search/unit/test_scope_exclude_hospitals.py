@@ -135,7 +135,7 @@ def test_estimate_cost_respects_scope(three_hospitals) -> None:
     est_all = estimate_cost(session, req)
     est_scoped = estimate_cost(session, req, scope_json={"exclude_hospitals": [hpks[0]]})
     assert est_all.estimated_rows >= est_scoped.estimated_rows
-    assert est_scoped.estimated_rows == 10  # 2 hospitals × 5 studies
+    assert est_scoped.estimated_rows == 10  # 2 hospitals x 5 studies
 
 
 def test_build_where_includes_hospital_notin() -> None:
