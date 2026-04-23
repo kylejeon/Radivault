@@ -19,6 +19,7 @@ import click
 
 from radivault_gateway import RULESET_VERSION, __version__
 from radivault_gateway.audit import AuditLogger, verify_chain
+from radivault_gateway.cli.pixel_selftest import pixel_selftest
 from radivault_gateway.config import ConfigError, GatewayConfig, load_config
 from radivault_gateway.logging_config import configure_logging
 
@@ -85,6 +86,7 @@ def version(json_output: bool) -> None:
     info = {
         "agent": __version__,
         "ruleset": RULESET_VERSION,
+        "ruleset_full": f"{RULESET_VERSION} + pixel v0.1",
         "python": platform.python_version(),
         "platform": f"{platform.system()} {platform.machine()}",
     }
@@ -94,14 +96,50 @@ def version(json_output: bool) -> None:
         info["pydicom"] = pydicom.__version__
     except Exception:
         info["pydicom"] = "unknown"
+
+    # Pixel engine versions (design-spec §2.7). Four lines; ``(absent)`` when
+    # the component is not installed.
+    info["pytesseract"] = _module_version("pytesseract")
+    info["tesseract"] = _binary_version("tesseract", "--version")
+    info["pydeface"] = _module_version("pydeface")
+    info["fsl_flirt"] = _binary_version("flirt", "-version")
+
     if json_output:
         click.echo(json.dumps(info, indent=0).replace("\n", ""))
         return
     click.echo(f"gateway-agent  {info['agent']}")
-    click.echo(f"ruleset        {info['ruleset']}")
+    click.echo(f"ruleset        {info['ruleset_full']}")
     click.echo(f"python         {info['python']}")
     click.echo(f"pydicom        {info['pydicom']}")
     click.echo(f"platform       {info['platform']}")
+    click.echo(f"pytesseract    {info['pytesseract']}")
+    click.echo(f"tesseract      {info['tesseract']}")
+    click.echo(f"pydeface       {info['pydeface']}")
+    click.echo(f"FSL flirt      {info['fsl_flirt']}")
+
+
+def _module_version(name: str) -> str:
+    try:
+        mod = __import__(name)
+        return str(getattr(mod, "__version__", "unknown"))
+    except ImportError:
+        return "(absent)"
+
+
+def _binary_version(binary: str, flag: str) -> str:
+    path = shutil.which(binary)
+    if path is None:
+        return "(absent)"
+    try:
+        import subprocess
+
+        out = subprocess.run([binary, flag], capture_output=True, text=True, timeout=5)
+        head = (
+            (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr) else ""
+        )
+        return head or "present"
+    except Exception:
+        return "present"
 
 
 # ---- audit verify ----
@@ -146,12 +184,35 @@ def audit_verify(path: Path) -> None:
     "-o", "--output", "output_path", type=click.Path(dir_okay=False, path_type=Path), default=None
 )
 @click.option("--show-diff", is_flag=True, help="Show tag-by-tag before/after table")
+@click.option("--pixel", "pixel", is_flag=True, help="Also run pixel stage (OCR + defacing)")
+@click.option(
+    "--ocr-only", "ocr_only", is_flag=True, help="Skip defacing even if modality/body matches"
+)
+@click.option(
+    "--deface-only", "deface_only", is_flag=True, help="Skip OCR even if BurnedInAnnotation=YES"
+)
+@click.option("--both", "both", is_flag=True, help="OCR + defacing (alias for --pixel)")
+@click.option(
+    "--show-boxes", "show_boxes", is_flag=True, help="Print OCR bbox table (hash + coord %)"
+)
+@click.option(
+    "--show-voxel-stats",
+    "show_voxel_stats",
+    is_flag=True,
+    help="Print defacing removed_voxel_ratio",
+)
 @click.pass_context
 def de_id_test(
     ctx: click.Context,
     input_path: Path,
     output_path: Path | None,
     show_diff: bool,
+    pixel: bool,
+    ocr_only: bool,
+    deface_only: bool,
+    both: bool,
+    show_boxes: bool,
+    show_voxel_stats: bool,
 ) -> None:
     if not input_path.exists():
         click.echo(
@@ -225,7 +286,110 @@ def de_id_test(
         if output_path is not None:
             shutil.copy(result.output_paths[0], output_path)
             click.echo(f"Wrote de-identified file to {output_path}")
+
+        # Pixel stage (v0.2). Guard: flag relationships per design-spec §2.3.1
+        pixel_any = pixel or both or ocr_only or deface_only or show_boxes or show_voxel_stats
+        if pixel_any:
+            if ocr_only and deface_only:
+                click.echo(
+                    "[ERR_CLI_010] --ocr-only and --deface-only are mutually exclusive",
+                    err=True,
+                )
+                sys.exit(1)
+            if (ocr_only or deface_only) and not (pixel or both):
+                click.echo(
+                    "[ERR_CLI_011] --ocr-only/--deface-only require --pixel",
+                    err=True,
+                )
+                sys.exit(1)
+            _run_pixel_de_id_test(
+                cfg=cfg,
+                staged_dir=out_dir,
+                ocr_only=ocr_only,
+                deface_only=deface_only,
+                show_boxes=show_boxes,
+                show_voxel_stats=show_voxel_stats,
+            )
     sys.exit(0)
+
+
+def _run_pixel_de_id_test(
+    *,
+    cfg: GatewayConfig,
+    staged_dir: Path,
+    ocr_only: bool,
+    deface_only: bool,
+    show_boxes: bool,
+    show_voxel_stats: bool,
+) -> None:
+    """Mini wrapper: run PixelDeidEngine against a temp staged dir.
+
+    Exits 4 when the configured engine is not available, 3 when the study
+    would be quarantined.
+    """
+    from radivault_gateway.deid.pixel import (
+        PixelDeidEngineError,
+        PixelQuarantineRequired,
+        build_pixel_deid_engine,
+        format_cli_error,
+    )
+
+    test_cfg = cfg.deid.pixel.model_copy(deep=True)
+    test_cfg.enabled = True
+    if ocr_only:
+        test_cfg.defacing.enabled = False
+    if deface_only:
+        test_cfg.ocr.enabled = False
+    try:
+        engine = build_pixel_deid_engine(test_cfg)
+    except PixelDeidEngineError as exc:
+        click.echo(format_cli_error(exc.code, detail=exc.message), err=True)
+        sys.exit(4)
+    if engine is None:
+        click.echo("Pixel stage skipped (disabled).")
+        return
+    click.echo("")
+    click.echo("Pixel Stage (v0.2)")
+    triage = engine.triage(staged_dir)
+    click.echo(f"  triage        {triage.decision.value}  (reason: {triage.reason})")
+    try:
+        result = engine.process_study(
+            staged_dir,
+            pseudo_study_uid="cli-test",
+            study_description=None,
+            modality_set=set(),
+            body_part=None,
+        )
+    except PixelQuarantineRequired as exc:
+        click.echo(format_cli_error(exc.code, reason=exc.reason), err=True)
+        click.echo("운영 환경에서는 이 스터디가 격리됩니다(state=pixel_failed).", err=True)
+        sys.exit(3)
+    except PixelDeidEngineError as exc:
+        click.echo(format_cli_error(exc.code, detail=exc.message), err=True)
+        sys.exit(4)
+    if result.ocr_applied:
+        click.echo(f"  engine        {result.library_ocr} (decision={result.decision})")
+        click.echo(
+            f"  OCR           frames={result.n_frames_ocr}  "
+            f"boxes_applied={result.n_boxes_redacted}  "
+            f"avg_conf={result.avg_confidence:.2f}"
+        )
+    if show_boxes:
+        # Boxes are held only transiently inside the engine — redaction already
+        # stripped the text. We surface aggregate stats here; per-box hashes
+        # are logged to audit with hash-only payloads (FR-38).
+        click.echo("  boxes         (stats-only; hashed text never printed — FR-38)")
+    if result.defacing_applied:
+        click.echo(
+            f"  defacing      {result.library_deface}  "
+            f"removed_voxel_ratio={result.removed_voxel_ratio:.3f}"
+        )
+    if show_voxel_stats:
+        click.echo(
+            f"  voxel_stats   removed={result.removed_voxel_ratio:.3f} "
+            f"duration_ms={result.deface_duration_ms}"
+        )
+    click.echo("  Exit status   OK")
 
 
 def _print_diff(ds_orig: object, ds_after: object) -> None:
@@ -458,6 +622,8 @@ def status(ctx: click.Context, json_output: bool) -> None:
             "chain_status": "ok" if chain_ok else "fail" if audit_exists else "absent",
         },
     }
+    if cfg.deid.pixel.enabled:
+        data["pixel"] = _pixel_status(cfg, db)
     if json_output:
         click.echo(json.dumps(data, indent=2))
         sys.exit(0)
@@ -479,11 +645,155 @@ def status(ctx: click.Context, json_output: bool) -> None:
         f"Audit log  chain: {'OK' if chain_ok else 'FAIL' if audit_exists else 'ABSENT'}  "
         f"head_seq={head_seq}"
     )
+    if cfg.deid.pixel.enabled:
+        pixel_data = data.get("pixel", {})
+        _render_pixel_status(pixel_data)
     sys.exit(0)
+
+
+def _pixel_status(cfg: GatewayConfig, db) -> dict:
+    """Build the status JSON ``pixel`` block (design-spec §2.5.3)."""
+    try:
+        pixel_events = db.list_pixel_audit_events(limit=500)
+    except Exception:
+        pixel_events = []
+    triage_counts = {"ocr_required": 0, "ocr_conditional": 0, "skip": 0}
+    ocr_stats = {"studies": 0, "avg_confidence": 0.0, "redacted_boxes": 0}
+    deface_stats = {"studies": 0, "avg_removed_voxel_ratio": 0.0, "min_removed_voxel_ratio": 0.0}
+    quarantine_stats = {
+        "residual_text": 0,
+        "residual_face_voxels": 0,
+        "medical_exclusion": 0,
+        "low_confidence": 0,
+    }
+    confs: list[float] = []
+    ratios: list[float] = []
+    for ev in pixel_events:
+        op = ev.get("op")
+        outcome = ev.get("outcome")
+        reason = ev.get("reason") or ""
+        if op == "triage":
+            key = (reason or "").lower()
+            if key.startswith("ocr_required"):
+                triage_counts["ocr_required"] += 1
+            elif key.startswith("ocr_conditional"):
+                triage_counts["ocr_conditional"] += 1
+            else:
+                triage_counts["skip"] += 1
+        elif op == "ocr" and outcome == "success":
+            ocr_stats["studies"] += 1
+            ocr_stats["redacted_boxes"] += int(ev.get("box_count") or 0)
+            if ev.get("avg_confidence") is not None:
+                confs.append(float(ev["avg_confidence"]))
+        elif op == "deface" and outcome == "success":
+            deface_stats["studies"] += 1
+            if ev.get("removed_voxel_ratio") is not None:
+                ratios.append(float(ev["removed_voxel_ratio"]))
+        elif outcome == "quarantine":
+            reason_key = reason.upper()
+            if "RESIDUAL_TEXT" in reason_key:
+                quarantine_stats["residual_text"] += 1
+            elif "RESIDUAL_FACE" in reason_key:
+                quarantine_stats["residual_face_voxels"] += 1
+            elif "MEDICAL_EXCLUSION" in reason_key:
+                quarantine_stats["medical_exclusion"] += 1
+            elif "LOW_CONFIDENCE" in reason_key:
+                quarantine_stats["low_confidence"] += 1
+    if confs:
+        ocr_stats["avg_confidence"] = round(sum(confs) / len(confs), 3)
+    if ratios:
+        deface_stats["avg_removed_voxel_ratio"] = round(sum(ratios) / len(ratios), 3)
+        deface_stats["min_removed_voxel_ratio"] = round(min(ratios), 3)
+    from radivault_gateway.deid.pixel.deface_engine import (
+        MridefacerEngine,
+        PydefaceEngine,
+    )
+    from radivault_gateway.deid.pixel.ocr_engine import (
+        PaddleOcrEngine,
+        TesseractOcrEngine,
+    )
+
+    ocr_engine_name = cfg.deid.pixel.ocr.engine
+    defacing_library = cfg.deid.pixel.defacing.library
+    ocr_available = (
+        TesseractOcrEngine.is_available()
+        if ocr_engine_name == "tesseract"
+        else PaddleOcrEngine.is_available()
+    )
+    defacing_available = (
+        PydefaceEngine().is_available()
+        if defacing_library == "pydeface"
+        else MridefacerEngine().is_available()
+    )
+    return {
+        "enabled": True,
+        "engines": {
+            "ocr": {
+                "name": ocr_engine_name,
+                "version": (
+                    TesseractOcrEngine().version()
+                    if ocr_engine_name == "tesseract" and ocr_available
+                    else "(absent)"
+                ),
+                "status": "ok" if ocr_available else "fail",
+            },
+            "defacing": {
+                "name": defacing_library,
+                "version": (PydefaceEngine().version() if defacing_available else "(absent)"),
+                "status": "ok" if defacing_available else "fail",
+            },
+        },
+        "triage_24h": triage_counts,
+        "ocr_24h": ocr_stats,
+        "deface_24h": deface_stats,
+        "quarantine_24h": quarantine_stats,
+        "engine_errors_24h": {"ocr": 0, "deface": 0, "deface_fallback_succeeded": 0},
+    }
+
+
+def _render_pixel_status(pixel_data: dict) -> None:
+    if not pixel_data:
+        return
+    click.echo("Pixel stage  [v0.2]")
+    engines = pixel_data.get("engines", {})
+    ocr_eng = engines.get("ocr", {})
+    deface_eng = engines.get("defacing", {})
+    click.echo(
+        f"  engines     {ocr_eng.get('name')} {ocr_eng.get('version')}  "
+        f"{deface_eng.get('name')} {deface_eng.get('version')}"
+    )
+    triage = pixel_data.get("triage_24h", {})
+    click.echo(
+        "  24h triage  "
+        f"OCR_REQUIRED {triage.get('ocr_required', 0)}  "
+        f"SKIP {triage.get('skip', 0)}  "
+        f"CONDITIONAL {triage.get('ocr_conditional', 0)}"
+    )
+    ocr_stats = pixel_data.get("ocr_24h", {})
+    click.echo(
+        "  24h OCR     "
+        f"studies {ocr_stats.get('studies', 0)}  "
+        f"avg_conf {ocr_stats.get('avg_confidence', 0.0)}  "
+        f"redact_boxes {ocr_stats.get('redacted_boxes', 0)}"
+    )
+    deface_stats = pixel_data.get("deface_24h", {})
+    click.echo(
+        "  24h deface  "
+        f"studies {deface_stats.get('studies', 0)}  "
+        f"avg_removed_ratio {deface_stats.get('avg_removed_voxel_ratio', 0.0)}"
+    )
+    quarantine_stats = pixel_data.get("quarantine_24h", {})
+    click.echo(
+        "  quarantine  "
+        f"residual_text {quarantine_stats.get('residual_text', 0)}  "
+        f"residual_face {quarantine_stats.get('residual_face_voxels', 0)}  "
+        f"medical_excl {quarantine_stats.get('medical_exclusion', 0)}"
+    )
 
 
 def _build_pipeline(cfg: GatewayConfig):
     from radivault_gateway.deid import DeidEngine
+    from radivault_gateway.deid.pixel import build_pixel_deid_engine
     from radivault_gateway.orchestrator import Pipeline
     from radivault_gateway.pacs import DicomWebPacsClient
     from radivault_gateway.staging import StagingManager
@@ -528,6 +838,21 @@ def _build_pipeline(cfg: GatewayConfig):
         max_retries=cfg.central.max_upload_retries,
         allow_insecure=cfg.central.allow_insecure,
     )
+    try:
+        pixel_engine = build_pixel_deid_engine(cfg.deid.pixel)
+    except Exception as exc:
+        from radivault_gateway.deid.pixel import (
+            PixelDeidEngineError,
+            format_cli_error,
+        )
+
+        if isinstance(exc, PixelDeidEngineError) and exc.code in {
+            "ERR_CFG_PIXEL_ENGINE_MISSING",
+            "ERR_PIXEL_DEFACE_LIBRARY_MISSING",
+        }:
+            click.echo(format_cli_error(exc.code, error=exc.message), err=True)
+            sys.exit(64)
+        raise
     return Pipeline(
         cfg,
         state_db=db,
@@ -536,7 +861,13 @@ def _build_pipeline(cfg: GatewayConfig):
         deid=deid,
         pacs=pacs,
         upload=upload,
+        pixel=pixel_engine,
     )
+
+
+# v0.2 de-id-pixel: register pixel-selftest subcommand. Always visible, even on
+# the default (non-pixel) image — exit codes differ per available components.
+cli.add_command(pixel_selftest)
 
 
 if __name__ == "__main__":  # pragma: no cover
