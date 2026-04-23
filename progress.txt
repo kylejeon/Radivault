@@ -473,3 +473,8 @@ v0.2.1 백로그 (QA Medium/Low):
 - env var naming 3자 불일치 통일
 - DICOM→NIfTI 변환 (L-1)
 - pixel-selftest help 텍스트
+
+---
+2026-04-22 @researcher — `docs/research/order-fulfillment-technical-foundations.md` 초안 완료 (7개 영역: FSM / pull transfer-job / Hot vs on-demand / presigned URL / validation+pricing stub / download audit / cancel-expire-cleanup). 옵션 E(Order Orchestrator) + H(Order Download) 병합. 다음: @planner가 `dev-spec-order-fulfillment.md` 작성 + gateway/central-ingest dev-spec 연쇄 갱신 제안 반영. Kyle 결정 7건 대기(pull 고정 / TTL 24h / tier cohort 상한 / billing 시점 / unlinked study 정책 / MSA-DPA 법률 자문 / web portal 시점).
+
+2026-04-22 @planner — `docs/specs/dev-spec-order-fulfillment.md` v0.1 Draft 완료 (1860 lines, 85 FR, 40 AC, 24 new error codes). v0.1 MVP 범위 확정: 신규 FastAPI 서비스 `radivault_fulfillment` (port 8002, Postgres 공유), buyer-facing 5+gateway-facing 4+probes 3 엔드포인트, 주문 FSM 12-state + PG row-lock 멱등 전이, transfer-job pull long-poll (15분 lease, 5-retry DLQ), Hot Storage hit/miss 분기, per-object presigned URL (24h 기본/7d 최대), `download_event` append-only 감사, 7-day order TTL, unlinked_study detach 정책, `order_outbox` 패턴. Contract deltas: C-1 `study.central_object_present`(central-ingest), C-2 `buyer_api_key.scope_json.allowed_hospitals`(metadata-index), G-1 gateway `transfer/*` subsystem + `transfer.*` config + `ondemand_*` state + `transfer start` CLI. 다음: @designer가 design-spec-order-fulfillment.md 작성 (envelope, error 이중언어, fulfillment-admin CLI, runbook, curl 샘플), 또는 Kyle 결정 시 @developer 직행. Kyle 결정 12건 대기(§11 참조).
