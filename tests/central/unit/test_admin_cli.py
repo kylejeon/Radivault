@@ -22,7 +22,7 @@ def test_version_emits_json(tmp_path):
     result = runner.invoke(cli, ["version", "--json"])
     assert result.exit_code == 0
     assert "radivault-central" in result.output
-    assert "\"version\"" in result.output
+    assert '"version"' in result.output
 
 
 def test_token_issue_requires_hospital(tmp_path, monkeypatch):

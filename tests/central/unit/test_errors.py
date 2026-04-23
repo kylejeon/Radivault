@@ -19,7 +19,15 @@ from radivault_central.errors import (
 def test_envelope_includes_required_fields():
     exc = ManifestAnon()
     env = exc.to_envelope(request_id="01HX")
-    for field in ("error", "detail", "message_ko", "message_en", "request_id", "doc_url", "retry_after"):
+    for field in (
+        "error",
+        "detail",
+        "message_ko",
+        "message_en",
+        "request_id",
+        "doc_url",
+        "retry_after",
+    ):
         assert field in env
     assert env["error"] == "ERR_MANIFEST_ANON"
 

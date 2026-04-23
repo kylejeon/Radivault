@@ -54,9 +54,7 @@ def latest_anchor(session: Session, hospital_pk: int) -> AuditAnchor | None:
 
 def study_exists(session: Session, pseudo_study_uid: str) -> bool:
     return (
-        session.scalar(
-            select(Study.study_pk).where(Study.pseudo_study_uid == pseudo_study_uid)
-        )
+        session.scalar(select(Study.study_pk).where(Study.pseudo_study_uid == pseudo_study_uid))
         is not None
     )
 

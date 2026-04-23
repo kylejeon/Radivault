@@ -92,9 +92,7 @@ class ManifestValidator:
 
     def _check_deid_methods(self, manifest: Manifest) -> None:
         if REQUIRED_DEID_CODE not in manifest.deid.method_code_sequence:
-            raise ManifestDeid(
-                detail=f"method_code_sequence missing required {REQUIRED_DEID_CODE}"
-            )
+            raise ManifestDeid(detail=f"method_code_sequence missing required {REQUIRED_DEID_CODE}")
 
     def _check_hospital_limits(self, manifest: Manifest) -> None:
         if manifest.n_instances > self.hospital.max_instances_per_study:

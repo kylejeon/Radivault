@@ -28,9 +28,7 @@ _DEFAULT_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 def _new_password_hasher(
     *, time_cost: int = 3, memory_cost_kib: int = 65536, parallelism: int = 2
 ) -> PasswordHasher:
-    return PasswordHasher(
-        time_cost=time_cost, memory_cost=memory_cost_kib, parallelism=parallelism
-    )
+    return PasswordHasher(time_cost=time_cost, memory_cost=memory_cost_kib, parallelism=parallelism)
 
 
 @dataclass

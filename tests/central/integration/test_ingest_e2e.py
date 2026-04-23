@@ -90,8 +90,7 @@ def _build_manifest(
     method_codes: list[str] | None = None,
 ) -> dict:
     files_meta = [
-        {"filename": n, "sha256": hashlib.sha256(d).hexdigest(), "bytes": len(d)}
-        for n, d in files
+        {"filename": n, "sha256": hashlib.sha256(d).hexdigest(), "bytes": len(d)} for n, d in files
     ]
     return {
         "manifest_version": 1,

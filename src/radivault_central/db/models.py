@@ -107,9 +107,7 @@ class PatientPseudo(Base):
         UniqueConstraint("hospital_pk", "pseudo_patient_key", name="uq_patient_pseudo_hp"),
     )
 
-    patient_pseudo_pk: Mapped[int] = mapped_column(
-        BigId, primary_key=True, autoincrement=True
-    )
+    patient_pseudo_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     hospital_pk: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
     )
@@ -239,9 +237,7 @@ class AuditAnchor(Base):
 
 class AuditDailyDigest(Base):
     __tablename__ = "audit_daily_digest"
-    __table_args__ = (
-        UniqueConstraint("digest_date", "hospital_pk", name="uq_audit_daily_digest"),
-    )
+    __table_args__ = (UniqueConstraint("digest_date", "hospital_pk", name="uq_audit_daily_digest"),)
 
     digest_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     digest_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)

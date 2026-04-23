@@ -133,10 +133,7 @@ def test_gateway_upload_client_talks_to_central(tmp_path: Path) -> None:
         ("files", ("b.dcm", f2.read_bytes(), "application/dicom")),
     ]
     # Make sure SHAs are correct to avoid sha256 rejection noise.
-    assert (
-        manifest["files"][0]["sha256"]
-        == hashlib.sha256(f1.read_bytes()).hexdigest()
-    )
+    assert manifest["files"][0]["sha256"] == hashlib.sha256(f1.read_bytes()).hexdigest()
     r = httpx_client.post(
         "/v1/ingest/studies",
         files=files,

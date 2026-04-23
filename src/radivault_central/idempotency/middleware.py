@@ -128,9 +128,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     response_body=body.decode("utf-8", errors="replace"),
                 )
                 session.commit()
-            IDEMPOTENCY_DEDUP.labels(
-                hospital_id=request.state.hospital_id, result="miss"
-            ).inc()
+            IDEMPOTENCY_DEDUP.labels(hospital_id=request.state.hospital_id, result="miss").inc()
 
         # Rebuild the response with the consumed body.
         return Response(
@@ -155,9 +153,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         except Exception:  # pragma: no cover — corrupt cache entry
             # Fall back to the DB mirror.
             with self._session_factory() as session:
-                mirror = get_idempotency_mirror(
-                    session, key=key, hospital_pk=hospital_pk
-                )
+                mirror = get_idempotency_mirror(session, key=key, hospital_pk=hospital_pk)
             if mirror is None:
                 raise IdempUnavailable()  # noqa: B904
             body_text = mirror.response_body or ""
@@ -180,6 +176,4 @@ def _envelope_response(exc: CentralError, request: Request) -> JSONResponse:
     headers: dict[str, str] = {"X-Request-Id": rid}
     if exc.retry_after is not None:
         headers["Retry-After"] = str(exc.retry_after)
-    return JSONResponse(
-        status_code=exc.status_code, content=exc.to_envelope(rid), headers=headers
-    )
+    return JSONResponse(status_code=exc.status_code, content=exc.to_envelope(rid), headers=headers)

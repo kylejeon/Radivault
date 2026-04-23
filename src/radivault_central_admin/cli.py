@@ -92,7 +92,9 @@ def cmd_version(as_json: bool) -> None:
         "api_contract_version": os.environ.get("RADIVAULT_API_CONTRACT_VERSION", "1"),
         "python": sys.version.split()[0],
     }
-    click.echo(json.dumps(payload) if as_json else "\n".join(f"{k:<14}{v}" for k, v in payload.items()))
+    click.echo(
+        json.dumps(payload) if as_json else "\n".join(f"{k:<14}{v}" for k, v in payload.items())
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -124,14 +126,10 @@ def cmd_token_issue(
     session = _open_session(settings)
     hospital = session.scalar(select(Hospital).where(Hospital.hospital_id == hospital_id))
     if hospital is None:
-        click.echo(
-            f"[ERR_ADMIN_HOSPITAL_NOT_FOUND] hospital not enrolled: {hospital_id}", err=True
-        )
+        click.echo(f"[ERR_ADMIN_HOSPITAL_NOT_FOUND] hospital not enrolled: {hospital_id}", err=True)
         sys.exit(1)
     bundle = generate_token()
-    expires_at = (
-        datetime.now(tz=UTC) + timedelta(days=expires_days) if expires_days else None
-    )
+    expires_at = datetime.now(tz=UTC) + timedelta(days=expires_days) if expires_days else None
     if dry_run:
         click.echo(
             json.dumps(
@@ -275,9 +273,7 @@ def cmd_anchor_verify(
     session = _open_session(ctx.obj["settings"])
     hospital = session.scalar(select(Hospital).where(Hospital.hospital_id == hospital_id))
     if hospital is None:
-        click.echo(
-            f"[ERR_ADMIN_HOSPITAL_NOT_FOUND] hospital not enrolled: {hospital_id}", err=True
-        )
+        click.echo(f"[ERR_ADMIN_HOSPITAL_NOT_FOUND] hospital not enrolled: {hospital_id}", err=True)
         sys.exit(1)
     report = verify_chain(
         session, hospital_pk=hospital.hospital_pk, seq_from=seq_from, seq_to=seq_to
@@ -331,7 +327,9 @@ def cmd_study_show(ctx: click.Context, pseudo_study_uid: str, as_json: bool) -> 
     if study is None:
         click.echo(f"[NOT_FOUND] study not found: {pseudo_study_uid}", err=True)
         sys.exit(1)
-    series_rows = list(session.scalars(select(Series).where(Series.study_pk == study.study_pk)).all())
+    series_rows = list(
+        session.scalars(select(Series).where(Series.study_pk == study.study_pk)).all()
+    )
     instance_rows = (
         list(
             session.scalars(

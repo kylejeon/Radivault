@@ -9,7 +9,10 @@ from radivault_central.idempotency.middleware import IdempotencyKeyValidator
 
 
 def test_validate_accepts_reasonable_key():
-    assert IdempotencyKeyValidator.validate("01HXX8WQ9Z3K7V5B2A1N6P4R9T") == "01HXX8WQ9Z3K7V5B2A1N6P4R9T"
+    assert (
+        IdempotencyKeyValidator.validate("01HXX8WQ9Z3K7V5B2A1N6P4R9T")
+        == "01HXX8WQ9Z3K7V5B2A1N6P4R9T"
+    )
 
 
 def test_validate_missing_key():

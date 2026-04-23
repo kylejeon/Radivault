@@ -77,7 +77,9 @@ def issued_token(engine_and_factory, hospital):
 
 
 @pytest.fixture
-def test_app(settings: Settings, engine_and_factory, hospital, issued_token) -> Iterator[TestClient]:
+def test_app(
+    settings: Settings, engine_and_factory, hospital, issued_token
+) -> Iterator[TestClient]:
     # Rebuild state with the same in-memory engine.
     app = create_app(settings, testing=False)
     # Patch: use existing engine+factory (so schema + seeded hospital survive).

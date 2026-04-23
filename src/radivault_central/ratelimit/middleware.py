@@ -56,9 +56,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._anchor_min = anchor_per_min
         self._ip_min = ip_global_per_min
 
-    async def dispatch(
-        self, request: Request, call_next: Callable[[Request], Awaitable]
-    ):
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable]):
         path = request.url.path
         scope = None
         window: int | None = None
@@ -75,9 +73,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         elif (
             path == "/v1/audit/anchor"
             and request.method.upper() == "POST"
-            and self._over_limit(
-                request, scope="anchor_min", window=60, limit=self._anchor_min
-            )
+            and self._over_limit(request, scope="anchor_min", window=60, limit=self._anchor_min)
         ):
             scope = "per_min"
             window = 60
@@ -118,6 +114,4 @@ def _envelope_response(exc: CentralError, request: Request) -> JSONResponse:
     headers: dict[str, str] = {"X-Request-Id": rid}
     if exc.retry_after is not None:
         headers["Retry-After"] = str(exc.retry_after)
-    return JSONResponse(
-        status_code=exc.status_code, content=exc.to_envelope(rid), headers=headers
-    )
+    return JSONResponse(status_code=exc.status_code, content=exc.to_envelope(rid), headers=headers)
