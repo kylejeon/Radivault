@@ -27,6 +27,17 @@ from radivault_gateway.deid.pixel.errors import (
     PixelQuarantineRequired,
 )
 from radivault_gateway.deid.pixel.exclusion import MedicalExclusionMatcher
+from radivault_gateway.deid.pixel.metrics import (
+    PixelMetrics,
+    record_defacing,
+    record_engine_unavailable,
+    record_medical_exclusion,
+    record_ocr,
+    record_quarantine,
+    record_residual_face,
+    record_residual_text,
+    record_triage_decision,
+)
 from radivault_gateway.deid.pixel.ocr_engine import (
     OcrBox,
     OcrEngine,
@@ -76,12 +87,14 @@ class PixelDeidEngine:
         ocr_engine: OcrEngine | None = None,
         deface_engine: DefacingEngine | None = None,
         fallback_deface_engine: DefacingEngine | None = None,
+        metrics: PixelMetrics | None = None,
     ) -> None:
         self._cfg = cfg
         self._ocr = ocr_engine
         self._deface = deface_engine
         self._fallback_deface = fallback_deface_engine
         self._exclusion = MedicalExclusionMatcher(cfg.defacing.exclusion_patterns)
+        self._metrics = metrics
 
     # ---- public API ----
 
@@ -104,6 +117,7 @@ class PixelDeidEngine:
         body_part: str | None,
     ) -> PixelDeidResult:
         triage_result = self.triage(staged_dir)
+        record_triage_decision(self._metrics, triage_result.decision.value)
         log.info(
             "pixel.triage.decided",
             extra={
@@ -126,6 +140,8 @@ class PixelDeidEngine:
         # quarantine for clinician review.
         exclusion = self._exclusion.matches(study_description or "")
         if exclusion.matched and self._defacing_eligible(modality_set, body_part):
+            record_medical_exclusion(self._metrics, reason=exclusion.pattern or "unknown")
+            record_quarantine(self._metrics, stage="deface")
             raise PixelQuarantineRequired(
                 code="ERR_PIXEL_MEDICAL_EXCLUSION",
                 reason=f"exclusion_pattern={exclusion.pattern}",
@@ -204,9 +220,11 @@ class PixelDeidEngine:
                 frames_scanned += 1
                 try:
                     boxes = self._ocr.detect_text(frame, languages=list(self._cfg.ocr.languages))
-                except PixelDeidEngineError:
-                    raise
+                except PixelDeidEngineError as exc:
+                    record_engine_unavailable(self._metrics, engine=self._ocr.engine_name)
+                    raise exc
                 except Exception as exc:
+                    record_engine_unavailable(self._metrics, engine=self._ocr.engine_name)
                     raise PixelDeidEngineError(
                         "ERR_PIXEL_OCR_ENGINE_FAILURE",
                         f"OCR engine raised: {exc}",
@@ -233,6 +251,8 @@ class PixelDeidEngine:
                         languages=list(self._cfg.ocr.languages),
                     )
                     if residuals:
+                        record_residual_text(self._metrics, count=len(residuals))
+                        record_quarantine(self._metrics, stage="ocr")
                         raise PixelQuarantineRequired(
                             code="ERR_PIXEL_RESIDUAL_TEXT",
                             reason=f"residual_boxes={len(residuals)}",
@@ -245,11 +265,28 @@ class PixelDeidEngine:
         duration_ms = int((time.monotonic() - started) * 1000)
         if triage_result.decision == TriageDecision.OCR_REQUIRED and redacted_total == 0:
             # Burned-in study but we found nothing we trust → quarantine.
+            record_ocr(
+                self._metrics,
+                engine=self._ocr.engine_name,
+                duration_seconds=duration_ms / 1000.0,
+                redaction_count=0,
+                confidences=[b.confidence for b in total_boxes],
+                success=False,
+            )
+            record_quarantine(self._metrics, stage="ocr")
             raise PixelQuarantineRequired(
                 code="ERR_PIXEL_OCR_LOW_CONFIDENCE",
                 reason="no_box_above_threshold",
             )
         confs = [b.confidence for b in total_boxes]
+        record_ocr(
+            self._metrics,
+            engine=self._ocr.engine_name,
+            duration_seconds=duration_ms / 1000.0,
+            redaction_count=redacted_total,
+            confidences=confs,
+            success=True,
+        )
         return _OcrRunResult(
             n_frames_ocr=frames_scanned,
             n_boxes_redacted=redacted_total,
@@ -273,6 +310,7 @@ class PixelDeidEngine:
         try:
             result = self._deface.deface_volume(candidate, out_path)
         except PixelDeidEngineError as exc:
+            record_engine_unavailable(self._metrics, engine=self._deface.engine_name)
             if (
                 self._cfg.defacing.fallback
                 and self._fallback_deface is not None
@@ -292,12 +330,17 @@ class PixelDeidEngine:
                 try:
                     result = self._fallback_deface.deface_volume(candidate, out_path)
                 except PixelDeidEngineError:
+                    record_engine_unavailable(
+                        self._metrics, engine=self._fallback_deface.engine_name
+                    )
+                    record_quarantine(self._metrics, stage="deface")
                     raise PixelQuarantineRequired(
                         code="ERR_PIXEL_DEFACE_FAILURE",
                         reason="fallback_failed",
                     ) from exc
                 library = self._fallback_deface.engine_name
             else:
+                record_quarantine(self._metrics, stage="deface")
                 raise PixelQuarantineRequired(
                     code="ERR_PIXEL_DEFACE_FAILURE",
                     reason=exc.code,
@@ -308,6 +351,15 @@ class PixelDeidEngine:
             self._cfg.defacing.residual_voxel_check
             and result.removed_voxel_ratio < self._cfg.defacing.min_removed_ratio
         ):
+            record_residual_face(self._metrics, count=1)
+            record_defacing(
+                self._metrics,
+                library=library or "unknown",
+                duration_seconds=result.duration_ms / 1000.0,
+                removed_voxel_ratio=float(result.removed_voxel_ratio),
+                success=False,
+            )
+            record_quarantine(self._metrics, stage="deface")
             raise PixelQuarantineRequired(
                 code="ERR_PIXEL_RESIDUAL_FACE_VOXELS",
                 reason=(
@@ -315,6 +367,13 @@ class PixelDeidEngine:
                     f"< {self._cfg.defacing.min_removed_ratio:.4f}"
                 ),
             )
+        record_defacing(
+            self._metrics,
+            library=library or "unknown",
+            duration_seconds=result.duration_ms / 1000.0,
+            removed_voxel_ratio=float(result.removed_voxel_ratio),
+            success=True,
+        )
         # AC-28 / dev-spec §6.4: stamp every DICOM in the study with the
         # defacing de-identification method tags so downstream consumers can
         # tell the study has been defaced. We mark all staged files because
@@ -490,7 +549,11 @@ def _build_result(
     )
 
 
-def build_pixel_deid_engine(cfg: PixelDeidConfig) -> PixelDeidEngine | None:
+def build_pixel_deid_engine(
+    cfg: PixelDeidConfig,
+    *,
+    metrics: PixelMetrics | None = None,
+) -> PixelDeidEngine | None:
     """Factory used by the pipeline (FR-41).
 
     Returns ``None`` when ``cfg.enabled=False`` so the orchestrator skips the
@@ -542,6 +605,7 @@ def build_pixel_deid_engine(cfg: PixelDeidConfig) -> PixelDeidEngine | None:
         ocr_engine=ocr_engine,
         deface_engine=deface_engine,
         fallback_deface_engine=fallback_engine,
+        metrics=metrics,
     )
 
 

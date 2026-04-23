@@ -30,6 +30,12 @@ from radivault_gateway.deid.pixel.exclusion import (
     ExclusionMatch,
     MedicalExclusionMatcher,
 )
+from radivault_gateway.deid.pixel.metrics import (
+    PixelMetrics,
+    build_pixel_metrics,
+    dump_dict,
+    dump_text,
+)
 from radivault_gateway.deid.pixel.ocr_engine import (
     OcrBox,
     OcrEngine,
@@ -58,6 +64,7 @@ __all__ = [
     "PixelDeidEngine",
     "PixelDeidEngineError",
     "PixelDeidResult",
+    "PixelMetrics",
     "PixelOcrConfig",
     "PixelQuarantineRequired",
     "RedactionResult",
@@ -67,6 +74,9 @@ __all__ = [
     "box_hash",
     "build_ocr_engine",
     "build_pixel_deid_engine",
+    "build_pixel_metrics",
+    "dump_dict",
+    "dump_text",
     "format_cli_error",
     "reverify_frame",
     "triage_datasets",

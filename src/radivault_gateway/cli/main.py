@@ -888,5 +888,50 @@ def _build_pipeline(cfg: GatewayConfig):
 cli.add_command(pixel_selftest)
 
 
+@cli.group("metrics", help="Pixel-stage observability metrics (픽셀 단계 메트릭)")
+def metrics_group() -> None:
+    """Metrics commands (design-spec §4.3)."""
+
+
+@metrics_group.command("dump", help="Dump Prometheus-format pixel metrics snapshot")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["prom", "text", "json"]),
+    default="prom",
+    show_default=True,
+    help="Output format: prom=Prometheus exposition, text=readable, json=structured",
+)
+def metrics_dump(output_format: str) -> None:
+    """Print the in-process pixel metrics registry (AC-D-12).
+
+    The Gateway has no ``/metrics`` HTTP server in v0.2. This command
+    materialises a fresh ``CollectorRegistry`` of the 10 pixel metrics
+    (design-spec §4.3) and prints the exposition. Useful for smoke
+    validation; external scraping is out-of-scope for the v0.2 MVP
+    (see dev-spec §NFR "관측성" note).
+    """
+    import json as _json
+
+    from radivault_gateway.deid.pixel import (
+        build_pixel_metrics,
+        dump_dict,
+        dump_text,
+    )
+
+    metrics = build_pixel_metrics()
+    if output_format == "prom":
+        click.echo(dump_text(metrics), nl=False)
+    elif output_format == "text":
+        data = dump_dict(metrics)
+        for name, family in data.items():
+            click.echo(f"# {name} ({family['type']}) — {family['help']}")
+            for sample in family["samples"]:
+                labels = ",".join(f"{k}={v!r}" for k, v in sample["labels"].items())
+                click.echo(f"  {sample['name']}{{{labels}}} {sample['value']}")
+    else:
+        click.echo(_json.dumps(dump_dict(metrics), indent=2, default=str))
+
+
 if __name__ == "__main__":  # pragma: no cover
     cli()
