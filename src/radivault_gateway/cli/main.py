@@ -472,6 +472,22 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
     # head_hash always reflects the most recent chain state.
     audit_logger = pipeline._audit
     upload_client = pipeline._upload
+    # FR-36 / AC-18: pixel-stage crash recovery at startup.
+    if cfg.deid.pixel.enabled:
+        from radivault_gateway.orchestrator.recovery import (
+            recover_orphaned_pixel_processing,
+        )
+
+        recovery = recover_orphaned_pixel_processing(
+            pipeline._db,
+            audit=audit_logger,
+            staging=pipeline._staging,
+        )
+        if recovery.recovered:
+            click.echo(
+                f"[radivault-gateway] pixel recovery: rolled back "
+                f"{recovery.recovered} orphaned pixel_processing study(ies)"
+            )
     click.echo(
         f"[radivault-gateway] starting, poll_interval={interval}s "
         f"anchor_interval={anchor_interval}s"
