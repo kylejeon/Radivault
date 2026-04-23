@@ -1,0 +1,71 @@
+# RadiVault Order Fulfillment — docker-compose dev profile.
+# Local-only; does not use KMS or TLS. Uses MinIO on port 9000.
+version: 1
+
+app:
+  env: "docker"
+  api_contract_version: "1"
+  workers: 2
+  port: 8002
+
+db:
+  dsn: "${env:FULFILLMENT_APP_DSN}"
+  admin_dsn: "${env:FULFILLMENT_ADMIN_DSN}"
+  pool_size: 10
+  max_overflow: 10
+
+redis:
+  url: "${env:REDIS_URL}"
+  auth_cache_ttl_seconds: 60
+  idempotency_ttl_seconds: 86400
+  long_poll_channel_prefix: "transfer_job_hospital:"
+
+storage:
+  provider: "minio"
+  endpoint_url: "${env:S3_ENDPOINT_URL}"
+  region: "ap-northeast-2"
+  bucket: "${env:S3_BUCKET:-radivault-ingest-dev}"
+  staging_prefix: "staging/"
+  ingest_prefix: "ingest/"
+  access_key_id: "${env:S3_ACCESS_KEY_ID}"
+  secret_access_key: "${env:S3_SECRET_ACCESS_KEY}"
+  presign:
+    default_ttl_seconds: 3600
+    min_ttl_seconds: 600
+    max_ttl_seconds: 86400
+
+order:
+  ttl_seconds: 86400  # 1 day in docker dev for faster TTL testing
+  estimated_ready_seconds_per_study_hot: 0.5
+  estimated_ready_seconds_per_study_cold: 36.0
+
+transfer_job:
+  lease_ttl_seconds: 300
+  max_retries: 3
+  long_poll_wait_max_seconds: 10
+  hospital_concurrency_cap: 2
+
+download:
+  rate_limit_mint_per_5s: 5
+  rate_limit_mint_burst: 20
+  access_log_etl_enabled: false
+
+audit:
+  agreement_hash_current: "${env:AGREEMENT_HASH_CURRENT}"
+
+observability:
+  log_level: "DEBUG"
+  json_logs: true
+  metrics_path: "/metrics"
+
+lease_reaper:
+  interval_seconds: 30
+  batch_size: 50
+
+outbox_poller:
+  interval_seconds: 1
+  batch_size: 50
+
+expiry_ticker:
+  interval_seconds: 30
+  batch_size: 50

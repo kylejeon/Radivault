@@ -86,9 +86,7 @@ def validate_order(
 
     # FR-11.4 all pseudo_study_uids exist.
     rows = (
-        session.execute(
-            select(Study).where(Study.pseudo_study_uid.in_(pseudo_study_uids))
-        )
+        session.execute(select(Study).where(Study.pseudo_study_uid.in_(pseudo_study_uids)))
         .scalars()
         .all()
     )
@@ -105,10 +103,7 @@ def validate_order(
     total_bytes = sum(r.total_bytes for r in ordered)
     if total_bytes > tier_cfg.max_order_bytes:
         raise OrderTooLarge(
-            detail=(
-                f"total {total_bytes} bytes > tier {tier} cap "
-                f"{tier_cfg.max_order_bytes}"
-            )
+            detail=(f"total {total_bytes} bytes > tier {tier} cap {tier_cfg.max_order_bytes}")
         )
 
     # FR-11.6 scope — exclude + allowed lists.
@@ -116,9 +111,7 @@ def validate_order(
     exclude = set(scope_json.get("exclude_hospitals") or [])
     bad_excl = hospital_pks & exclude
     if bad_excl:
-        raise OrderScopeForbidden(
-            detail=f"hospital_pks excluded by scope: {sorted(bad_excl)}"
-        )
+        raise OrderScopeForbidden(detail=f"hospital_pks excluded by scope: {sorted(bad_excl)}")
     allowed = scope_json.get("allowed_hospitals")
     if allowed is not None:
         allowed_set = set(allowed)

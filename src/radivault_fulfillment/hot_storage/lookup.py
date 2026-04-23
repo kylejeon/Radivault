@@ -29,17 +29,12 @@ class HotColdPartition:
         return "mixed"
 
 
-def partition(
-    session: Session, *, pseudo_study_uids: list[str]
-) -> HotColdPartition:
-    rows = (
-        session.execute(
-            select(Study.pseudo_study_uid, Study.central_object_present).where(
-                Study.pseudo_study_uid.in_(pseudo_study_uids)
-            )
+def partition(session: Session, *, pseudo_study_uids: list[str]) -> HotColdPartition:
+    rows = session.execute(
+        select(Study.pseudo_study_uid, Study.central_object_present).where(
+            Study.pseudo_study_uid.in_(pseudo_study_uids)
         )
-        .all()
-    )
+    ).all()
     hot: set[str] = set()
     for uid, present in rows:
         if bool(present):

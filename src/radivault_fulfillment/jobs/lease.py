@@ -28,9 +28,7 @@ from radivault_fulfillment.errors import (
 log = logging.getLogger("radivault_fulfillment.jobs.lease")
 
 
-def _get_job_for_update(
-    session: Session, *, transfer_job_id: str
-) -> TransferJob:
+def _get_job_for_update(session: Session, *, transfer_job_id: str) -> TransferJob:
     dialect = session.bind.dialect.name if session.bind else "sqlite"
     stmt = select(TransferJob).where(TransferJob.transfer_job_id == transfer_job_id)
     if dialect == "postgresql":
@@ -41,13 +39,23 @@ def _get_job_for_update(
     return row
 
 
+def _normalize_tz(ts: datetime | None) -> datetime | None:
+    """SQLite drops timezone awareness — coerce naive to UTC so comparisons work."""
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=UTC)
+    return ts
+
+
 def _check_ownership_and_lease(job: TransferJob, *, gateway_id: str) -> None:
     if job.state != "claimed":
         raise JobStateConflict(detail=f"job state={job.state!r}")
     if job.lease_owner != gateway_id:
         raise JobLeaseOwnership()
     now = datetime.now(tz=UTC)
-    if job.lease_expires_at is None or job.lease_expires_at < now:
+    lease_expires_at = _normalize_tz(job.lease_expires_at)
+    if lease_expires_at is None or lease_expires_at < now:
         raise JobLeaseExpired()
 
 
@@ -70,7 +78,7 @@ def report_progress(
         raise JobCounterRegress()
 
     now = datetime.now(tz=UTC)
-    new_lease = job.lease_expires_at
+    new_lease = _normalize_tz(job.lease_expires_at)
     if lease_extend:
         new_lease = now + timedelta(seconds=lease_ttl_seconds)
 
@@ -112,9 +120,7 @@ def complete_job(
         from radivault_fulfillment.errors import JobManifestMismatch
 
         raise JobManifestMismatch(
-            detail=(
-                f"missing={sorted(missing)[:3]} extra={sorted(extra)[:3]}"
-            )
+            detail=(f"missing={sorted(missing)[:3]} extra={sorted(extra)[:3]}")
         )
 
     now = datetime.now(tz=UTC)
@@ -132,22 +138,25 @@ def complete_job(
                 OrderItem.order_pk == job.order_pk,
                 OrderItem.pseudo_study_uid == entry["pseudo_study_uid"],
             )
-            .values(state="staged", staged_at=now, n_instances=entry.get("n_instances"), total_bytes=entry.get("total_bytes"))
+            .values(
+                state="staged",
+                staged_at=now,
+                n_instances=entry.get("n_instances"),
+                total_bytes=entry.get("total_bytes"),
+            )
         )
 
     # Compute new order state.
-    all_items = session.execute(
-        select(OrderItem).where(OrderItem.order_pk == job.order_pk)
-    ).scalars().all()
+    all_items = (
+        session.execute(select(OrderItem).where(OrderItem.order_pk == job.order_pk)).scalars().all()
+    )
     staged_states = {"staged", "hot_hit_staged", "copied"}
     if all(item.state in staged_states for item in all_items):
         new_order_state = "staging_complete"
     else:
         new_order_state = "staging_partial"
 
-    order_row = session.execute(
-        select(Order).where(Order.order_pk == job.order_pk)
-    ).scalar_one()
+    order_row = session.execute(select(Order).where(Order.order_pk == job.order_pk)).scalar_one()
 
     # Only transition if the target is an allowed one for the current state.
     from radivault_fulfillment.orders.state_machine import is_allowed, transition
@@ -246,18 +255,23 @@ def fail_job(
 def reap_expired_leases(session: Session, *, max_retries: int) -> tuple[int, int]:
     """Re-queue any leased-but-expired jobs. Returns (requeued, dead)."""
     now = datetime.now(tz=UTC)
-    rows = session.execute(
-        select(TransferJob).where(
-            TransferJob.state == "claimed",
-            TransferJob.lease_expires_at.is_not(None),
-            TransferJob.lease_expires_at < now,
+    rows = (
+        session.execute(
+            select(TransferJob).where(
+                TransferJob.state == "claimed",
+                TransferJob.lease_expires_at.is_not(None),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
+    # Filter in Python so naive-vs-aware comparisons don't explode on SQLite.
+    rows = [r for r in rows if (_normalize_tz(r.lease_expires_at) or now) < now]
 
     requeued = 0
     dead = 0
     for job in rows:
-        attempts = (job.attempt_count or 0)
+        attempts = job.attempt_count or 0
         if attempts >= max_retries:
             session.execute(
                 update(TransferJob)

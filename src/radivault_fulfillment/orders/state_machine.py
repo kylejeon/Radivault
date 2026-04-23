@@ -136,15 +136,11 @@ def transition(
         values[ts_field] = now
 
     stmt = (
-        update(Order)
-        .where(Order.order_pk == order_pk, Order.status == from_state)
-        .values(**values)
+        update(Order).where(Order.order_pk == order_pk, Order.status == from_state).values(**values)
     )
     result = session.execute(stmt)
     if result.rowcount == 0:
-        raise OrderStateTransition(
-            detail=f"order {order_pk} not in state {from_state!r}"
-        )
+        raise OrderStateTransition(detail=f"order {order_pk} not in state {from_state!r}")
 
     session.add(
         OrderStateHistory(

@@ -933,5 +933,14 @@ def metrics_dump(output_format: str) -> None:
         click.echo(_json.dumps(dump_dict(metrics), indent=2, default=str))
 
 
+# ---- transfer (order-fulfilment consumer subsystem, §14 G-1) ------------
+# Imported + registered here so the top-level ``radivault-gateway --help``
+# surfaces the ``transfer`` group. Disabled by default via
+# ``transfer.enabled=false`` in gateway.yml.
+from radivault_gateway.transfer.cli import transfer_group as _transfer_group  # noqa: E402
+
+cli.add_command(_transfer_group)
+
+
 if __name__ == "__main__":  # pragma: no cover
     cli()

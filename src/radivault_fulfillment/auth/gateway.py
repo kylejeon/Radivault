@@ -20,7 +20,6 @@ from starlette.types import ASGIApp
 from radivault_central.auth.tokens import parse_kid, verify_token
 from radivault_central.db.repository import get_hospital_by_pk, get_token_by_kid
 from radivault_central.errors import CentralError
-
 from radivault_fulfillment.errors import (
     AuthExpired,
     AuthMissing,

@@ -1,4 +1,4 @@
-"""Buyer-facing order endpoints (dev-spec §7.1–§7.5)."""
+"""Buyer-facing order endpoints (dev-spec §7.1-§7.5)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request, status
-from fastapi.responses import JSONResponse
 
 from radivault_central.db.models import Hospital, Instance, Series, Study
 from radivault_fulfillment.auth.buyer import require_buyer
@@ -62,11 +61,16 @@ def _get_settings(request: Request) -> Settings:
 
 
 def _tier_config(settings: Settings, tier: str):
-    return (
-        settings.order.tier_paid
-        if tier == "paid"
-        else settings.order.tier_preview
-    )
+    return settings.order.tier_paid if tier == "paid" else settings.order.tier_preview
+
+
+def _coerce_utc(ts: datetime | None) -> datetime | None:
+    """SQLite DATETIME columns come back naive; assume UTC."""
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=UTC)
+    return ts
 
 
 def _order_response(
@@ -78,12 +82,14 @@ def _order_response(
 ) -> OrderResponse:
     progress = 0.0
     if order.n_studies and items_summary:
-        ok = sum(
-            1
-            for it in items_summary
-            if it.state in ("staged", "hot_hit_staged", "copied")
-        )
+        ok = sum(1 for it in items_summary if it.state in ("staged", "hot_hit_staged", "copied"))
         progress = ok / order.n_studies
+    submitted_at = _coerce_utc(order.submitted_at)
+    ready_at = _coerce_utc(order.ready_at)
+    expires_at = _coerce_utc(order.expires_at)
+    cancelled_at = _coerce_utc(order.cancelled_at)
+    est = _coerce_utc(estimated_ready_at)
+    now = datetime.now(tz=UTC)
     return OrderResponse(
         order_id=order.order_id,
         state=order.status,
@@ -93,17 +99,13 @@ def _order_response(
         total_estimated_usd=float(order.total_estimated_usd),
         tier=order.tier,
         path_type=order.path_type,
-        submitted_at=order.submitted_at,
-        estimated_ready_at=estimated_ready_at,
-        ready_at=order.ready_at,
-        expires_at=order.expires_at,
-        cancelled_at=order.cancelled_at,
+        submitted_at=submitted_at or now,
+        estimated_ready_at=est,
+        ready_at=ready_at,
+        expires_at=expires_at,
+        cancelled_at=cancelled_at,
         progress=progress,
-        eta_seconds=(
-            int((estimated_ready_at - datetime.now(tz=UTC)).total_seconds())
-            if estimated_ready_at and estimated_ready_at > datetime.now(tz=UTC)
-            else None
-        ),
+        eta_seconds=(int((est - now).total_seconds()) if est and est > now else None),
         items=items_summary,
         transfer_jobs=jobs_summary,
         last_error=(
@@ -114,9 +116,7 @@ def _order_response(
     )
 
 
-def _item_summary(
-    item: OrderItem, *, hospital_ids: dict[int, str]
-) -> OrderItemSummary:
+def _item_summary(item: OrderItem, *, hospital_ids: dict[int, str]) -> OrderItemSummary:
     hospital_opaque_id = hospital_ids.get(item.hospital_pk, f"hosp_{item.hospital_pk}")
     return OrderItemSummary(
         pseudo_study_uid=item.pseudo_study_uid,
@@ -155,18 +155,14 @@ def _hospital_id_map(session, hospital_pks: set[int]) -> dict[int, str]:
     status_code=status.HTTP_202_ACCEPTED,
     response_model=OrderResponse,
 )
-def create_order_endpoint(
-    payload: OrderRequest, request: Request
-) -> OrderResponse:
+def create_order_endpoint(payload: OrderRequest, request: Request) -> OrderResponse:
     buyer_pk, buyer_id, tier, kid, scope_json = require_buyer(request)
     settings = _get_settings(request)
     tier_cfg = _tier_config(settings, tier)
     session_factory = request.app.state.session_factory
 
     if payload.agreement_hash != settings.audit.agreement_hash_current:
-        raise OrderAgreementRequired(
-            detail="agreement_hash does not match the current MSA digest"
-        )
+        raise OrderAgreementRequired(detail="agreement_hash does not match the current MSA digest")
 
     with session_factory() as session:
         cohort = validate_order(
@@ -304,9 +300,7 @@ def get_order_endpoint(order_id: str, request: Request) -> OrderResponse:
     )
 
 
-@router.post(
-    "/v1/orders/{order_id}/cancel", response_model=CancelResponse, status_code=200
-)
+@router.post("/v1/orders/{order_id}/cancel", response_model=CancelResponse, status_code=200)
 def cancel_order_endpoint(
     order_id: str, payload: CancelRequest | None, request: Request
 ) -> CancelResponse:
@@ -362,7 +356,8 @@ def download_urls_endpoint(
         now = datetime.now(tz=UTC)
         if order.status in ("cancelled", "failed"):
             raise OrderTerminal(detail=f"order status={order.status}")
-        if order.status == "expired" or (order.expires_at and order.expires_at < now):
+        expires_at_aware = _coerce_utc(order.expires_at)
+        if order.status == "expired" or (expires_at_aware and expires_at_aware < now):
             raise OrderExpired()
         if order.status != "ready_for_download":
             raise OrderNotReady(detail=f"order status={order.status}")
@@ -384,21 +379,15 @@ def download_urls_endpoint(
 
         for item in items:
             study = (
-                session.query(Study)
-                .filter(Study.pseudo_study_uid == item.pseudo_study_uid)
-                .first()
+                session.query(Study).filter(Study.pseudo_study_uid == item.pseudo_study_uid).first()
             )
             if study is None:
                 continue
-            series_rows = (
-                session.query(Series).filter(Series.study_pk == study.study_pk).all()
-            )
+            series_rows = session.query(Series).filter(Series.study_pk == study.study_pk).all()
             files: list[DownloadFile] = []
             for series in series_rows:
                 inst_rows = (
-                    session.query(Instance)
-                    .filter(Instance.series_pk == series.series_pk)
-                    .all()
+                    session.query(Instance).filter(Instance.series_pk == series.series_pk).all()
                 )
                 for inst in inst_rows:
                     minted = signer.mint(
@@ -406,7 +395,11 @@ def download_urls_endpoint(
                         ttl_seconds=ttl,
                         filename=f"{inst.pseudo_sop_uid}.dcm",
                     )
-                    sha_hex = inst.sha256.hex() if isinstance(inst.sha256, (bytes, bytearray)) else str(inst.sha256)
+                    sha_hex = (
+                        inst.sha256.hex()
+                        if isinstance(inst.sha256, (bytes, bytearray))
+                        else str(inst.sha256)
+                    )
                     files.append(
                         DownloadFile(
                             object_key=inst.object_key,
@@ -430,9 +423,7 @@ def download_urls_endpoint(
                         ttl_seconds=ttl,
                     )
 
-            response_items.append(
-                DownloadItem(pseudo_study_uid=item.pseudo_study_uid, files=files)
-            )
+            response_items.append(DownloadItem(pseudo_study_uid=item.pseudo_study_uid, files=files))
 
         session.commit()
 

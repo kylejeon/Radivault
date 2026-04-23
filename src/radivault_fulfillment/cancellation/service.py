@@ -42,8 +42,7 @@ def cancel_as_buyer(
             detail=f"buyer cancel not allowed in state {order.status!r}",
             hint=(
                 "admin cancellation required; contact support"
-                if order.status
-                in {"fetching", "staging_partial", "staging_complete"}
+                if order.status in {"fetching", "staging_partial", "staging_complete"}
                 else None
             ),
         )
@@ -79,9 +78,7 @@ def cancel_as_admin(
 ) -> datetime:
     """Admin cancellation — allowed from fetching/staging_* too (FR-78)."""
     if order.status not in ADMIN_ALLOWED_SOURCES:
-        raise OrderStateTransition(
-            detail=f"admin cancel not allowed in state {order.status!r}"
-        )
+        raise OrderStateTransition(detail=f"admin cancel not allowed in state {order.status!r}")
     result = transition(
         session,
         order_pk=order.order_pk,

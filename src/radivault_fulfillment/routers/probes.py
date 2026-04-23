@@ -49,4 +49,6 @@ def readyz(request: Request) -> JSONResponse:
     checks["migrations"] = getattr(request.app.state, "migrations_state", "unknown")
 
     status = 200 if overall_ok else 503
-    return JSONResponse({"status": "ok" if overall_ok else "degraded", "checks": checks}, status_code=status)
+    return JSONResponse(
+        {"status": "ok" if overall_ok else "degraded", "checks": checks}, status_code=status
+    )

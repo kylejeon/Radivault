@@ -41,10 +41,7 @@ class UrlMintRateLimitMiddleware(BaseHTTPMiddleware):
         self._time = time_fn
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        if not (
-            request.method == "POST"
-            and request.url.path.endswith(URL_MINT_PATH_FRAGMENT)
-        ):
+        if not (request.method == "POST" and request.url.path.endswith(URL_MINT_PATH_FRAGMENT)):
             return await call_next(request)
 
         buyer_pk = getattr(request.state, "buyer_pk", None)

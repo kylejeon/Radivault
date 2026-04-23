@@ -33,7 +33,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import JSON, String as Str
+from sqlalchemy.types import JSON
+from sqlalchemy.types import String as Str
 
 from radivault_central.db.models import Base  # shared declarative registry
 
@@ -59,14 +60,10 @@ class Order(Base):
 
     order_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     order_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    buyer_pk: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("buyer.buyer_pk"), nullable=False
-    )
+    buyer_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("buyer.buyer_pk"), nullable=False)
     kid: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
-    status_billing: Mapped[str] = mapped_column(
-        String, nullable=False, default="pending_billing"
-    )
+    status_billing: Mapped[str] = mapped_column(String, nullable=False, default="pending_billing")
     n_studies: Mapped[int] = mapped_column(Integer, nullable=False)
     total_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     total_estimated_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -100,9 +97,7 @@ class OrderItem(Base):
     )
 
     order_item_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
-    order_pk: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk"), nullable=False
-    )
+    order_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("order.order_pk"), nullable=False)
     pseudo_study_uid: Mapped[str] = mapped_column(String, nullable=False)
     hospital_pk: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
@@ -131,9 +126,7 @@ class TransferJob(Base):
 
     transfer_job_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     transfer_job_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    order_pk: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk"), nullable=False
-    )
+    order_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("order.order_pk"), nullable=False)
     hospital_pk: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
     )
@@ -188,15 +181,11 @@ class DownloadEvent(Base):
     # table with a single-column PK. The migration creates the partitioned
     # variant on Postgres only.
     event_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
-    order_pk: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk"), nullable=False
-    )
+    order_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("order.order_pk"), nullable=False)
     order_item_pk: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("order_item.order_item_pk")
     )
-    buyer_pk: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("buyer.buyer_pk"), nullable=False
-    )
+    buyer_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("buyer.buyer_pk"), nullable=False)
     kid: Mapped[str] = mapped_column(String, nullable=False)
     event_type: Mapped[str] = mapped_column(String, nullable=False)
     ts: Mapped[datetime] = mapped_column(
@@ -223,9 +212,7 @@ class OrderStateHistory(Base):
     )
 
     history_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
-    order_pk: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk"), nullable=False
-    )
+    order_pk: Mapped[int] = mapped_column(BigInteger, ForeignKey("order.order_pk"), nullable=False)
     from_state: Mapped[str | None] = mapped_column(String)
     to_state: Mapped[str] = mapped_column(String, nullable=False)
     event: Mapped[str] = mapped_column(String, nullable=False)
@@ -242,9 +229,7 @@ class OrderOutbox(Base):
     __table_args__ = (Index("idx_outbox_undispatched", "created_at"),)
 
     outbox_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
-    order_pk: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk")
-    )
+    order_pk: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("order.order_pk"))
     transfer_job_pk: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("transfer_job.transfer_job_pk")
     )
@@ -268,9 +253,7 @@ class UnlinkedStudy(Base):
     hospital_pk: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("hospital.hospital_pk"), nullable=False
     )
-    original_order_pk: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk")
-    )
+    original_order_pk: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("order.order_pk"))
     detached_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -298,9 +281,7 @@ class OrderIdempotencyMirror(Base):
     response_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     response_status_code: Mapped[int] = mapped_column(Integer, nullable=False)
     response_body: Mapped[str | None] = mapped_column(String)
-    order_pk: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("order.order_pk")
-    )
+    order_pk: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("order.order_pk"))
 
 
 __all__ = [

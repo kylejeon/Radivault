@@ -26,7 +26,6 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
 from radivault_central.errors import CentralError
-
 from radivault_fulfillment.db.models import OrderIdempotencyMirror
 from radivault_fulfillment.errors import (
     FulfillmentError,
@@ -64,10 +63,7 @@ class IdempotencyKeyValidator:
 def _requires_idempotency(request: Request) -> bool:
     method = request.method.upper()
     path = request.url.path
-    return any(
-        method == m and pattern.match(path)
-        for m, pattern in IDEMPOTENT_PATH_RULES
-    )
+    return any(method == m and pattern.match(path) for m, pattern in IDEMPOTENT_PATH_RULES)
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
@@ -97,16 +93,13 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             return _envelope_response(exc, request)
 
         # Scope: buyer POSTs key by buyer_pk, gateway POSTs by hospital_pk.
-        scope_owner = (
-            getattr(request.state, "buyer_pk", None)
-            or getattr(request.state, "hospital_pk", None)
+        scope_owner = getattr(request.state, "buyer_pk", None) or getattr(
+            request.state, "hospital_pk", None
         )
         if scope_owner is None:
             # Auth middleware must have failed earlier; let it surface.
             return await call_next(request)
-        scope_type = (
-            "buyer" if getattr(request.state, "buyer_pk", None) else "gw"
-        )
+        scope_type = "buyer" if getattr(request.state, "buyer_pk", None) else "gw"
 
         redis_key = f"idem:ff:{scope_type}:{scope_owner}:{key}"
         cached = None
@@ -162,9 +155,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 )
             if scope_type == "buyer":
                 with self._session_factory() as session:
-                    existing = session.get(
-                        OrderIdempotencyMirror, (key, int(scope_owner))
-                    )
+                    existing = session.get(OrderIdempotencyMirror, (key, int(scope_owner)))
                     if existing is None:
                         session.add(
                             OrderIdempotencyMirror(

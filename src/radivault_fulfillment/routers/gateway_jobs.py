@@ -1,14 +1,12 @@
-"""Gateway-facing transfer-job endpoints (dev-spec §7.6–§7.9)."""
+"""Gateway-facing transfer-job endpoints (dev-spec §7.6-§7.9)."""
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC
 
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import JSONResponse, Response
 
-from radivault_central.db.models import Hospital
 from radivault_fulfillment.auth.gateway import require_gateway
 from radivault_fulfillment.errors import JobHospitalMismatch
 from radivault_fulfillment.jobs.lease import (

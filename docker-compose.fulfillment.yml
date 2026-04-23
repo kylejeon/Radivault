@@ -1,0 +1,43 @@
+# docker-compose for local fulfilment testing (dev-spec §3.1 #30).
+#
+# Requires the external network ``radivault_net`` to already exist
+# (created by docker-compose.central.yml). Reuses the shared postgres,
+# redis, and minio services.
+
+version: "3.8"
+
+networks:
+  radivault_net:
+    external: true
+
+services:
+  fulfillment:
+    build:
+      context: .
+      dockerfile: Dockerfile.fulfillment
+    image: radivault/fulfillment:dev
+    container_name: radivault-fulfillment
+    restart: unless-stopped
+    networks: [radivault_net]
+    ports:
+      - "8002:8002"
+    environment:
+      FULFILLMENT_APP_DSN: "postgresql+psycopg://radivault_fulfillment_app:radivault_fulfillment_app@postgres:5432/radivault_central"
+      FULFILLMENT_ADMIN_DSN: "postgresql+psycopg://central_migrator:central_migrator@postgres:5432/radivault_central"
+      REDIS_URL: "redis://redis:6379/2"
+      S3_ENDPOINT_URL: "http://minio:9000"
+      S3_BUCKET: "radivault-ingest-dev"
+      S3_REGION: "ap-northeast-2"
+      S3_ACCESS_KEY_ID: "minioadmin"
+      S3_SECRET_ACCESS_KEY: "minioadmin"
+      AGREEMENT_HASH_CURRENT: "${AGREEMENT_HASH_CURRENT:-0000000000000000000000000000000000000000000000000000000000000000}"
+      RV_FULFILLMENT_CONFIG: /etc/radivault-fulfillment/fulfillment.yml
+    volumes:
+      - ./configs/fulfillment.docker.yaml:/etc/radivault-fulfillment/fulfillment.yml:ro
+    depends_on: []  # operator responsibility: postgres/redis/minio already up via central compose
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://127.0.0.1:8002/healthz', timeout=3); exit(0 if r.status_code==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s

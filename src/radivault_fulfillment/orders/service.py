@@ -15,7 +15,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 from ulid import ULID
 
-from radivault_central.db.models import Hospital, Study
 from radivault_fulfillment.config import Settings, TierDefaults
 from radivault_fulfillment.db.models import (
     Order,
@@ -132,9 +131,7 @@ def create_order(
         )
     )
 
-    estimated_ready_at = _estimated_ready_at(
-        submitted_at=now, cohort=cohort, settings=settings
-    )
+    estimated_ready_at = _estimated_ready_at(submitted_at=now, cohort=cohort, settings=settings)
     # ETA written to `expires_at`? No — dev-spec keeps expires_at null until ready.
     # We return the estimate via response only.
     log.info(
@@ -165,9 +162,7 @@ def _group_by_hospital(cohort: ValidatedCohort) -> list[dict[str, Any]]:
                 "priority": 1,
             }
         )
-    return [
-        {"hospital_pk": hp, "studies": entries} for hp, entries in grouped.items()
-    ]
+    return [{"hospital_pk": hp, "studies": entries} for hp, entries in grouped.items()]
 
 
 def compute_estimated_ready_at(

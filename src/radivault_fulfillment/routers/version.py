@@ -17,10 +17,10 @@ def version(request: Request) -> dict:
     return {
         "service": "radivault-fulfillment",
         "version": __version__,
-        "api_contract_version": getattr(
-            getattr(request.app.state, "settings", None), "app", None
+        "api_contract_version": (
+            getattr(getattr(request.app.state, "settings", None), "app", None)
+            and getattr(request.app.state.settings.app, "api_contract_version", "1")
         )
-        and getattr(request.app.state.settings.app, "api_contract_version", "1")
         or "1",
         "git_sha": os.environ.get("RADIVAULT_GIT_SHA", "unknown"),
         "python_version": ".".join(str(s) for s in sys.version_info[:3]),

@@ -11,6 +11,7 @@ from typing import TypeAlias
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 SessionFactory: TypeAlias = sessionmaker[Session]
 
@@ -26,7 +27,12 @@ def get_engine(dsn: str, *, pool_size: int = 10, max_overflow: int = 10) -> Engi
             kwargs["pool_size"] = pool_size
             kwargs["max_overflow"] = max_overflow
         else:
+            # ``:memory:`` SQLite needs StaticPool so every session reuses the
+            # single underlying connection (otherwise tables created in one
+            # connection vanish in the next). File-backed SQLite doesn't need
+            # it but the pool still works correctly.
             kwargs["connect_args"] = {"check_same_thread": False}
+            kwargs["poolclass"] = StaticPool
         _engine = create_engine(dsn, **kwargs)
         _factory = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
     return _engine

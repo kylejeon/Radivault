@@ -27,7 +27,9 @@ from radivault_fulfillment import __version__
 from radivault_fulfillment.auth.buyer import BuyerAuthMiddleware
 from radivault_fulfillment.auth.gateway import GatewayAuthMiddleware
 from radivault_fulfillment.config import Settings
-from radivault_fulfillment.db import models as _fulfillment_models  # noqa: F401 — registry side-effect
+from radivault_fulfillment.db import (
+    models as _fulfillment_models,  # noqa: F401 — registry side-effect
+)
 from radivault_fulfillment.db.session import get_engine, get_session_factory
 from radivault_fulfillment.download.presigned import PresignedSigner
 from radivault_fulfillment.errors import register_exception_handlers
@@ -74,9 +76,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
             extra={"event": "service.startup", "version": __version__},
         )
         yield
-        log.info(
-            "radivault_fulfillment_stopping", extra={"event": "service.shutdown"}
-        )
+        log.info("radivault_fulfillment_stopping", extra={"event": "service.shutdown"})
         engine = getattr(app.state, "engine", None)
         if engine is not None:
             engine.dispose()
@@ -89,9 +89,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     )
 
     if testing:
-        engine = get_engine(
-            "sqlite+pysqlite:///:memory:", pool_size=5, max_overflow=0
-        )
+        engine = get_engine("sqlite+pysqlite:///:memory:", pool_size=5, max_overflow=0)
         CentralBase.metadata.create_all(engine)
         import fakeredis
 

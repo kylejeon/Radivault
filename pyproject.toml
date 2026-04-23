@@ -183,5 +183,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B", "SIM"]
+"tests/**" = ["B", "SIM", "E702", "RUF059", "RUF002", "RUF003"]
 "alembic/**" = ["E402", "F401"]
+# Fulfilment routers intentionally unpack (_, _, gateway_id) tuples for clarity
+# even when the first two values aren't used — the naming documents intent.
+"src/radivault_fulfillment/routers/gateway_jobs.py" = ["RUF059"]
+"src/radivault_fulfillment/routers/buyer_orders.py" = ["RUF059"]

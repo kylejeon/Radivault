@@ -1,0 +1,88 @@
+# RadiVault Order Fulfillment — example config (dev-spec §6.6).
+# Copy to /etc/radivault-fulfillment/fulfillment.yml for real use.
+version: 1
+
+app:
+  env: "prod"
+  api_contract_version: "1"
+  workers: 5
+  port: 8002
+
+db:
+  dsn: "${env:FULFILLMENT_APP_DSN}"
+  admin_dsn: "${env:FULFILLMENT_ADMIN_DSN}"
+  pool_size: 30
+  max_overflow: 20
+
+redis:
+  url: "${env:REDIS_URL}"
+  auth_cache_ttl_seconds: 60
+  idempotency_ttl_seconds: 86400
+  long_poll_channel_prefix: "transfer_job_hospital:"
+
+storage:
+  provider: "s3"
+  endpoint_url: "${env:S3_ENDPOINT_URL}"
+  region: "ap-northeast-2"
+  bucket: "radivault-ingest-prod"
+  staging_prefix: "staging/"
+  ingest_prefix: "ingest/"
+  kms_key_arn: "${env:S3_KMS_KEY_ARN}"
+  presign:
+    default_ttl_seconds: 86400
+    min_ttl_seconds: 3600
+    max_ttl_seconds: 604800
+
+order:
+  ttl_seconds: 604800
+  estimated_ready_seconds_per_study_hot: 0.5
+  estimated_ready_seconds_per_study_cold: 36.0
+  tier_defaults:
+    preview:
+      max_cohort_size: 50
+      max_order_bytes: 10737418240
+      daily_order_quota: 5
+      download_ttl_max_seconds: 86400
+      unit_price_usd: 5.0
+    paid:
+      max_cohort_size: 10000
+      max_order_bytes: 2199023255552
+      daily_order_quota: 50
+      download_ttl_max_seconds: 604800
+      unit_price_usd: 5.0
+
+transfer_job:
+  lease_ttl_seconds: 900
+  max_retries: 5
+  retry_backoff_initial_seconds: 60
+  retry_backoff_factor: 2
+  retry_backoff_cap_seconds: 3600
+  long_poll_wait_max_seconds: 60
+  hospital_concurrency_cap: 2
+
+download:
+  rate_limit_mint_per_5s: 1
+  rate_limit_mint_burst: 10
+  access_log_etl_enabled: false
+
+audit:
+  agreement_hash_current: "${env:AGREEMENT_HASH_CURRENT}"
+
+observability:
+  log_level: "INFO"
+  json_logs: true
+  otlp_endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+  metrics_path: "/metrics"
+  sentry_dsn: "${env:SENTRY_DSN}"
+
+lease_reaper:
+  interval_seconds: 60
+  batch_size: 200
+
+outbox_poller:
+  interval_seconds: 2
+  batch_size: 100
+
+expiry_ticker:
+  interval_seconds: 60
+  batch_size: 100

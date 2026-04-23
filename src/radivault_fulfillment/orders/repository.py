@@ -17,19 +17,13 @@ from radivault_fulfillment.db.models import (
 
 
 def get_order_by_id(session: Session, *, order_id: str) -> Order | None:
-    return session.execute(
-        select(Order).where(Order.order_id == order_id)
-    ).scalar_one_or_none()
+    return session.execute(select(Order).where(Order.order_id == order_id)).scalar_one_or_none()
 
 
-def get_order_for_buyer(
-    session: Session, *, order_id: str, buyer_pk: int
-) -> Order | None:
+def get_order_for_buyer(session: Session, *, order_id: str, buyer_pk: int) -> Order | None:
     """Return the row only if it belongs to ``buyer_pk`` (else None)."""
     return session.execute(
-        select(Order).where(
-            Order.order_id == order_id, Order.buyer_pk == buyer_pk
-        )
+        select(Order).where(Order.order_id == order_id, Order.buyer_pk == buyer_pk)
     ).scalar_one_or_none()
 
 
@@ -58,21 +52,13 @@ def list_orders_for_buyer(
 
 def list_items_for_order(session: Session, *, order_pk: int) -> list[OrderItem]:
     return list(
-        session.execute(
-            select(OrderItem).where(OrderItem.order_pk == order_pk)
-        )
-        .scalars()
-        .all()
+        session.execute(select(OrderItem).where(OrderItem.order_pk == order_pk)).scalars().all()
     )
 
 
 def list_jobs_for_order(session: Session, *, order_pk: int) -> list[TransferJob]:
     return list(
-        session.execute(
-            select(TransferJob).where(TransferJob.order_pk == order_pk)
-        )
-        .scalars()
-        .all()
+        session.execute(select(TransferJob).where(TransferJob.order_pk == order_pk)).scalars().all()
     )
 
 
@@ -89,9 +75,7 @@ def list_dlq(session: Session, *, limit: int = 50) -> list[TransferJobDeadLetter
     )
 
 
-def count_orders_by_buyer_since(
-    session: Session, *, buyer_pk: int, since: datetime
-) -> int:
+def count_orders_by_buyer_since(session: Session, *, buyer_pk: int, since: datetime) -> int:
     return int(
         session.scalar(
             select(func.count(Order.order_pk)).where(
@@ -103,9 +87,7 @@ def count_orders_by_buyer_since(
     )
 
 
-def mark_transfer_jobs_cancelled_for_order(
-    session: Session, *, order_pk: int
-) -> tuple[int, int]:
+def mark_transfer_jobs_cancelled_for_order(session: Session, *, order_pk: int) -> tuple[int, int]:
     """FR-23 cancel cascade.
 
     - queued → cancelled (hard).
@@ -133,17 +115,14 @@ def mark_transfer_jobs_cancelled_for_order(
     return int(hard or 0), int(coop or 0)
 
 
-def find_expired_orders(
-    session: Session, *, limit: int = 100
-) -> list[Order]:
+def find_expired_orders(session: Session, *, limit: int = 100) -> list[Order]:
     now = datetime.now(tz=UTC)
-    return list(
+    rows = list(
         session.execute(
             select(Order)
             .where(
                 Order.status.in_(["ready_for_download", "delivering"]),
                 Order.expires_at.is_not(None),
-                Order.expires_at < now,
             )
             .order_by(Order.expires_at.asc())
             .limit(limit)
@@ -152,8 +131,16 @@ def find_expired_orders(
         .all()
     )
 
+    # SQLite strips tzinfo — coerce to UTC before comparison so the predicate
+    # doesn't explode with offset-naive vs offset-aware errors.
+    def _coerce(ts):
+        return ts.replace(tzinfo=UTC) if (ts is not None and ts.tzinfo is None) else ts
+
+    return [r for r in rows if (_coerce(r.expires_at) or now) < now]
+
 
 __all__ = [
+    "OrderStateHistory",
     "count_orders_by_buyer_since",
     "find_expired_orders",
     "get_order_by_id",
@@ -163,7 +150,6 @@ __all__ = [
     "list_jobs_for_order",
     "list_orders_for_buyer",
     "mark_transfer_jobs_cancelled_for_order",
-    "OrderStateHistory",
     "timedelta",
 ]
 

@@ -21,12 +21,6 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from radivault_central.errors import CentralError
-from radivault_search.auth.buyer_tokens import (
-    constant_time_miss,
-    parse_bearer,
-    verify_buyer_key,
-)
-from radivault_search.db.repository import get_key_by_kid
 from radivault_fulfillment.errors import (
     AuthExpired,
     AuthMissing,
@@ -34,6 +28,12 @@ from radivault_fulfillment.errors import (
     FulfillmentError,
 )
 from radivault_fulfillment.telemetry import AUTH_FAILURES_TOTAL, CACHE_HIT_TOTAL
+from radivault_search.auth.buyer_tokens import (
+    constant_time_miss,
+    parse_bearer,
+    verify_buyer_key,
+)
+from radivault_search.db.repository import get_key_by_kid
 
 log = logging.getLogger("radivault_fulfillment.auth.buyer")
 

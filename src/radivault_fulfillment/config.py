@@ -29,8 +29,7 @@ class DbConfig:
         "@localhost:5432/radivault_central"
     )
     admin_dsn: str = (
-        "postgresql+psycopg://central_migrator:central_migrator"
-        "@localhost:5432/radivault_central"
+        "postgresql+psycopg://central_migrator:central_migrator@localhost:5432/radivault_central"
     )
     pool_size: int = 30
     max_overflow: int = 20

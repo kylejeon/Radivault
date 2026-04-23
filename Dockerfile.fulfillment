@@ -1,0 +1,57 @@
+# RadiVault Order Fulfillment — Zone 2 orders + transfer-job orchestration.
+#
+# Multi-stage, non-root UID 10001. Port 8002 (central=8000, search=8001).
+# Build context is the repo root; wheels are produced by pip into a
+# throwaway venv for reproducible installs.
+
+FROM python:3.11-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY pyproject.toml README.md ./
+COPY alembic.ini ./
+COPY alembic ./alembic
+COPY src ./src
+
+RUN pip install --upgrade pip wheel \
+ && pip install ".[fulfillment]"
+
+
+FROM python:3.11-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    RADIVAULT_FULFILLMENT_HOST=0.0.0.0 \
+    RADIVAULT_FULFILLMENT_PORT=8002
+
+RUN groupadd --system --gid 10001 radivault \
+ && useradd --system --uid 10001 --gid 10001 --home-dir /var/lib/radivault \
+    --shell /usr/sbin/nologin radivault \
+ && mkdir -p /etc/radivault-fulfillment /var/lib/radivault \
+ && chown -R radivault:radivault /var/lib/radivault
+
+COPY --from=builder /opt/venv /opt/venv
+COPY alembic.ini /app/alembic.ini
+COPY alembic /app/alembic
+COPY src /app/src
+
+WORKDIR /app
+USER radivault
+EXPOSE 8002
+
+# Gunicorn + UvicornWorker matches central/search.
+CMD ["gunicorn", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "-w", "5", \
+     "-b", "0.0.0.0:8002", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "radivault_fulfillment.app:app"]
