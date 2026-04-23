@@ -39,11 +39,18 @@ type Audit = {
   }[];
 };
 
-// Demo-only revenue simulation (dev-spec §11.2 Q-Demo-2 pending Kyle decision).
-// Values are clearly marked as simulation in the tile footer.
-const UNIT_PRICE_USD = 5;
-const HOSPITAL_SHARE = 0.35;
-const KRW_PER_USD = 1350;
+// Demo-only revenue simulation (dev-spec §11.2 Q-Demo-2 pending legal review).
+// Values are always displayed with a "시뮬레이션 — v0.2 정산 대기" disclaimer.
+// Operators tune the three knobs through NEXT_PUBLIC_DEMO_* env vars without
+// code changes; the Math.round floor keeps KRW integer for display.
+const parseNum = (raw: string | undefined, fallback: number): number => {
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const UNIT_PRICE_USD = parseNum(process.env.NEXT_PUBLIC_DEMO_UNIT_PRICE_USD, 5);
+const HOSPITAL_SHARE = parseNum(process.env.NEXT_PUBLIC_DEMO_HOSPITAL_SHARE, 0.35);
+const KRW_PER_USD = parseNum(process.env.NEXT_PUBLIC_DEMO_KRW_PER_USD, 1350);
 
 function simulateRevenueKrw(cumulative: number): number {
   return Math.round(cumulative * UNIT_PRICE_USD * HOSPITAL_SHARE * KRW_PER_USD);
