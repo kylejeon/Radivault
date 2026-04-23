@@ -121,11 +121,13 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
             rpm=settings.rate_limit.tier_preview.rpm,
             daily=settings.rate_limit.tier_preview.daily,
             concurrency=settings.rate_limit.tier_preview.concurrency,
+            max_limit_per_page=settings.rate_limit.tier_preview.max_limit_per_page,
         ),
         tier_paid=TierLimits(
             rpm=settings.rate_limit.tier_paid.rpm,
             daily=settings.rate_limit.tier_paid.daily,
             concurrency=settings.rate_limit.tier_paid.concurrency,
+            max_limit_per_page=settings.rate_limit.tier_paid.max_limit_per_page,
         ),
         ip_global_per_min=settings.rate_limit.ip_global_per_min,
     )

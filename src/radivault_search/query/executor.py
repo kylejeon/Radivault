@@ -88,6 +88,8 @@ def run_search(
     include_facets_override: bool | None = None,
     facets_suppressed: bool = False,
     scope_json: dict | None = None,
+    buyer_tier: str | None = None,
+    buyer_quota_remaining: int | None = None,
 ) -> ExecutorResult:
     """Execute the main search — keyset page + facets + total."""
     start = time.perf_counter()
@@ -212,6 +214,8 @@ def run_search(
         total_count_exact=True,
         result_is_approximate=False,
         query_duration_ms=duration_ms,
+        buyer_quota_remaining=buyer_quota_remaining,
+        buyer_tier=buyer_tier,
         facets_suppressed=facets_suppressed,
         response_truncated=False,
     )

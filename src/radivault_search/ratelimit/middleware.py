@@ -47,6 +47,7 @@ class TierLimits:
     rpm: int = 20
     daily: int = 100
     concurrency: int = 3
+    max_limit_per_page: int = 100
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -88,7 +89,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     detail=f"rate limit {limits.rpm}/min exceeded",
                     retry_after=60,
                 )
-                return _envelope_response(exc, request)
+                return _envelope_response(
+                    exc, request, self._rate_headers(buyer_pk, limits)
+                )
         except RedisDown:
             return _envelope_response(IdempUnavailable(), request)
 
@@ -108,7 +111,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     detail=(f"daily quota exhausted: {limits.daily}/{limits.daily} requests used"),
                     retry_after=max(retry_after, 60),
                 )
-                return _envelope_response(exc, request)
+                return _envelope_response(
+                    exc, request, self._rate_headers(buyer_pk, limits)
+                )
         except RedisDown:
             return _envelope_response(IdempUnavailable(), request)
 
@@ -126,11 +131,57 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 excc = BuyerConcurrency(
                     detail=(f"per-buyer concurrency cap {limits.concurrency} reached")
                 )
-                return _envelope_response(excc, request)
-            return await call_next(request)
+                return _envelope_response(excc, request, self._rate_headers(buyer_pk, limits))
+            # Expose the computed quota snapshot to downstream handlers so they
+            # can populate Meta.buyer_tier / Meta.buyer_quota_remaining
+            # (design-spec §2.3).
+            snapshot = self._rate_headers(buyer_pk, limits)
+            request.state.buyer_tier = tier
+            request.state.buyer_quota_remaining = int(
+                snapshot.get("X-Quota-Remaining-Daily", "0") or 0
+            )
+            request.state.rate_limit_snapshot = snapshot
+            response = await call_next(request)
+            for k, v in snapshot.items():
+                response.headers[k] = v
+            return response
         finally:
             with contextlib.suppress(Exception):
                 self._redis.decr(key_inflight)
+
+    # ------------------------------------------------------------------
+    def _rate_headers(self, buyer_pk: int, limits: TierLimits) -> dict[str, str]:
+        """Return the 6 rate-limit + quota headers for this buyer.
+
+        Shapes per design-spec §2.7. Reads current counter values from Redis;
+        if Redis is unavailable we fall back to the configured limit as a
+        safe "full budget" hint so the client never sees a negative number.
+        """
+        now = int(time.time())
+        rpm_limit = int(limits.rpm)
+        daily_limit = int(limits.daily)
+        try:
+            rpm_used = int(self._redis.get(f"search:rl:minute:{buyer_pk}") or 0)
+        except Exception:
+            rpm_used = 0
+        day = time.strftime("%Y%m%d", time.gmtime(now))
+        try:
+            daily_used = int(self._redis.get(f"search:rl:daily:{buyer_pk}:{day}") or 0)
+        except Exception:
+            daily_used = 0
+        rpm_remaining = max(rpm_limit - rpm_used, 0)
+        daily_remaining = max(daily_limit - daily_used, 0)
+        # Per-minute window resets at the next wall-clock minute boundary.
+        rpm_reset = ((now // 60) + 1) * 60
+        daily_reset = ((now // 86400) + 1) * 86400
+        return {
+            "X-RateLimit-Limit": str(rpm_limit),
+            "X-RateLimit-Remaining": str(rpm_remaining),
+            "X-RateLimit-Reset": str(rpm_reset),
+            "X-Quota-Limit-Daily": str(daily_limit),
+            "X-Quota-Remaining-Daily": str(daily_remaining),
+            "X-Quota-Reset-Daily": str(daily_reset),
+        }
 
     # ------------------------------------------------------------------
     def _over_limit(self, key: str, *, window: int, limit: int) -> bool:
@@ -147,7 +198,11 @@ class RedisDown(Exception):
     """Raised internally when Redis ops fail — mapped to 503."""
 
 
-def _envelope_response(exc: CentralError, request: Request) -> JSONResponse:
+def _envelope_response(
+    exc: CentralError,
+    request: Request,
+    extra_headers: dict[str, str] | None = None,
+) -> JSONResponse:
     rid = getattr(request.state, "request_id", "unknown")
     envelope = exc.to_envelope(rid)
     if not isinstance(exc, SearchError):
@@ -155,4 +210,6 @@ def _envelope_response(exc: CentralError, request: Request) -> JSONResponse:
     headers: dict[str, str] = {"X-Request-Id": rid}
     if exc.retry_after is not None:
         headers["Retry-After"] = str(exc.retry_after)
+    if extra_headers:
+        headers.update(extra_headers)
     return JSONResponse(status_code=exc.status_code, content=envelope, headers=headers)

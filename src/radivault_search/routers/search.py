@@ -107,6 +107,10 @@ async def search_studies(
             global_salt=settings.auth.global_filter_salt,
             facets_suppressed=estimate.suppressed_facets,
             scope_json=scope_json,
+            buyer_tier=tier,
+            buyer_quota_remaining=getattr(
+                request.state, "buyer_quota_remaining", None
+            ),
         )
 
     payload = result.response.model_dump(mode="json")
