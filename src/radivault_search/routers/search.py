@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from radivault_search.audit.search_event import write_audit
 from radivault_search.auth.middleware import require_buyer
-from radivault_search.errors import QueryTooBroad
+from radivault_search.errors import PageLimit, QueryTooBroad
 from radivault_search.query.cursor import compute_filter_sha256
 from radivault_search.query.executor import load_study_detail, run_search
 from radivault_search.query.schema import (
@@ -43,6 +43,19 @@ async def search_studies(
     settings = request.app.state.settings
     factory = request.app.state.session_factory
     scope_json = getattr(request.state, "scope_json", {}) or {}
+
+    # FR-19 — tier-specific page-size cap. scope_json.max_limit_per_page
+    # (admin-issued override) wins over the tier default.
+    tier_cap = _tier_limit_cap(tier, settings)
+    effective_cap = _resolve_page_cap(scope_json, tier_cap)
+    if body.limit > effective_cap:
+        raise PageLimit(
+            detail=(
+                f"limit {body.limit} exceeds tier cap {effective_cap} "
+                f"(tier={tier})"
+            ),
+            hint=f"use limit <= {effective_cap}",
+        )
 
     # Stage 1 — filter length gates (FR-17).
     validate_filter(body)
@@ -204,3 +217,17 @@ def _hash_buyer_id(buyer_id: str) -> str:
     import hashlib
 
     return hashlib.sha256(buyer_id.encode("utf-8")).hexdigest()[:12]
+
+
+def _tier_limit_cap(tier: str, settings) -> int:
+    """Return the ``max_limit_per_page`` for the buyer's tier (FR-19)."""
+    cfg = settings.rate_limit.tier_paid if tier == "paid" else settings.rate_limit.tier_preview
+    return int(cfg.max_limit_per_page)
+
+
+def _resolve_page_cap(scope_json: dict, tier_cap: int) -> int:
+    """FR-19 — scope_json override wins if an admin has explicitly set it."""
+    override = scope_json.get("max_limit_per_page") if scope_json else None
+    if isinstance(override, int) and override > 0:
+        return override
+    return tier_cap
