@@ -53,6 +53,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
 # Paths that require the *gateway* plane — a buyer token hitting any of
 # these yields ERR_AUTH_WRONG_PLANE (FR-7).
 GATEWAY_PATH_PREFIX = "/v1/gateway/"
+# Hospital Dashboard paths — handled by GatewayAuthMiddleware via the shared
+# ``auth_token`` table (buyer-portal-demo D-2).
+HOSPITAL_PATH_PREFIX = "/v1/hospital/"
 
 
 class BuyerAuthMiddleware(BaseHTTPMiddleware):
@@ -77,8 +80,8 @@ class BuyerAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in PUBLIC_PATHS or path.startswith("/static/"):
             return await call_next(request)
-        if path.startswith(GATEWAY_PATH_PREFIX):
-            # Gateway plane — skip (GatewayAuthMiddleware handles this).
+        if path.startswith(GATEWAY_PATH_PREFIX) or path.startswith(HOSPITAL_PATH_PREFIX):
+            # Gateway / Hospital Dashboard plane — skip (GatewayAuthMiddleware handles both).
             return await call_next(request)
 
         try:

@@ -22,6 +22,7 @@ from radivault_fulfillment.errors import (
     OrderTerminal,
     UrlTtlExceeded,
 )
+from radivault_fulfillment.orders.buyer_phase import buyer_phase_for
 from radivault_fulfillment.orders.repository import (
     get_order_for_buyer,
     list_items_for_order,
@@ -93,6 +94,7 @@ def _order_response(
     return OrderResponse(
         order_id=order.order_id,
         state=order.status,
+        buyer_phase=buyer_phase_for(order.status),
         state_billing=order.status_billing,
         n_studies=order.n_studies,
         total_bytes=order.total_bytes,

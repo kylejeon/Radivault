@@ -39,6 +39,7 @@ from radivault_fulfillment.ratelimit.middleware import UrlMintRateLimitMiddlewar
 from radivault_fulfillment.routers import (
     buyer_orders_router,
     gateway_jobs_router,
+    hospital_orders_router,
     probes_router,
     version_router,
 )
@@ -148,6 +149,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     app.include_router(version_router)
     app.include_router(buyer_orders_router)
     app.include_router(gateway_jobs_router)
+    app.include_router(hospital_orders_router)
 
     @app.get("/metrics", include_in_schema=False)
     def metrics() -> Response:

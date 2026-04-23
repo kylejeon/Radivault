@@ -32,17 +32,26 @@ log = logging.getLogger("radivault_fulfillment.auth.gateway")
 
 
 GATEWAY_PATH_PREFIX = "/v1/gateway/"
+# Hospital Dashboard endpoints (buyer-portal-demo D-2) reuse the same
+# central-ingest ``auth_token`` for now — BFF proxies the hospital bearer
+# through to order-fulfillment. The v0.1.5 plan is a dedicated hospital
+# admin SSO path.
+HOSPITAL_PATH_PREFIX = "/v1/hospital/"
+
+
+def _is_hospital_auth_path(path: str) -> bool:
+    return path.startswith(GATEWAY_PATH_PREFIX) or path.startswith(HOSPITAL_PATH_PREFIX)
 
 
 class GatewayAuthMiddleware(BaseHTTPMiddleware):
-    """Resolve a gateway Bearer on ``/v1/gateway/*`` paths only."""
+    """Resolve a hospital-plane Bearer on ``/v1/gateway/*`` + ``/v1/hospital/*``."""
 
     def __init__(self, app: ASGIApp, *, session_factory: Callable) -> None:
         super().__init__(app)
         self._session_factory = session_factory
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        if not request.url.path.startswith(GATEWAY_PATH_PREFIX):
+        if not _is_hospital_auth_path(request.url.path):
             return await call_next(request)
         try:
             self._authenticate(request)

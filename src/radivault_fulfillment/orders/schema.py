@@ -36,6 +36,9 @@ class TransferJobSummary(BaseModel):
 class OrderResponse(BaseModel):
     order_id: str
     state: str
+    # buyer-facing 5-phase mapping (dev-spec buyer-portal-demo D-3). Added as a
+    # non-breaking field so existing clients can keep reading ``state``.
+    buyer_phase: str
     state_billing: str
     n_studies: int
     total_bytes: int
