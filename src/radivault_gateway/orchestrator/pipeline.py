@@ -494,7 +494,11 @@ class Pipeline:
             )
         except PixelQuarantineRequired as exc:
             quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
-            self._audit.append(
+            # AC-14 / FR-37: append to the hash-chained audit.log first so we
+            # can cross-reference the pixel_audit_event row via ``audit_seq``
+            # (AC-21). ``AuditLogger.append`` returns an ``AuditRecord`` with
+            # the assigned seq.
+            record = self._audit.append(
                 "pixel.quarantined",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={
@@ -508,6 +512,7 @@ class Pipeline:
                 op="quarantine",
                 outcome="quarantine",
                 reason=exc.code,
+                audit_seq=record.seq,
             )
             self._db.mark_state(pseudo_uid, StudyState.PIXEL_FAILED, last_error=exc.code)
             self._db.add_quarantine(
@@ -542,7 +547,7 @@ class Pipeline:
             log.exception("pixel engine failed")
             if self._cfg.deid.pixel.quarantine_on_failure:
                 quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
-                self._audit.append(
+                record = self._audit.append(
                     "pixel.quarantined",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={
@@ -556,6 +561,7 @@ class Pipeline:
                     op="quarantine",
                     outcome="failure",
                     reason="ERR_PIXEL_OCR_ENGINE_FAILURE",
+                    audit_seq=record.seq,
                 )
                 self._db.mark_state(
                     pseudo_uid,
@@ -579,7 +585,7 @@ class Pipeline:
             raise
 
         pixel_duration_ms = _elapsed_ms(pixel_started)
-        self._audit.append(
+        completed_record = self._audit.append(
             "pixel.completed",
             target={"pseudo_study_uid": pseudo_uid},
             meta={
@@ -591,6 +597,7 @@ class Pipeline:
                 "duration_ms": pixel_duration_ms,
                 "library_ocr": result.library_ocr,
                 "library_deface": result.library_deface,
+                "fallback_used": result.fallback_used,
             },
         )
         self._db.add_pixel_audit_event(
@@ -598,6 +605,7 @@ class Pipeline:
             op="triage",
             outcome="success",
             reason=result.decision,
+            audit_seq=completed_record.seq,
         )
         if result.ocr_applied:
             self._db.add_pixel_audit_event(
@@ -610,6 +618,7 @@ class Pipeline:
                 avg_confidence=result.avg_confidence or None,
                 min_confidence=result.min_confidence or None,
                 max_confidence=result.max_confidence or None,
+                audit_seq=completed_record.seq,
             )
         if result.defacing_applied:
             self._db.add_pixel_audit_event(
@@ -619,6 +628,29 @@ class Pipeline:
                 library=result.library_deface,
                 duration_ms=result.deface_duration_ms,
                 removed_voxel_ratio=result.removed_voxel_ratio,
+                audit_seq=completed_record.seq,
+            )
+        # AC-14 / FR-37: emit a dedicated hash-chained ``pixel.deface.fallback_used``
+        # event whenever the pixel engine escalated from the primary defacing
+        # library to the fallback. Previously this information only existed in
+        # the WARN app log — which is not tamper-evident and not visible to
+        # ``audit verify``.
+        if result.fallback_used:
+            fallback_record = self._audit.append(
+                "pixel.deface.fallback_used",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={
+                    "fallback_library": result.library_deface,
+                    "primary_error_code": result.fallback_reason,
+                },
+            )
+            self._db.add_pixel_audit_event(
+                pseudo_study_uid=pseudo_uid,
+                op="deface",
+                outcome="fallback",
+                library=result.library_deface,
+                reason=result.fallback_reason,
+                audit_seq=fallback_record.seq,
             )
         log.info(
             "pixel.completed",

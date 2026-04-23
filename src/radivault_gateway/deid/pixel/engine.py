@@ -75,6 +75,8 @@ class PixelDeidResult:
     max_confidence: float = 0.0
     p10_confidence: float = 0.0
     exclusion_matched: bool = False
+    fallback_used: bool = False
+    fallback_reason: str | None = None
 
 
 class PixelDeidEngine:
@@ -149,8 +151,10 @@ class PixelDeidEngine:
 
         deface_result: DefaceResult | None = None
         library_deface: str | None = None
+        fallback_used = False
+        fallback_reason: str | None = None
         if self._should_run_defacing(modality_set, body_part):
-            deface_result, library_deface = self._run_defacing(
+            deface_result, library_deface, fallback_used, fallback_reason = self._run_defacing(
                 staged_dir, pseudo_study_uid=pseudo_study_uid
             )
 
@@ -161,6 +165,8 @@ class PixelDeidEngine:
             deface=deface_result,
             library_deface=library_deface,
             exclusion_matched=exclusion.matched,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
         )
 
     # ---- helpers ----
@@ -301,12 +307,14 @@ class PixelDeidEngine:
         staged_dir: Path,
         *,
         pseudo_study_uid: str,
-    ) -> tuple[DefaceResult | None, str | None]:
+    ) -> tuple[DefaceResult | None, str | None, bool, str | None]:
         assert self._deface is not None
         candidate = _pick_defacing_volume(staged_dir)
         if candidate is None:
-            return None, None
+            return None, None, False, None
         out_path = candidate.with_suffix(".defaced.nii.gz")
+        fallback_used = False
+        fallback_reason: str | None = None
         try:
             result = self._deface.deface_volume(candidate, out_path)
         except PixelDeidEngineError as exc:
@@ -316,6 +324,8 @@ class PixelDeidEngine:
                 and self._fallback_deface is not None
                 and self._fallback_deface.is_available()
             ):
+                fallback_used = True
+                fallback_reason = exc.code
                 log.warning(
                     "pixel.deface.fallback_used",
                     extra={
@@ -380,7 +390,7 @@ class PixelDeidEngine:
         # the defaced 3D volume was reconstructed from the series and the
         # tags are study-level provenance (FR-18).
         _stamp_defacing_tags(staged_dir)
-        return result, library
+        return result, library, fallback_used, fallback_reason
 
 
 @dataclass(frozen=True)
@@ -518,6 +528,8 @@ def _build_result(
     deface: DefaceResult | None,
     library_deface: str | None,
     exclusion_matched: bool,
+    fallback_used: bool = False,
+    fallback_reason: str | None = None,
 ) -> PixelDeidResult:
     confs = ocr.confidences if ocr else []
     if confs:
@@ -545,6 +557,8 @@ def _build_result(
         min_confidence=min_c,
         max_confidence=max_c,
         p10_confidence=p10,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
         exclusion_matched=exclusion_matched,
     )
 
