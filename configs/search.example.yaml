@@ -1,0 +1,65 @@
+# /etc/radivault-search/search.yml — example
+# dev-spec §6.5; copy to /etc/radivault-search/search.yml and customise.
+
+version: 1
+
+app:
+  env: "dev"
+  api_contract_version: "1"
+  workers: 2
+  port: 8001
+
+db:
+  dsn: "postgresql+psycopg://radivault_buyer_ro:radivault_buyer_ro@localhost:5432/radivault_central"
+  admin_dsn: "postgresql+psycopg://search_admin:search_admin@localhost:5432/radivault_central"
+  migration_dsn: "postgresql+psycopg://central_migrator:central_migrator@localhost:5432/radivault_central"
+  pool_size: 30
+  max_overflow: 20
+
+redis:
+  url: "redis://localhost:6379/0"
+  auth_cache_ttl_seconds: 60
+  cost_estimate_ttl_seconds: 300
+  facets_cache_ttl_seconds: 900
+  hospitals_cache_ttl_seconds: 300
+
+auth:
+  hash_algorithm: "argon2id"
+  argon2:
+    time_cost: 3
+    memory_cost_kib: 65536
+    parallelism: 2
+  global_filter_salt: "change-me-please"
+  api_key_prefix_live: "rv_live_"
+  api_key_prefix_test: "rv_test_"
+
+rate_limit:
+  tier_preview:
+    rpm: 20
+    daily: 100
+    concurrency: 3
+    max_limit_per_page: 100
+  tier_paid:
+    rpm: 600
+    daily: 10000
+    concurrency: 20
+    max_limit_per_page: 200
+  ip_global_per_min: 300
+
+cost:
+  max_estimated_rows: 10000000
+  facet_auto_suppress_rows: 2000000
+  cost_estimate_timeout_ms: 500
+
+timeouts:
+  fastapi_request_timeout_seconds: 15
+  pg_statement_timeout: "10s"
+  graceful_drain_seconds: 15
+
+observability:
+  log_level: "INFO"
+  json_logs: true
+  otlp_endpoint: null
+  metrics_path: "/metrics"
+  sentry_dsn: null
+  log_sanitizer_strict: true

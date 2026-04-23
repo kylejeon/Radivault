@@ -65,11 +65,43 @@ central-test = [
     "httpx>=0.27",
     "fakeredis>=2.20",
 ]
+search = [
+    # Core web stack — share central's foundations.
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "gunicorn>=21.2",
+    # Persistence.
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    # Cache / rate limit.
+    "redis>=5.0",
+    "slowapi>=0.1.9",
+    # Auth.
+    "argon2-cffi>=23.0",
+    # Observability.
+    "prometheus-client>=0.20",
+    "prometheus-fastapi-instrumentator>=7.0",
+    "python-json-logger>=2.0",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-instrumentation-fastapi>=0.45b0",
+    # ULIDs.
+    "python-ulid>=2.0",
+]
+search-test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "fakeredis>=2.20",
+]
 
 [project.scripts]
 radivault-gateway = "radivault_gateway.cli.main:cli"
 radivault-central = "radivault_central.__main__:main"
 ingest-admin = "radivault_central_admin.cli:cli"
+radivault-search = "radivault_search.__main__:main"
+search-admin = "radivault_search_admin.cli:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = [
@@ -77,6 +109,8 @@ packages = [
     "src/radivault_mock_central",
     "src/radivault_central",
     "src/radivault_central_admin",
+    "src/radivault_search",
+    "src/radivault_search_admin",
 ]
 
 [tool.pytest.ini_options]
@@ -84,6 +118,7 @@ minversion = "8.0"
 testpaths = ["tests"]
 markers = [
     "integration: integration tests requiring external services (Orthanc, docker); skipped by default",
+    "search_integration: integration tests for radivault_search; gated by SEARCH_TEST_SERVICES=1",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:pydicom.*",

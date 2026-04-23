@@ -1,0 +1,64 @@
+# Docker-compose variant of /etc/radivault-search/search.yml.
+
+version: 1
+
+app:
+  env: "docker"
+  api_contract_version: "1"
+  workers: 2
+  port: 8001
+
+db:
+  dsn: "${env:DATABASE_URL}"
+  admin_dsn: "${env:ADMIN_DATABASE_URL}"
+  migration_dsn: "${env:MIGRATION_DATABASE_URL}"
+  pool_size: 30
+  max_overflow: 20
+
+redis:
+  url: "${env:REDIS_URL}"
+  auth_cache_ttl_seconds: 60
+  cost_estimate_ttl_seconds: 300
+  facets_cache_ttl_seconds: 900
+  hospitals_cache_ttl_seconds: 300
+
+auth:
+  hash_algorithm: "argon2id"
+  argon2:
+    time_cost: 3
+    memory_cost_kib: 65536
+    parallelism: 2
+  global_filter_salt: "${env:FILTER_HASH_GLOBAL_SALT}"
+  api_key_prefix_live: "rv_live_"
+  api_key_prefix_test: "rv_test_"
+
+rate_limit:
+  tier_preview:
+    rpm: 20
+    daily: 100
+    concurrency: 3
+    max_limit_per_page: 100
+  tier_paid:
+    rpm: 600
+    daily: 10000
+    concurrency: 20
+    max_limit_per_page: 200
+  ip_global_per_min: 300
+
+cost:
+  max_estimated_rows: 10000000
+  facet_auto_suppress_rows: 2000000
+  cost_estimate_timeout_ms: 500
+
+timeouts:
+  fastapi_request_timeout_seconds: 15
+  pg_statement_timeout: "10s"
+  graceful_drain_seconds: 15
+
+observability:
+  log_level: "INFO"
+  json_logs: true
+  otlp_endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+  metrics_path: "/metrics"
+  sentry_dsn: "${env:SENTRY_DSN}"
+  log_sanitizer_strict: true
