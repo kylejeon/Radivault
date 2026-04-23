@@ -286,3 +286,87 @@ v0.1.1 백로그 (QA round 1 Medium/Low):
 - @designer dev-spec-metadata-index.md 읽고 design-spec-metadata-index.md 작성.
   - 6표면: HTTP API UX·search-admin CLI·로그/메트릭 네이밍·에러 taxonomy 이중언어 표·Runbook·Buyer onboarding walkthrough.
 - Kyle 결정 선행 권고: opt-out 정책 단계, SDK 타이밍, pricing tier 실값, filter hash salt 전략.
+
+## 2026-04-22 — Session 6 (Claude, metadata-index v0.1 풀 파이프라인)
+
+### 뭘 했나
+옵션 B 선택. 6 에이전트 전부 가동하여 metadata-index(구매자 검색 API) v0.1 MVP 완주.
+
+#### Phase 1 보강 리서치 (@researcher)
+- docs/research/metadata-index-technical-foundations.md (371줄)
+
+#### Phase 2 개발지시서 (@planner)
+- docs/specs/dev-spec-metadata-index.md (1,191줄, 77 FR, 34 AC, 11 신규 에러 코드)
+
+#### Phase 3 디자인 명세 (@designer)
+- docs/specs/design-spec-metadata-index.md (1,626줄)
+  Buyer DX 중심. 13 search-admin 서브커맨드, 17 Prometheus 메트릭,
+  11 Alertmanager 알람, 7 운영 런북, 12 단계 buyer 온보딩 walkthrough.
+- 중간 커밋 c6d16c9
+
+#### Phase 4 개발 round 1 (@developer)
+- 15 커밋 (c888a73..3f83ff7)
+  scaffold, Alembic 0002, config/logging/telemetry, 11 에러 코드,
+  argon2id buyer auth, slowapi 레이트, filter validator + cost estimator,
+  keyset cursor + filter_sha256 바인딩, facet + executor, search_audit,
+  routers, search-admin CLI 14 서브커맨드, Dockerfile.search + compose,
+  테스트 48건
+- 테스트 총계: search unit 34 + integration 14 + central 회귀 50 + gateway 회귀 55 = 153 통과
+
+#### Phase 5 검수 round 1 (@qa)
+- 판정: FAIL
+  - Critical 1: C-1 (auth middleware last_used_at UPDATE vs GRANT SELECT 불일치 → 프로덕션 PG 인증 500 크래시)
+  - High 5: H-1 opt-out 미집행, H-2 hint 직렬화 버그, H-3 tier limit 미집행,
+    H-4 X-RateLimit/X-Quota 헤더 미방출, H-5 audit PK 단일 컬럼
+- 커밋 8278fd3
+
+#### Phase 4 재작업 round 2 (@developer)
+- 7 fix 커밋 (5b53983..c2ca4c0)
+- 테스트 search unit 34→49 (+15), integration 14→20 (+6), ruff clean
+
+#### Phase 5 재검수 round 2 (@qa)
+- Round 1 발견 전수 RESOLVED
+- 새 발견 3건 모두 non-blocking (UTC reset, Redis fallback, TierLimits 이중 출처)
+- 판정: PASS with minor
+- 커밋 860126e
+
+#### Phase 6 런칭 콘텐츠 (@marketer)
+- docs/marketing/one-pager-buyer-global-en.md (108줄)
+- docs/marketing/api-quickstart-buyer-en.md (600줄, 14 섹션, Hello World부터 FAQ까지)
+- docs/marketing/competitive-positioning-buyer-en.md (127줄, vs Segmed/Gradient 비교)
+- 3종 전부 컴플라이언스 언어 self-audit 통과 (aligned/designed/in preparation만, 단정 0건)
+- 플레이스홀더: one-pager 7, competitive 5 (Kyle 채움 필요); api-quickstart 0
+- 커밋 3140bde
+
+### 어디까지 됐나
+metadata-index v0.1 MVP 풀 파이프라인 완주, PASS with minor.
+누적 3 feature 완료: gateway-agent + central-ingest + metadata-index.
+
+claude 브랜치 통계:
+- 커밋 70+ 개 (이번 세션 +25)
+- 테스트: gateway 55 + central 50 + search 49 unit + 20 integration = 174 통과
+- ruff clean
+- 마케팅 콘텐츠 5종 (병원 대상 2, 구매자 대상 3)
+
+### 다음에 뭘 하나
+
+v0.1 GA 배포 전 체크리스트 추가:
+- prod config allow_unencrypted/allow_insecure 전부 false
+- Alembic 0001→0002 실제 PG 15에서 roundtrip 검증
+- buyer_ro role GRANT UPDATE(last_used_at) 컬럼 권한 실제 적용 확인
+- composite PK audit_pk, created_at 실제 PG에서 ALTER 성공 확인
+- Docker 이미지 3종 (gateway, central, search) 실제 빌드
+- 마케팅 플레이스홀더 12건 채우기
+
+v0.1.1 백로그 (QA round 1 Medium/Low + 이번 세션 잔여):
+- metadata-index: M-1 min_hospitals, M-2 CORS, M-3 QueryTimeout asyncio wrap,
+  M-5 docs/search, L-1..L-4
+- central-ingest: M-1..M-5, L-1..L-3, FR-45 byte quota, AC-33 GRANT 검증
+- gateway-agent: AC-28 CI, AC-29 trivy
+
+다음 기능 후보 (Kyle 결정):
+- 옵션 C: @planner dev-spec-de-id-engine-v0.2 (OCR 번인 + defacing)
+- 옵션 D: Gateway v0.1.1 보강 dev-spec (D-1..D-7 공식화)
+- 옵션 E: @planner dev-spec-order-orchestrator (구매 확정 → Gateway 영상 전송)
+- 옵션 F: @planner dev-spec-buyer-portal (웹 UI, 지금까지 API-only)
+- 비기술: 법률 자문, 파일럿 병원 물색 (보류 상태)
