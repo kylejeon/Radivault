@@ -95,6 +95,33 @@ search-test = [
     "httpx>=0.27",
     "fakeredis>=2.20",
 ]
+# Order Fulfillment (dev-spec-order-fulfillment §9.4) — shares the central/search
+# foundations but adds boto3 (presigned URLs) and reuses redis/slowapi.
+fulfillment = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "gunicorn>=21.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "redis>=5.0",
+    "slowapi>=0.1.9",
+    "boto3>=1.34",
+    "argon2-cffi>=23.0",
+    "prometheus-client>=0.20",
+    "prometheus-fastapi-instrumentator>=7.0",
+    "python-json-logger>=2.0",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-instrumentation-fastapi>=0.45b0",
+    "python-ulid>=2.0",
+]
+fulfillment-test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "fakeredis>=2.20",
+]
 # v0.2 de-id-pixel: OCR + 3D defacing (opt-in; included in :0.2.0-pixel image).
 pixel = [
     "pytesseract>=0.3.13",
@@ -116,6 +143,8 @@ radivault-central = "radivault_central.__main__:main"
 ingest-admin = "radivault_central_admin.cli:cli"
 radivault-search = "radivault_search.__main__:main"
 search-admin = "radivault_search_admin.cli:cli"
+radivault-fulfillment = "radivault_fulfillment.__main__:main"
+fulfillment-admin = "radivault_fulfillment_admin.cli:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = [
@@ -125,6 +154,8 @@ packages = [
     "src/radivault_central_admin",
     "src/radivault_search",
     "src/radivault_search_admin",
+    "src/radivault_fulfillment",
+    "src/radivault_fulfillment_admin",
 ]
 
 [tool.pytest.ini_options]
@@ -133,6 +164,7 @@ testpaths = ["tests"]
 markers = [
     "integration: integration tests requiring external services (Orthanc, docker); skipped by default",
     "search_integration: integration tests for radivault_search; gated by SEARCH_TEST_SERVICES=1",
+    "fulfillment_integration: integration tests for radivault_fulfillment; gated by FULFILLMENT_TEST_SERVICES=1",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:pydicom.*",

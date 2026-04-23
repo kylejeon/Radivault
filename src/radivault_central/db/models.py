@@ -152,6 +152,14 @@ class Study(Base):
     raw_dicom_tags: Mapped[dict | None] = mapped_column(_json_type())
     central_job_id: Mapped[str] = mapped_column(String, nullable=False)
     gateway_id: Mapped[str] = mapped_column(String, nullable=False)
+    # order-fulfillment §14 C-1 (additive): Hot Storage hit marker.
+    # Default False; central-ingest will flip to True on successful ingest
+    # in a follow-up revision. Safe to keep False during v0.1 — the
+    # fulfillment lookup simply treats every study as cold and fans out a
+    # transfer_job, which is the correct fallback.
+    central_object_present: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
 
 class Series(Base):
