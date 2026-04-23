@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — design-spec-buyer-portal-demo §2. */
+:root {
+  /* Buyer surface — cool blue */
+  --rv-primary: #1d4ed8;
+  --rv-primary-fg: #ffffff;
+  --rv-primary-soft: #dbeafe;
+}
+
+.surface-buyer {
+  --rv-primary: #1d4ed8;
+  --rv-primary-fg: #ffffff;
+  --rv-primary-soft: #dbeafe;
+}
+
+.surface-hospital {
+  /* Hospital surface — teal (design-spec §2). */
+  --rv-primary: #0f766e;
+  --rv-primary-fg: #ffffff;
+  --rv-primary-soft: #ccfbf1;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Noto Sans KR", sans-serif;
+}
+
+.card {
+  @apply rounded-card border border-surface-border bg-surface-card shadow-card;
+}
+
+/* Modality badge utility — emitted via `modality-{CT|MR|...}` class. */
+.badge-modality {
+  @apply inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase text-white;
+}
+.badge-modality.ct {
+  background: #2563eb;
+}
+.badge-modality.mr {
+  background: #7c3aed;
+}
+.badge-modality.cr,
+.badge-modality.dr {
+  background: #059669;
+}
+.badge-modality.mg {
+  background: #ec4899;
+}
+.badge-modality.us {
+  background: #ea580c;
+}
+.badge-modality.pt {
+  background: #dc2626;
+}
+.badge-modality.unknown {
+  background: #94a3b8;
+}
+
+/* Phase stepper dot colour (FR-A-38). */
+.phase-dot {
+  @apply inline-block size-2.5 rounded-full;
+}
+.phase-dot.accepted {
+  background: #64748b;
+}
+.phase-dot.fetching_from_hospital {
+  background: #2563eb;
+  animation: pulse 1.6s infinite;
+}
+.phase-dot.preparing_download {
+  background: #2563eb;
+}
+.phase-dot.ready_to_download {
+  background: #059669;
+}
+.phase-dot.completed {
+  background: #065f46;
+}
+.phase-dot.cancelled,
+.phase-dot.expired {
+  background: #64748b;
+}
+.phase-dot.failed {
+  background: #dc2626;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Skeletons (design-spec §7). */
+.skeleton {
+  @apply inline-block animate-pulse rounded bg-slate-200;
+}

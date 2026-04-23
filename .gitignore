@@ -38,3 +38,10 @@ htmlcov/
 # Local state (runtime)
 /var/
 
+# Node / Next.js (web/portal)
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
