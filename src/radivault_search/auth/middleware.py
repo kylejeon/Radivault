@@ -135,8 +135,24 @@ class BuyerAuthMiddleware(BaseHTTPMiddleware):
             request.state.kid = kid
             request.state.scope_json = ctx["scope_json"]
 
-            row.last_used_at = datetime.now(tz=UTC)
-            session.commit()
+            # FR-6/7: `last_used_at` is a bookkeeping touch. If the DB role
+            # lacks UPDATE(last_used_at) (misconfigured GRANT) or the write
+            # fails for any other reason, we MUST NOT fail authentication —
+            # the buyer has already been verified. Emit a WARN and continue.
+            try:
+                row.last_used_at = datetime.now(tz=UTC)
+                session.commit()
+            except Exception as exc:  # noqa: BLE001 — defense-in-depth
+                log.warning(
+                    "ERR_LAST_USED_UPDATE_FAILED",
+                    extra={
+                        "event": "auth.last_used_update_failed",
+                        "kid": kid,
+                        "reason": exc.__class__.__name__,
+                    },
+                )
+                with contextlib.suppress(Exception):
+                    session.rollback()
 
             self._cache_set(kid, ctx)
 

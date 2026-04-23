@@ -105,9 +105,16 @@ def upgrade() -> None:
             "TO radivault_buyer_ro;"
         )
         op.execute("GRANT SELECT ON buyer, buyer_api_key TO radivault_buyer_ro;")
+        # FR-6/7: auth middleware writes ``buyer_api_key.last_used_at`` on
+        # every cold-cache success. Grant a *column-level* UPDATE so the
+        # buyer-ro role can touch only that single column (minimum-privilege
+        # over "full UPDATE on the table"). All other columns remain
+        # immutable. dev-spec §6.2 "UPDATE/DELETE 미부여" is preserved for
+        # every other column; this is the narrowest possible exception.
+        op.execute(
+            "GRANT UPDATE (last_used_at) ON buyer_api_key TO radivault_buyer_ro;"
+        )
         op.execute("GRANT INSERT ON search_audit TO radivault_buyer_ro;")
-        # Explicit deny on UPDATE/DELETE: the default is no grant, so no REVOKE
-        # needed; documenting here for clarity.
 
         op.execute("GRANT USAGE ON SCHEMA public TO search_admin;")
         op.execute(
@@ -135,6 +142,7 @@ def downgrade() -> None:
         op.execute(
             "DO $$ BEGIN "
             "IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='radivault_buyer_ro') THEN "
+            "REVOKE UPDATE (last_used_at) ON buyer_api_key FROM radivault_buyer_ro; "
             "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM radivault_buyer_ro; "
             "DROP ROLE radivault_buyer_ro; "
             "END IF; "
