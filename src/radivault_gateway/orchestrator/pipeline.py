@@ -21,6 +21,11 @@ from pathlib import Path
 from radivault_gateway.audit import AuditLogger
 from radivault_gateway.config import GatewayConfig
 from radivault_gateway.deid import DeidEngine, QuarantineRequired
+from radivault_gateway.deid.pixel import (
+    PixelDeidEngine,
+    PixelDeidResult,
+    PixelQuarantineRequired,
+)
 from radivault_gateway.pacs import DicomWebPacsClient, PacsError, StudySummary
 from radivault_gateway.staging import StagingManager
 from radivault_gateway.state import StateDB, StudyState
@@ -48,6 +53,9 @@ class RunSummary:
     failed: int = 0
     skipped: int = 0
     total: int = 0
+    # v0.2 de-id-pixel counters (surfaced in status output).
+    pixel_deided: int = 0
+    pixel_failed: int = 0
     outcomes: list[StudyOutcome] = field(default_factory=list)
 
 
@@ -62,6 +70,7 @@ class Pipeline:
         deid: DeidEngine,
         pacs: DicomWebPacsClient,
         upload: UploadClient,
+        pixel: PixelDeidEngine | None = None,
     ) -> None:
         self._cfg = config
         self._db = state_db
@@ -70,6 +79,8 @@ class Pipeline:
         self._deid = deid
         self._pacs = pacs
         self._upload = upload
+        # v0.2 de-id-pixel: opt-in, None when cfg.deid.pixel.enabled=false.
+        self._pixel = pixel
 
     def run_once(
         self,
@@ -131,6 +142,12 @@ class Pipeline:
                 summary.uploaded += 1
             elif outcome.state == StudyState.QUARANTINED:
                 summary.quarantined += 1
+            elif outcome.state == StudyState.PIXEL_FAILED:
+                summary.pixel_failed += 1
+                summary.quarantined += 1
+            elif outcome.state == StudyState.PIXEL_DEIDED:
+                summary.pixel_deided += 1
+                summary.uploaded += 1
             elif outcome.state in {
                 StudyState.FAILED_FETCH,
                 StudyState.FAILED_DEID,
@@ -296,6 +313,26 @@ class Pipeline:
                     deid_ms=deid_ms,
                 )
 
+            # v0.2 de-id-pixel: opt-in pixel stage (FR-31). Skipped entirely
+            # when ``self._pixel is None`` (cfg.deid.pixel.enabled=false) so
+            # the downstream behaviour remains bit-equivalent to v0.1.
+            if self._pixel is not None:
+                pixel_outcome = self._run_pixel_stage(
+                    pseudo_uid=pseudo_uid,
+                    staging_dir=staging_dir,
+                    study=study,
+                    started=started,
+                    fetch_ms=fetch_ms,
+                    deid_ms=deid_ms,
+                    original_uid=original_uid,
+                )
+                if pixel_outcome is not None:
+                    # Pixel stage routed to quarantine; fetch_dir already
+                    # cleaned by helper. Short-circuit to the outcome.
+                    shutil.rmtree(staging_dir, ignore_errors=True)
+                    fetch_dir = None
+                    return pixel_outcome
+
             # FR-14 canonical layout: preserve the series-nested tree the
             # de-id engine produced under ``{staging_root}/{pseudo_study_uid}/
             # {pseudo_series_uid}/{pseudo_sop_uid}.dcm``.
@@ -425,6 +462,205 @@ class Pipeline:
         finally:
             if fetch_dir is not None:
                 shutil.rmtree(fetch_dir, ignore_errors=True)
+
+    # ---- pixel stage (v0.2) ----
+
+    def _run_pixel_stage(
+        self,
+        *,
+        pseudo_uid: str,
+        staging_dir: Path,
+        study: StudySummary,
+        started: datetime,
+        fetch_ms: int,
+        deid_ms: int,
+        original_uid: str,
+    ) -> StudyOutcome | None:
+        """Run pixel triage + OCR + defacing. Returns a terminal outcome on
+        quarantine / failure, or ``None`` when the caller should continue."""
+        assert self._pixel is not None
+        self._db.mark_state(pseudo_uid, StudyState.PIXEL_PROCESSING)
+        pixel_started = datetime.now()
+        # Determine study-level inputs from the first staged instance.
+        study_description, body_part = _sample_pixel_context(staging_dir)
+        modality_set = {str(m).upper() for m in study.modalities_in_study}
+        try:
+            result: PixelDeidResult = self._pixel.process_study(
+                staging_dir,
+                pseudo_study_uid=pseudo_uid,
+                study_description=study_description,
+                modality_set=modality_set,
+                body_part=body_part,
+            )
+        except PixelQuarantineRequired as exc:
+            quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
+            self._audit.append(
+                "pixel.quarantined",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={
+                    "code": exc.code,
+                    "reason": exc.reason,
+                    "quarantine_path": str(quarantine_path),
+                },
+            )
+            self._db.add_pixel_audit_event(
+                pseudo_study_uid=pseudo_uid,
+                op="quarantine",
+                outcome="quarantine",
+                reason=exc.code,
+            )
+            self._db.mark_state(pseudo_uid, StudyState.PIXEL_FAILED, last_error=exc.code)
+            self._db.add_quarantine(
+                pseudo_uid,
+                reason=f"pixel:{exc.code}",
+                payload_path=str(quarantine_path),
+            )
+            log.warning(
+                "pixel.quarantined",
+                extra={
+                    "event": "pixel.quarantined",
+                    "pixel": {
+                        "stage": "quarantine",
+                        "error_code": exc.code,
+                        "reason": exc.reason,
+                    },
+                    "pseudo_study_uid": pseudo_uid,
+                },
+            )
+            return StudyOutcome(
+                original_study_uid=study.study_instance_uid,
+                pseudo_study_uid=pseudo_uid,
+                state=StudyState.PIXEL_FAILED,
+                reason=exc.code,
+                duration_ms=_elapsed_ms(started),
+                fetch_ms=fetch_ms,
+                deid_ms=deid_ms,
+            )
+        except Exception as exc:
+            # Engine-internal failure. Per FR-33, escalate to quarantine when
+            # quarantine_on_failure=true (default).
+            log.exception("pixel engine failed")
+            if self._cfg.deid.pixel.quarantine_on_failure:
+                quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
+                self._audit.append(
+                    "pixel.quarantined",
+                    target={"pseudo_study_uid": pseudo_uid},
+                    meta={
+                        "code": "ERR_PIXEL_OCR_ENGINE_FAILURE",
+                        "error": str(exc),
+                        "quarantine_path": str(quarantine_path),
+                    },
+                )
+                self._db.add_pixel_audit_event(
+                    pseudo_study_uid=pseudo_uid,
+                    op="quarantine",
+                    outcome="failure",
+                    reason="ERR_PIXEL_OCR_ENGINE_FAILURE",
+                )
+                self._db.mark_state(
+                    pseudo_uid,
+                    StudyState.PIXEL_FAILED,
+                    last_error="ERR_PIXEL_OCR_ENGINE_FAILURE",
+                )
+                self._db.add_quarantine(
+                    pseudo_uid,
+                    reason="pixel:ERR_PIXEL_OCR_ENGINE_FAILURE",
+                    payload_path=str(quarantine_path),
+                )
+                return StudyOutcome(
+                    original_study_uid=study.study_instance_uid,
+                    pseudo_study_uid=pseudo_uid,
+                    state=StudyState.PIXEL_FAILED,
+                    reason="ERR_PIXEL_OCR_ENGINE_FAILURE",
+                    duration_ms=_elapsed_ms(started),
+                    fetch_ms=fetch_ms,
+                    deid_ms=deid_ms,
+                )
+            raise
+
+        pixel_duration_ms = _elapsed_ms(pixel_started)
+        self._audit.append(
+            "pixel.completed",
+            target={"pseudo_study_uid": pseudo_uid},
+            meta={
+                "decision": result.decision,
+                "ocr_applied": result.ocr_applied,
+                "defacing_applied": result.defacing_applied,
+                "n_boxes_redacted": result.n_boxes_redacted,
+                "removed_voxel_ratio": result.removed_voxel_ratio,
+                "duration_ms": pixel_duration_ms,
+                "library_ocr": result.library_ocr,
+                "library_deface": result.library_deface,
+            },
+        )
+        self._db.add_pixel_audit_event(
+            pseudo_study_uid=pseudo_uid,
+            op="triage",
+            outcome="success",
+            reason=result.decision,
+        )
+        if result.ocr_applied:
+            self._db.add_pixel_audit_event(
+                pseudo_study_uid=pseudo_uid,
+                op="ocr",
+                outcome="success",
+                library=result.library_ocr,
+                duration_ms=result.ocr_duration_ms,
+                box_count=result.n_boxes_redacted,
+                avg_confidence=result.avg_confidence or None,
+                min_confidence=result.min_confidence or None,
+                max_confidence=result.max_confidence or None,
+            )
+        if result.defacing_applied:
+            self._db.add_pixel_audit_event(
+                pseudo_study_uid=pseudo_uid,
+                op="deface",
+                outcome="success",
+                library=result.library_deface,
+                duration_ms=result.deface_duration_ms,
+                removed_voxel_ratio=result.removed_voxel_ratio,
+            )
+        log.info(
+            "pixel.completed",
+            extra={
+                "event": "pixel.completed",
+                "pixel": {
+                    "stage": "verify",
+                    "library": result.library_ocr or result.library_deface,
+                    "decision": result.decision,
+                    "duration_ms": pixel_duration_ms,
+                    "redaction_count": result.n_boxes_redacted,
+                    "defaced_voxel_ratio": result.removed_voxel_ratio,
+                    "confidence_p50": result.avg_confidence,
+                    "confidence_p10": result.p10_confidence,
+                },
+                "pseudo_study_uid": pseudo_uid,
+            },
+        )
+        return None
+
+
+def _sample_pixel_context(staging_dir: Path) -> tuple[str, str | None]:
+    """Read StudyDescription + BodyPartExamined from the first staged DICOM.
+
+    Returns ``("", None)`` on any error. The pixel engine tolerates empty
+    values — they simply make the study exclusion/body-part gates fall
+    through to SKIP.
+    """
+    try:
+        import pydicom
+    except ImportError:
+        return "", None
+    for path in sorted(Path(staging_dir).rglob("*.dcm")):
+        try:
+            ds = pydicom.dcmread(path, stop_before_pixels=True, force=False)
+        except Exception:
+            continue
+        return (
+            str(getattr(ds, "StudyDescription", "") or ""),
+            str(getattr(ds, "BodyPartExamined", "") or "") or None,
+        )
+    return "", None
 
 
 def _elapsed_ms(start: datetime) -> int:
