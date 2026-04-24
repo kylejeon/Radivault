@@ -25,6 +25,7 @@ import base64
 import json
 import logging
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -39,7 +40,12 @@ log = logging.getLogger("demo_seed.orthanc")
 
 STOW_BOUNDARY = "radivault-stow"
 UPLOADED_MARKER = "_orthanc_uploaded.marker"
-DEFAULT_TIMEOUT = 60.0  # per-study STOW-RS request
+# 600s: large UPENN-GBM MR studies (2000+ files) exceed the old 60s limit
+# when Orthanc is CPU-saturated indexing a previous upload. Session 16.
+DEFAULT_TIMEOUT = 600.0  # per-study STOW-RS request
+UPLOAD_RETRY_COUNT = 2  # attempts beyond the first on transient failure
+UPLOAD_RETRY_BACKOFF = 10.0  # seconds, linear backoff * attempt#
+INTER_STUDY_SLEEP = 5.0  # breathing room for Orthanc between studies
 
 
 # ---------------------------------------------------------------------------
@@ -212,19 +218,51 @@ def main(argv: list[str] | None = None) -> int:
             if marker.exists():
                 skipped += 1
                 continue
-            try:
-                boundary = f"{STOW_BOUNDARY}-{uuid.uuid4().hex[:8]}"
-                n_files, status = upload_study(client, study, boundary=boundary)
-                marker.write_text(f"status={status} files={n_files}\n", encoding="utf-8")
-                done += 1
-                total_files += n_files
-                log.info("stow_done study=%s files=%d status=%d", study.name, n_files, status)
-            except Exception as exc:
+            last_exc: Exception | None = None
+            for attempt in range(UPLOAD_RETRY_COUNT + 1):
+                try:
+                    boundary = f"{STOW_BOUNDARY}-{uuid.uuid4().hex[:8]}"
+                    n_files, status = upload_study(client, study, boundary=boundary)
+                    marker.write_text(
+                        f"status={status} files={n_files}\n", encoding="utf-8"
+                    )
+                    done += 1
+                    total_files += n_files
+                    log.info(
+                        "stow_done study=%s files=%d status=%d attempt=%d",
+                        study.name,
+                        n_files,
+                        status,
+                        attempt + 1,
+                    )
+                    last_exc = None
+                    break
+                except (httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+                    last_exc = exc
+                    if attempt < UPLOAD_RETRY_COUNT:
+                        wait = UPLOAD_RETRY_BACKOFF * (attempt + 1)
+                        log.warning(
+                            "stow_retry study=%s attempt=%d/%d wait=%.0fs err=%s",
+                            study.name,
+                            attempt + 1,
+                            UPLOAD_RETRY_COUNT,
+                            wait,
+                            exc.__class__.__name__,
+                        )
+                        time.sleep(wait)
+                        continue
+                except Exception as exc:
+                    last_exc = exc
+                    break  # non-transient — fail immediately
+            if last_exc is not None:
                 failed += 1
                 (study / "_orthanc_error.json").write_text(
-                    json.dumps({"error": str(exc)}, indent=2), encoding="utf-8"
+                    json.dumps({"error": str(last_exc)}, indent=2),
+                    encoding="utf-8",
                 )
-                log.error("stow_failed study=%s err=%s", study.name, exc)
+                log.error("stow_failed study=%s err=%s", study.name, last_exc)
+            # Breathing room so Orthanc can finish indexing before the next POST.
+            time.sleep(INTER_STUDY_SLEEP)
 
     log.info(
         "orthanc_load_complete skipped=%d done=%d failed=%d files=%d",
