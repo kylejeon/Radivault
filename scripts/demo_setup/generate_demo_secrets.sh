@@ -53,8 +53,8 @@ cat > "$ENV_FILE" <<EOF
 # 프로덕션/파일럿 배포에서 재사용 금지.
 
 # --- Upstream services (로컬 docker-compose 기본값) ---
-CENTRAL_INGEST_URL=http://localhost:8001
-SEARCH_URL=http://localhost:8003
+CENTRAL_INGEST_URL=http://localhost:8000
+SEARCH_URL=http://localhost:8001
 FULFILLMENT_URL=http://localhost:8002
 
 # --- BFF 세션 ---
