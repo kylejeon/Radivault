@@ -128,106 +128,118 @@ export function HospitalDashboard() {
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <TileCard
-        title="오늘 / 누적 제공 스터디"
-        value={
-          stats ? (
-            <div>
-              <span className="text-primary">{stats.studies.today.toLocaleString()}</span>
-              <span className="mx-2 text-ink-subtle">/</span>
-              <span>{stats.studies.cumulative.toLocaleString()}</span>
-            </div>
-          ) : (
-            <span className="skeleton inline-block h-8 w-32" />
-          )
-        }
-        subtitle="오늘 / 누적"
-      />
-
-      <TileCard
-        title="예상 수익 (시뮬레이션)"
-        value={
-          stats ? (
-            <span>₩ {simulateRevenueKrw(stats.studies.cumulative).toLocaleString("ko-KR")}</span>
-          ) : (
-            <span className="skeleton inline-block h-8 w-36" />
-          )
-        }
-        subtitle="누계"
-        footer="시뮬레이션 — v0.2 정산 대기"
-      >
-        {stats ? (
-          <MonthlyBarChart data={stats.studies.monthly_12m} />
-        ) : null}
-      </TileCard>
-
-      <TileCard title="기여 지역">
-        <div className="h-44 w-full">
-          <KoreaHeatmap regions={PLACEHOLDER_REGIONS} />
-        </div>
-      </TileCard>
-
-      <TileCard title="Gateway 상태">
-        {stats ? (
-          <div className="flex flex-col gap-2">
-            <div className={"flex items-center gap-2 text-lg font-semibold " + statusPillClass(stats.gateway_health.status)}>
-              <span className="inline-block size-2.5 rounded-full bg-current" />
-              {statusLabelKo(stats.gateway_health.status)}
-            </div>
-            {stats.gateway_health.last_sync_at ? (
-              <div className="text-xs text-ink-subtle">
-                마지막 동기화:{" "}
-                {new Date(stats.gateway_health.last_sync_at).toLocaleTimeString("ko-KR")}
+      <div data-testid="tile-b1-studies">
+        <TileCard
+          title="오늘 / 누적 제공 스터디"
+          value={
+            stats ? (
+              <div>
+                <span className="text-primary">{stats.studies.today.toLocaleString()}</span>
+                <span className="mx-2 text-ink-subtle">/</span>
+                <span>{stats.studies.cumulative.toLocaleString()}</span>
               </div>
             ) : (
-              <div className="text-xs text-ink-subtle">동기화 기록 없음</div>
-            )}
-          </div>
-        ) : (
-          <span className="skeleton inline-block h-8 w-24" />
-        )}
-      </TileCard>
+              <span className="skeleton inline-block h-8 w-32" />
+            )
+          }
+          subtitle="오늘 / 누적"
+        />
+      </div>
 
-      <TileCard title="최근 주문 스트림">
-        {orders ? (
-          orders.orders.length === 0 ? (
-            <p className="text-sm text-ink-subtle">아직 주문이 없습니다.</p>
+      <div data-testid="tile-b2-revenue">
+        <TileCard
+          title="예상 수익 (시뮬레이션)"
+          value={
+            stats ? (
+              <span>₩ {simulateRevenueKrw(stats.studies.cumulative).toLocaleString("ko-KR")}</span>
+            ) : (
+              <span className="skeleton inline-block h-8 w-36" />
+            )
+          }
+          subtitle="누계"
+          footer="시뮬레이션 — v0.2 정산 대기"
+        >
+          {stats ? (
+            <MonthlyBarChart data={stats.studies.monthly_12m} />
+          ) : null}
+        </TileCard>
+      </div>
+
+      <div data-testid="tile-b3-map">
+        <TileCard title="기여 지역">
+          <div className="h-44 w-full">
+            <KoreaHeatmap regions={PLACEHOLDER_REGIONS} />
+          </div>
+        </TileCard>
+      </div>
+
+      <div data-testid="tile-b4-gateway">
+        <TileCard title="Gateway 상태">
+          {stats ? (
+            <div className="flex flex-col gap-2">
+              <div className={"flex items-center gap-2 text-lg font-semibold " + statusPillClass(stats.gateway_health.status)}>
+                <span className="inline-block size-2.5 rounded-full bg-current" />
+                {statusLabelKo(stats.gateway_health.status)}
+              </div>
+              {stats.gateway_health.last_sync_at ? (
+                <div className="text-xs text-ink-subtle">
+                  마지막 동기화:{" "}
+                  {new Date(stats.gateway_health.last_sync_at).toLocaleTimeString("ko-KR")}
+                </div>
+              ) : (
+                <div className="text-xs text-ink-subtle">동기화 기록 없음</div>
+              )}
+            </div>
           ) : (
-            <ul className="flex flex-col gap-1.5 text-sm">
-              {orders.orders.slice(0, 5).map((o) => (
-                <li key={o.order_id_masked + o.submitted_at} className="flex items-center justify-between">
-                  <code className="font-mono text-xs text-ink-muted">{o.order_id_masked}</code>
-                  <span>{o.n_studies.toLocaleString()} 스터디</span>
-                  <span className="text-xs text-ink-subtle">{o.phase}</span>
+            <span className="skeleton inline-block h-8 w-24" />
+          )}
+        </TileCard>
+      </div>
+
+      <div data-testid="tile-b5-orders">
+        <TileCard title="최근 주문 스트림">
+          {orders ? (
+            orders.orders.length === 0 ? (
+              <p className="text-sm text-ink-subtle">아직 주문이 없습니다.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {orders.orders.slice(0, 5).map((o) => (
+                  <li key={o.order_id_masked + o.submitted_at} className="flex items-center justify-between">
+                    <code className="font-mono text-xs text-ink-muted">{o.order_id_masked}</code>
+                    <span>{o.n_studies.toLocaleString()} 스터디</span>
+                    <span className="text-xs text-ink-subtle">{o.phase}</span>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : (
+            <span className="skeleton inline-block h-8 w-32" />
+          )}
+        </TileCard>
+      </div>
+
+      <div data-testid="tile-b6-audit">
+        <TileCard title="최근 감사 이벤트">
+          {audit ? (
+            <ul className="flex flex-col gap-1 text-xs">
+              {audit.events.slice(0, 10).map((e, i) => (
+                <li key={e.hash_short + i} className="grid grid-cols-[5rem_1fr_5rem] items-center gap-2">
+                  <code className="text-ink-subtle">
+                    {new Date(e.ts).toLocaleTimeString("ko-KR")}
+                  </code>
+                  <span>{e.event_type}</span>
+                  <code className="text-right font-mono text-ink-subtle">{e.hash_short}</code>
                 </li>
               ))}
+              {audit.events.length === 0 ? (
+                <li className="text-ink-subtle">이벤트 없음</li>
+              ) : null}
             </ul>
-          )
-        ) : (
-          <span className="skeleton inline-block h-8 w-32" />
-        )}
-      </TileCard>
-
-      <TileCard title="최근 감사 이벤트">
-        {audit ? (
-          <ul className="flex flex-col gap-1 text-xs">
-            {audit.events.slice(0, 10).map((e, i) => (
-              <li key={e.hash_short + i} className="grid grid-cols-[5rem_1fr_5rem] items-center gap-2">
-                <code className="text-ink-subtle">
-                  {new Date(e.ts).toLocaleTimeString("ko-KR")}
-                </code>
-                <span>{e.event_type}</span>
-                <code className="text-right font-mono text-ink-subtle">{e.hash_short}</code>
-              </li>
-            ))}
-            {audit.events.length === 0 ? (
-              <li className="text-ink-subtle">이벤트 없음</li>
-            ) : null}
-          </ul>
-        ) : (
-          <span className="skeleton inline-block h-8 w-32" />
-        )}
-      </TileCard>
+          ) : (
+            <span className="skeleton inline-block h-8 w-32" />
+          )}
+        </TileCard>
+      </div>
     </div>
   );
 }

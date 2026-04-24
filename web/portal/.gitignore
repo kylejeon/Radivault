@@ -9,3 +9,7 @@ coverage
 dist
 *.tsbuildinfo
 .DS_Store
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/

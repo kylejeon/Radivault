@@ -1409,3 +1409,77 @@ Kyle이 pip install -e ".[demo-seed]" + bash scripts/demo_seed/inject_all.sh
   검증. 가정 기반 아님.
 - UPENN-GBM CC-BY 라이선스는 TCIA 페이지 최종 확인 권고 (Kyle 법무
   flag 에 추가). 대부분 CC-BY 지만 특정 series 에 제약 있을 수 있음.
+
+
+## 2026-04-24 — Session 17 (@developer, portal-e2e Playwright 3 시나리오)
+
+### 뭘 했나
+CEO 미팅 D-14 데모 리허설 안전망. Playwright 1.59.1 + 3 spec 파일 +
+2 fixture 모듈 + playwright.config.ts. TCIA seed 와 병렬 착수 (독립).
+
+- **playwright.config.ts**: reuseExistingServer=true (Kyle 의 port 3000
+  dev server 재사용), chromium-only, retries=0, list+html reporter,
+  bypassCSP=true (Next dev 의 eval() 차단 해결).
+- **e2e/fixtures/mocks.ts** (304 줄): page.route 기반 mock 팩토리 7 종 +
+  default 응답 dataset. `blockRealUpstream(page)` 으로 unmocked /api/*
+  호출을 599 로 차단 (tripwire). dev-spec §4 / §7 응답 shape 정확 준수.
+- **e2e/fixtures/session.ts** (87 줄): iron-session sealData 로
+  `rv_session` / `rv_hospital_session` 쿠키 직접 주입. .env.local 의
+  SESSION_PASSWORD 를 재사용 — 실 dev server 와 동일 비밀.
+- **e2e/search-flow.spec.ts** (3 tests): signed-in → /search → facet
+  filter (CT + CHEST) → 3 rows 확인 / zero-result EmptyState.
+- **e2e/order-flow.spec.ts** (2 tests): 3 study 선택 → DUA → Confirm →
+  /orders/{id} redirect → PhaseStepper accepted. 422 validation fail
+  시 modal 유지 + ErrorBanner 검증.
+- **e2e/hospital-dashboard.spec.ts** (3 tests): 6 tiles (B-1..B-6)
+  data-testid 로 전부 로드 확인 + gateway warning 상태 / no-live-upstream
+  tripwire 증명.
+
+### 어디까지 됐나
+- 8 e2e tests 전부 PASS (2회 연속 stable)
+- vitest 10 PASS 유지 (baseline), typecheck clean, next lint clean
+- HospitalDashboard.tsx 에 6 `data-testid` 추가 (기존 컴포넌트 비파괴)
+- package.json: @playwright/test ^1.59.1 + 3 script (e2e, e2e:ui,
+  e2e:install). vitest.config.ts: exclude e2e/**
+
+### 판단 기록
+- **bypassCSP=true 선택 근거**: 현 next.config.mjs CSP 는 prod-grade
+  (`script-src 'self' 'unsafe-inline'` — unsafe-eval 없음). Next dev
+  HMR 은 eval() 필수 → 실제로 React hydration 가 prod CSP 에서 막힘.
+  dev-spec FR-X-5 는 `'unsafe-eval'(Next dev only)` 명시이지만 현
+  config 미반영 (latent bug, 별 건). e2e 는 Playwright bypassCSP 로
+  회피 — app 쪽 변경 없음.
+- **session cookie 주입 vs UI sign-in**: 실제 /api/session 은 metadata-index
+  /v1/search/facets probe 수행 → 실 upstream 필요. iron-session sealData
+  로 쿠키 직접 주입이 mock-only 철학과 일치. UI sign-in 플로우는
+  mockBuyerSignIn helper 로 보존 (future spec 용).
+- **hospital URL 스펙 괴리**: dev-spec §3.B 는 `/hospital/{gateway_id}`
+  path param 이지만 v0.1 구현은 `/hospital` (cookie 에 hospital_id
+  저장). 테스트는 구현 실체 기준 — README 에 명시.
+- **testid 추가 최소**: 6 tile 에만 `data-testid="tile-b{1..6}-*"`.
+  나머지는 role/aria 로 선택 가능 → 추가 금지. design-spec §6 명명
+  규칙과 충돌 없음.
+
+### 수정·추가 파일 (이번 세션)
+- web/portal/playwright.config.ts (신규, 52 줄)
+- web/portal/e2e/fixtures/mocks.ts (신규, 304 줄)
+- web/portal/e2e/fixtures/session.ts (신규, 101 줄)
+- web/portal/e2e/search-flow.spec.ts (신규, 86 줄)
+- web/portal/e2e/order-flow.spec.ts (신규, 105 줄)
+- web/portal/e2e/hospital-dashboard.spec.ts (신규, 108 줄)
+- web/portal/e2e/README.md (신규, 10 줄)
+- web/portal/package.json — @playwright/test + 3 script
+- web/portal/package-lock.json — @playwright/test 1.59.1 tree
+- web/portal/vitest.config.ts — e2e/** exclude
+- web/portal/.gitignore — playwright-report/ · test-results/ · playwright/.cache/
+- web/portal/src/app/hospital/HospitalDashboard.tsx — 6 data-testid wrapper div
+
+### 다음에 뭘 하나
+- @qa — portal-e2e 시나리오 커버리지 + design-spec selector 준수 리뷰
+  (특히 role/aria 우선 원칙 · data-testid 6건 네이밍 · mock 응답 shape
+  drift 위험).
+- Kyle 리허설: `cd web/portal && npm run e2e` 한 줄 실행 → 데모 전
+  5초 smoke. 실패 시 "지금 화면에서 보는 게 production 과 같은 동작인지"
+  바로 확인 가능.
+- 선택적: bypassCSP 가 아닌 실제 CSP 수정 (`'unsafe-eval'` dev-only
+  추가) — 별 건 backlog. CEO 미팅 D-14 내 불요.
