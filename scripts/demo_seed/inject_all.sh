@@ -7,7 +7,7 @@
 # Steps:
 #   1. download_tcia.py           — TCIA → local cache (idempotent)
 #   2. load_orthanc.py            — cache  → Orthanc STOW-RS (idempotent)
-#   3. gateway-admin run --once   — Orthanc → De-ID → Central
+#   3. radivault-gateway sync-once — Orthanc → De-ID → Central
 #   4. seed_buyer.py              — demo buyer + API key
 #   5. seed_hospital.py           — demo hospital row (token optional)
 #   6. verify.py                  — V-1..V-8 checks + demo_seed_ready.lock
@@ -83,20 +83,22 @@ else
 fi
 
 # --- Step 3: Gateway flow A (once) ----------------------------------------
+GATEWAY_CONFIG="${REPO_ROOT}/configs/demo_gateway.yaml"
 if [[ "${DEMO_SEED_SKIP_GATEWAY:-0}" == "1" ]]; then
-  say "STEP 3/6 SKIPPED: gateway-admin run --once (DEMO_SEED_SKIP_GATEWAY=1)"
+  say "STEP 3/6 SKIPPED: radivault-gateway sync-once (DEMO_SEED_SKIP_GATEWAY=1)"
 else
-  say "STEP 3/6: gateway-admin run --once (host-side CLI)"
-  if ! command -v gateway-admin >/dev/null 2>&1; then
-    say "WARN: gateway-admin not on PATH — skipping step 3."
+  say "STEP 3/6: radivault-gateway sync-once (host-side CLI, config=${GATEWAY_CONFIG})"
+  if ! command -v radivault-gateway >/dev/null 2>&1; then
+    say "WARN: radivault-gateway not on PATH — skipping step 3."
     say "      Install with: pip install -e . (from repo root)"
-    say "      Or run manually inside a gateway container."
+    say "      Or activate the venv: source .venv/bin/activate"
+  elif [[ ! -f "${GATEWAY_CONFIG}" ]]; then
+    say "WARN: gateway config missing: ${GATEWAY_CONFIG} — skipping step 3."
+    say "      Expected path: configs/demo_gateway.yaml (install-guide §6)."
   else
-    gateway-admin run --once \
-      --batch-size 500 \
-      --target-hospital-id HOSP-001 \
+    radivault-gateway -c "${GATEWAY_CONFIG}" sync-once \
       2>&1 | tee -a "${LOG_FILE}" || {
-        say "WARN: gateway-admin returned non-zero. Continuing — verify.py will catch residual failures."
+        say "WARN: radivault-gateway sync-once returned non-zero. Continuing — verify.py will catch residual failures."
       }
   fi
 fi

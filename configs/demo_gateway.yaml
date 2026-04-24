@@ -1,0 +1,80 @@
+# RadiVault Gateway Agent — demo / CEO rehearsal configuration.
+#
+# Target: host-mode execution against docker-compose services on localhost.
+# PACS     = radivault-orthanc-1 (AUTHENTICATION_ENABLED=false)
+# Central  = radivault-central-1 (port 8000)
+# Hospital = HOSP-001 (seeded by install-guide §6)
+#
+# Salt and upload_token are demo-grade. Rotate for pilot. Long-term the
+# `${file:...}` substitution pattern + issued per-gateway credentials
+# (dev-spec FR-20..FR-22) is expected.
+#
+# Created 2026-04-24 Session 16 after inject_all.sh STEP 3 surfaced the
+# `gateway-admin` CLI name gap. Paired with inject_all.sh fix.
+
+version: 1
+
+agent:
+  gateway_id: "gw_demo_local"
+  hospital_id: "HOSP-001"
+  org_root_oid: "2.25.140737488355328"
+
+pacs:
+  base_url: "http://localhost:8042/dicom-web"
+  auth:
+    type: "basic"
+    # Orthanc auth disabled in docker-compose.yml; schema still requires
+    # the block. Any credentials pass.
+    username: "orthanc"
+    password: "orthanc"
+  max_concurrency: 2
+  poll_interval_seconds: 60
+  query:
+    # MG added for CBIS-DDSM (mammography); PT for potential PET data.
+    modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
+    # TCIA data is often several years old; wide lookback so QIDO picks
+    # up all of it regardless of StudyDate.
+    lookback_days: 3650
+
+deid:
+  ruleset_version: "v0.1.0"
+  # 64 hex chars = 32 bytes. Demo-only literal; production path is per-
+  # hospital salt issued by central + stored in a runtime credentials
+  # directory (${file:/run/credentials/salt}).
+  salt: "d19e2c47a0f38b95e5c11a7e6f4b8273e9a04d1c3f7b26580d9e4c8a1b3f5d72"
+  salt_version: 1
+  burnin_quarantine_modalities: ["SC", "US", "OT"]
+  retain_options:
+    longitudinal_dates: true
+    patient_characteristics: true
+    clean_descriptors: true
+    clean_graphics: true
+    safe_private: false
+    uids: false
+    institution_identity: false
+    device_identity: "partial"
+
+staging:
+  root: "./demo_data/gateway/staging"
+  retention_hours: 72
+  max_disk_pct: 80
+
+state:
+  db_path: "./demo_data/gateway/state.sqlite3"
+
+audit:
+  path: "./demo_data/gateway/audit.log"
+  anchor_interval_seconds: 3600
+
+central:
+  base_url: "http://localhost:8000"
+  # Reuses HOSP-001 bearer issued 2026-04-24. If rotated, regenerate via
+  # `docker exec radivault-central-1 ingest-admin token issue ...`
+  upload_token: "rvct_1a8fe44e.dEiQrif9moLY69D5XY7SJtGusAvNe-P7YIpBRodyh1UhJtjv"
+  upload_timeout_seconds: 600
+  max_upload_retries: 3
+
+logging:
+  level: "INFO"
+  json: false
+  console_color: "never"
