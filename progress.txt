@@ -1197,3 +1197,67 @@ fix + 커밋 정리.
   Session 3 N-1 선례, developer agent 재호출 오버헤드 대비 이익 낮음.
   QA round 2 생략 — 변경 scope가 기존 PASS 조건의 복원일 뿐, 새 공격
   면 없음.
+
+## 2026-04-24 — Session 13 (@developer, tcia-seed 6-file 구현)
+
+### 뭘 했나
+CEO 미팅 D-10 영업일 기한에 맞춰 buyer-portal-demo dev-spec §8 (FR-S-4
+..S-12) 의 demo-seed 파이프라인 6 개 파일 전부 구현 + 단위 테스트.
+dev-spec 은 별도 파일 없이 buyer-portal-demo §8 에 embed — 신규 dev-spec
+작성 없이 §8 FR-S-* 를 수용 기준으로 삼음.
+
+**커밋 4건 (5ea682d → ccfd560)**
+1. 5ea682d feat(demo-seed): wire tcia_utils fetch into download_tcia.py
+   - NotImplementedError 제거, tcia_utils.nbia 어댑터 (TCIAClient 클래스)
+   - 지수 백오프 retry 3회, pydicom header-only 검증, _manifest.sha256
+   - ERR_SEED_CONFIG_MISSING 한영 stderr (AC-S-6)
+   - pyproject.toml [demo-seed] extras (tcia_utils, requests, pyyaml,
+     httpx, pydicom)
+   - .gitignore: demo_data/, .buyer_key.local.txt, demo_seed_ready.lock,
+     logs/
+2. 2ab4b5d feat(demo-seed): STOW-RS uploader load_orthanc.py
+   - multipart/related (RFC 7578) 페이로드 빌더, per-study 트랜잭션
+   - check_orthanc SystemExit(3) + 한영 ERR_SEED_ORTHANC_DOWN 힌트
+   - _orthanc_uploaded.marker 재실행 시 skip
+3. fd20a78 feat(demo-seed): seed_buyer.py + seed_hospital.py
+   - seed_buyer: search-admin buyer create + key issue (docker exec),
+     idempotent (ERR_ADMIN_BUYER_DUPLICATE 성공 처리), 0600 키 파일 출력
+   - seed_hospital: ingest-admin init-hospital 얇은 래퍼. 기본은 token
+     미발급 (install-guide §6 / .env.local 중복 회피). --issue-token 옵션
+4. ccfd560 feat(demo-seed): verify.py V-1..V-8 + inject_all.sh
+   - 8 개 검사 (DB/HTTP/subprocess injectable) → demo_seed_ready.lock
+   - inject_all.sh: set -euo pipefail, 6 단계 오케스트레이션, tee 로그,
+     DEMO_SEED_SKIP_* 플래그 3 종, DEMO_SEED_ACCEPT_RESTRICTED,
+     DEMO_SEED_ISSUE_HOSPITAL_TOKEN
+
+### 어디까지 됐나
+- 코드 6 파일 + 테스트 4 파일 (conftest 포함) 완료. 실 네트워크 없이
+  CI-hermetic 테스트 전수 통과.
+- Python 단위 테스트 신규 45 개 (download 7 + orthanc 5 + buyer 6 +
+  hospital 5 + verify 22). 기존 baseline 407 → 452 passed + 4 skipped.
+- ruff clean (scripts/demo_seed/, tests/demo_seed/). 기존 alembic
+  경고 6건은 사전 존재 — 이번 범위 아님.
+- CLI --help 전수 동작 확인. 스모크 테스트: --plan-only 300-study
+  플랜 JSON 출력, --dry-run placeholder 생성.
+
+### 판단 기록
+- **seed_hospital 범위**: install-guide §6 + generate_demo_secrets.sh 와
+  겹침 → 얇게 유지 (init-hospital idempotent + optional token). .env.local
+  자동 편집 금지 (dev-spec "하지 말 것" #5).
+- **LIDC-IDRI RESTRICTED**: 기본 skip, --accept-restricted 또는
+  DEMO_SEED_ACCEPT_RESTRICTED=1 해제. Kyle DUA 전까지 유지.
+- **실 TCIA 400-study 다운로드**: 수행 안 함 (하룻밤 소요, Kyle 직접
+  실행). 이번 scope = "한 줄 실행 준비 완료"까지.
+- **inject_all.sh 의 gateway-admin**: host PATH 없으면 WARN + skip.
+  Orthanc→De-ID→Central 체인은 Kyle 이 R-1 리허설에서 실제 검증.
+
+### 다음에 뭘 하나
+- @qa — tcia-seed 검수 (FR-S-4..S-12, AC-S-1..S-6 매트릭스 + 보안 검토).
+  특히 L-3 (presigned URL 로그 금지), L-1 (PHI leak V-6 negative test)
+  독립 검증 권장.
+- R-1 리허설 실행 (Kyle): bash scripts/demo_seed/inject_all.sh → 30 분
+  내 demo_seed_ready.lock 생성 확인. 실 TCIA 네트워크 세션은 Kyle 별도
+  수행.
+- Kyle 결정 사항 (진행 중):
+  1. LIDC-IDRI DUA 체결 여부 → --accept-restricted 영구 활성 여부
+  2. Demo 운영 계정 회전 정책 (rv_live_demo001 key expiry 180일 기본)
