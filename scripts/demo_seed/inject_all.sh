@@ -96,7 +96,9 @@ else
     say "WARN: gateway config missing: ${GATEWAY_CONFIG} — skipping step 3."
     say "      Expected path: configs/demo_gateway.yaml (install-guide §6)."
   else
-    radivault-gateway -c "${GATEWAY_CONFIG}" sync-once \
+    # --since 2000-01-01 overrides the pacs.query.lookback_days cap (max 365).
+    # TCIA historic StudyDate spans ~2000-2020, so we cast a wide net here.
+    radivault-gateway -c "${GATEWAY_CONFIG}" sync-once --since 2000-01-01 \
       2>&1 | tee -a "${LOG_FILE}" || {
         say "WARN: radivault-gateway sync-once returned non-zero. Continuing — verify.py will catch residual failures."
       }

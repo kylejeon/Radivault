@@ -32,9 +32,9 @@ pacs:
   query:
     # MG added for CBIS-DDSM (mammography); PT for potential PET data.
     modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
-    # TCIA data is often several years old; wide lookback so QIDO picks
-    # up all of it regardless of StudyDate.
-    lookback_days: 3650
+    # Schema max 365. TCIA data is historic (2000+), so inject_all.sh
+    # passes `--since 2000-01-01` on sync-once to override via CLI.
+    lookback_days: 365
 
 deid:
   ruleset_version: "v0.1.0"
@@ -68,6 +68,9 @@ audit:
 
 central:
   base_url: "http://localhost:8000"
+  # Demo/local-only: central runs on plain HTTP inside docker-compose.
+  # Production must use TLS; this override is for localhost dev.
+  allow_insecure: true
   # Reuses HOSP-001 bearer issued 2026-04-24. If rotated, regenerate via
   # `docker exec radivault-central-1 ingest-admin token issue ...`
   upload_token: "rvct_1a8fe44e.dEiQrif9moLY69D5XY7SJtGusAvNe-P7YIpBRodyh1UhJtjv"
