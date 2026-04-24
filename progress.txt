@@ -1290,3 +1290,42 @@ dev-spec 은 별도 파일 없이 buyer-portal-demo §8 에 embed — 신규 dev
 - Kyle R-1 리허설 (실 TCIA 다운로드 + inject_all.sh 30분 목표 실측)
 - 선택적 @developer 호출: M-1 retries=5 로 1줄 수정 (재 QA 불요)
 - Kyle 결정 대기: FR-S-7 "5회 vs 3회" 방향, --accept-restricted 기본 정책
+
+
+## 2026-04-24 — Session 15 (Claude 메인, Kyle 결정 반영 + M-1 직접 수정)
+
+### 뭘 했나
+Kyle "내 결정 대기 항목은 네의 의견대로 진행해줘" 수락. 3건 결정
+확정 + M-1 1줄 수정 (Session 3·12 선례: trivial fix 는 메인 세션 직접
+처리, @developer 재호출·@qa 재검수 모두 생략). 커밋 d6a7fb4.
+
+### Kyle 결정 3건 확정
+1. **FR-S-7 retries**: 코드 쪽 수정 (3→5). `DEFAULT_RETRIES = 5`.
+   근거: TCIA NBIA flaky timeout 대비 복원력. 스펙 완화는 리스크.
+   파일: scripts/demo_seed/download_tcia.py:54
+2. **`--accept-restricted` 기본값**: 기본 skip 유지 (변경 없음).
+   근거: DUA 미체결 법무 리스크 > LIDC 데모 설득력 손실.
+3. **M-2 10GB 캐시 경고**: v0.1.1 백로그 defer (변경 없음).
+   근거: CEO 미팅 D-14 타임라인 영향 없음.
+
+### 수정 결과
+- scripts/demo_seed/download_tcia.py:54 — DEFAULT_RETRIES 3→5
+- tests/demo_seed/ 45 PASS 유지, ruff clean
+
+### 어디까지 됐나
+- tcia-seed v0.1 QA 블로커 완전 해소
+- Kyle R-1 리허설 실 실행 대기 (가장 임팩트 큰 다음 단계)
+
+### 다음에 뭘 하나
+- Kyle 수동: bash scripts/demo_seed/inject_all.sh (하룻밤, 3~8h)
+- Kyle 결정 후 병렬 옵션:
+  - C: canned JSON 10건 녹화 (R-1 완료 후 Kyle 수동)
+  - P: Playwright e2e 3 시나리오 (@developer)
+  - F: fulfillment DSN 갭 (@planner→@developer)
+- v0.1.1 백로그 확정: M-2/M-3/M-4/M-5/M-6 + retries=5 실전 관측
+
+### 메모
+- 이번 세션에서 @developer·@qa 모두 예산 초과 없이 완주. 파이프라인
+  6-Phase 중 Phase 4→5 를 한 대화 세션에 소화.
+- 의존성 tcia_utils>=3.3 추가 (pyproject.toml [demo-seed] extras).
+  Kyle 머신에서 pip install -e ".[demo-seed]" 1회 실행 필요.
