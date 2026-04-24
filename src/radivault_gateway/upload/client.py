@@ -158,6 +158,11 @@ class UploadClient:
         """
         url = f"{self.base_url}/v1/ingest/studies"
         manifest_bytes = json.dumps(manifest).encode("utf-8")
+        # Central requires an Idempotency-Key (16-128 chars, [A-Za-z0-9_.-])
+        # for every POST /v1/ingest/studies. Keying on pseudo_study_uid makes
+        # Gateway retries of the same logical study deduplicate server-side.
+        idempotency_key = f"upload-{manifest['pseudo_study_uid']}"[:128]
+        request_headers = {"Idempotency-Key": idempotency_key}
         attempt = 0
         delay = self._retry_initial
         started = time.time()
@@ -175,7 +180,7 @@ class UploadClient:
                     )
                 )
             try:
-                resp = self._client.post(url, files=files)
+                resp = self._client.post(url, files=files, headers=request_headers)
             except httpx.HTTPError as exc:
                 last_exc = UploadError(f"network error: {exc}", retryable=True)
                 if attempt < self.max_retries:

@@ -74,7 +74,11 @@ async def post_ingest(request: Request) -> dict:
     if not content_type.lower().startswith("multipart/"):
         raise IngestContentType()
 
-    form = await request.form()
+    # Starlette defaults (max_files=1000, max_part_size=1MB) are too low for
+    # DICOM studies: MR/CT series can exceed 1000 slices, and a single slice
+    # can exceed 1MB. Per-hospital manifest validator still enforces
+    # n_instances <= hospital.max_instances_per_study downstream.
+    form = await request.form(max_files=50_000, max_part_size=64 * 1024 * 1024)
     manifest_upload = form.get("manifest")
     files = form.getlist("files")
     if manifest_upload is None:
