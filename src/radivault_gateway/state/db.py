@@ -9,6 +9,7 @@ the v0.1 orchestrator the pipeline is single-threaded per study.
 from __future__ import annotations
 
 import enum
+import hashlib
 import sqlite3
 import threading
 from collections.abc import Iterable
@@ -42,20 +43,24 @@ CREATE TABLE IF NOT EXISTS patient_date_offset (
 );
 
 CREATE TABLE IF NOT EXISTS study_job (
-    pseudo_study_uid  TEXT PRIMARY KEY,
-    state             TEXT NOT NULL,
-    modalities        TEXT,
-    n_instances       INTEGER,
-    n_bytes           INTEGER,
-    first_seen_at     TEXT NOT NULL,
-    deided_at         TEXT,
-    uploaded_at       TEXT,
-    last_error        TEXT,
-    retry_count       INTEGER NOT NULL DEFAULT 0,
-    central_job_id    TEXT
+    pseudo_study_uid          TEXT PRIMARY KEY,
+    state                     TEXT NOT NULL,
+    modalities                TEXT,
+    n_instances               INTEGER,
+    n_bytes                   INTEGER,
+    first_seen_at             TEXT NOT NULL,
+    deided_at                 TEXT,
+    uploaded_at               TEXT,
+    last_error                TEXT,
+    retry_count               INTEGER NOT NULL DEFAULT 0,
+    central_job_id            TEXT,
+    original_study_uid_hash   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_study_job_state ON study_job(state);
 CREATE INDEX IF NOT EXISTS idx_study_job_first_seen ON study_job(first_seen_at);
+-- idx_study_job_original_hash is created in _migrate() after the
+-- ``original_study_uid_hash`` column is guaranteed present (handles both
+-- fresh DBs and legacy DBs that predate the column).
 
 CREATE TABLE IF NOT EXISTS quarantine (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +136,18 @@ def _utcnow() -> str:
     return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _hash_original_uid(original_uid: str) -> str:
+    """16-char SHA-256 prefix of the original Study Instance UID.
+
+    Used as a Gateway-only short-circuit key so we can decide whether a study
+    has already been uploaded to Central without reversing the one-way pseudo
+    UID derivation. The 16-char prefix is collision-safe at any realistic
+    Gateway scale (2^32 studies before a 50% collision chance) while staying
+    small enough for a compact sqlite index.
+    """
+    return hashlib.sha256(original_uid.encode("utf-8")).hexdigest()[:16]
+
+
 class StateDB:
     """Facade over the SQLite state database.
 
@@ -149,6 +166,24 @@ class StateDB:
     def _migrate(self) -> None:
         with self._lock:
             self._conn.executescript("PRAGMA journal_mode=WAL;\nPRAGMA foreign_keys=ON;\n" + SCHEMA)
+            # gateway-sync-skip-uploaded: ensure the ``original_study_uid_hash``
+            # column exists on legacy DBs (pre-migration) before we declare the
+            # index on it. On fresh DBs the column is already in SCHEMA; on
+            # legacy DBs we ALTER TABLE to add it NULLable — backfill is
+            # intentionally skipped (the pseudo UID is one-way, we cannot
+            # recover the original Study Instance UID from it).
+            existing_cols = {
+                row["name"]
+                for row in self._conn.execute("PRAGMA table_info('study_job')").fetchall()
+            }
+            if "original_study_uid_hash" not in existing_cols:
+                self._conn.execute(
+                    "ALTER TABLE study_job ADD COLUMN original_study_uid_hash TEXT"
+                )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_study_job_original_hash "
+                "ON study_job(original_study_uid_hash)"
+            )
 
     def close(self) -> None:
         with self._lock:
@@ -277,25 +312,61 @@ class StateDB:
         state: StudyState,
         *,
         last_error: str | None = None,
+        original_uid: str | None = None,
     ) -> None:
+        """Update the state column (and timestamp columns) for a study_job row.
+
+        When ``original_uid`` is supplied we also persist its 16-char SHA-256
+        hash so a later ``is_study_uploaded()`` lookup can short-circuit the
+        fetch/de-id work. Callers should supply ``original_uid`` whenever they
+        have it available — most importantly on the UPLOADED transition — so
+        the skip check survives Gateway restarts. Other transitions tolerate
+        the extra bookkeeping harmlessly (UPDATE-with-COALESCE preserves an
+        existing hash if this call omits it).
+        """
         ts_field_map = {
             StudyState.DEIDED: "deided_at",
             StudyState.UPLOADED: "uploaded_at",
         }
         now = _utcnow()
+        orig_hash = _hash_original_uid(original_uid) if original_uid is not None else None
         with self._lock:
             if state in ts_field_map:
                 field = ts_field_map[state]
                 self._conn.execute(
-                    f"UPDATE study_job SET state=?, {field}=?, last_error=? "
+                    f"UPDATE study_job SET state=?, {field}=?, last_error=?, "
+                    "original_study_uid_hash=COALESCE(?, original_study_uid_hash) "
                     "WHERE pseudo_study_uid=?",
-                    (state.value, now, last_error, pseudo_study_uid),
+                    (state.value, now, last_error, orig_hash, pseudo_study_uid),
                 )
             else:
                 self._conn.execute(
-                    "UPDATE study_job SET state=?, last_error=? WHERE pseudo_study_uid=?",
-                    (state.value, last_error, pseudo_study_uid),
+                    "UPDATE study_job SET state=?, last_error=?, "
+                    "original_study_uid_hash=COALESCE(?, original_study_uid_hash) "
+                    "WHERE pseudo_study_uid=?",
+                    (state.value, last_error, orig_hash, pseudo_study_uid),
                 )
+
+    def is_study_uploaded(self, original_study_uid: str) -> bool:
+        """Return True when this original Study Instance UID has a completed
+        UPLOADED row in the state DB.
+
+        Looks up by 16-char SHA-256 prefix (same hash scheme ``mark_state``
+        writes). Rows where ``original_study_uid_hash`` is NULL — typically
+        rows persisted before this column existed — are treated as "unknown"
+        and will be re-processed on the first run after the migration. This
+        is intentional: we cannot reverse the pseudo UID to backfill the
+        hash, so existing rows pay a one-off re-fetch cost and skip works
+        from the second run onwards (§8 dev-spec notes).
+        """
+        key = _hash_original_uid(original_study_uid)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM study_job "
+                "WHERE original_study_uid_hash = ? AND state = ? LIMIT 1",
+                (key, StudyState.UPLOADED.value),
+            ).fetchone()
+        return row is not None
 
     def increment_retry(self, pseudo_study_uid: str) -> int:
         with self._lock:

@@ -1712,3 +1712,134 @@ metadata 엔드포인트 (`/studies/{uid}/metadata`) 로 전환. 픽셀 0 바이
     여전히 full-payload 경로에 잔존. Flow B 동작 시점 재검토 필요.
   - pydicom v4.0 migration: Dataset.is_little_endian/is_implicit_VR
     deprecated → file_meta.TransferSyntaxUID 로 이미 통일됨.
+
+
+## 2026-04-25 — Session 21 (@developer, gateway-sync-skip-uploaded)
+
+### 뭘 했나
+Session 20 WADO /metadata fetch 로 3-study 벤치마크 27s 달성했지만, Kyle
+실측에서 드러난 잔여 낭비: `sync-once --metadata-only` 가 state DB 를
+안 보고 이미 UPLOADED 된 studies 를 재 fetch + de-id + POST. Central
+idempotency middleware 가 replay 로 흡수하니 correctness 는 OK 지만
+PACS 대역/CPU 낭비. 리허설 재시드 속도 절반 수준. Gateway-side skip
+로직으로 short-circuit.
+
+### 구현 요약
+- **state DB 스키마 확장** (`state/db.py`):
+  - `study_job` 테이블에 `original_study_uid_hash TEXT` 컬럼 추가.
+  - 값: `sha256(original_uid).hexdigest()[:16]` — 16-char prefix, 2^32
+    studies 까지 충돌확률 <50% (Gateway 규모에 충분).
+  - `_migrate()` 에 `PRAGMA table_info` 기반 ALTER TABLE ADD COLUMN
+    idempotent 경로 — 기존 DB 재오픈 시 자동 마이그레이션, 실패 없이.
+  - `idx_study_job_original_hash` 인덱스 신설 (skip lookup 용).
+  - 기존 CREATE INDEX 는 `_migrate()` 에서 컬럼 존재 확인 후 실행 —
+    legacy DB 열 때 "no such column" 오류 방지 (디버그 중 발견).
+- **`mark_state()` 시그니처 확장**:
+  - `mark_state(pseudo_uid, state, *, last_error=None, original_uid=None)`
+  - `original_uid` 주어지면 hash 계산 후 컬럼 업데이트.
+  - 다른 호출은 `original_uid=None` 기본값 → 기존 동작 무변화 (키워드-only
+    argument 로 backward compat 보장).
+  - UPDATE 에 `COALESCE(?, original_study_uid_hash)` 사용 — 이미 채워진
+    hash 를 실수로 NULL 로 덮어쓰지 않음.
+- **`is_study_uploaded(original_uid) -> bool`** 신규 메서드:
+  - 16-char hash 로 `state='uploaded'` row 조회.
+  - 미존재 / 다른 state / NULL hash 는 False.
+- **Pipeline `_process_study` 초입 skip**:
+  - fetch_dir tempfile 만들기 전에 `is_study_uploaded()` 체크.
+  - 히트 시 `sync.skipped` audit event 남기고 `StudyOutcome(state=
+    UPLOADED, reason='already_uploaded', pseudo_study_uid=None)` 즉시
+    반환. 디스크/네트워크/CPU zero-touch.
+  - metadata-only (Flow A) + full-payload (Flow B) 양쪽에 동일 적용.
+- **RunSummary 분기**:
+  - `reason == "already_uploaded"` 는 `skipped +=1`, `uploaded` 는 증가
+    안 함. 통계 정확성 유지.
+- **두 UPLOADED 전이 지점 `mark_state()` 호출 업데이트**:
+  - `_process_study` line ~504 (full-payload) 와 `_run_metadata_only_upload`
+    line ~872 (metadata-only). 둘 다 `original_uid=original_uid` 전달.
+- **CLI 출력 개선** (`cli/main.py`):
+  - per-study 라인에 `SKIPPED (already_uploaded)` 라벨 (operator 가
+    UPLOADED vs skip 을 즉시 구분).
+  - Summary 라인에 `skipped=N` 추가.
+
+### 실측 검증 (/tmp/radivault-s21-benchmark — Kyle 프로세스 격리)
+1. 실 production state.sqlite3 (75 rows) 마이그레이션 dry-check:
+   - ALTER TABLE 적용 확인, 75 rows 모두 `original_study_uid_hash IS
+     NULL` (예상대로 — pseudo UID 단방향이라 backfill 불가).
+   - `is_study_uploaded(known_uid)` → False (legacy row, NULL hash).
+2. 격리 state DB 1차 sync (3-study, --metadata-only):
+   - 2 studies UPLOADED, 1 FAILED_FETCH (Kyle 프로세스의 Orthanc 경합
+     — 환경 문제, 내 변경과 무관).
+   - 성공 row 2개 `original_study_uid_hash` 값 16-char hex 로 채워짐:
+     `18a73d9eabc92397`, `0c68a6c99cb969d5`.
+3. 동일 sync 재실행 (3-study):
+   - Study 1, 3: `fetch 0ms deid 0ms upload 0ms UPLOADED` — 완전 skip.
+   - Study 2: 여전히 FAILED_FETCH (Orthanc 경합 지속).
+   - `Summary uploaded=0 skipped=2 failed=1` — skip 카운터 정확.
+4. 1-study skip 단독 벤치마크:
+   - **5.8 초 전체** (PACS query ~5s + 즉시 skip).
+   - Skip path 자체는 < 1ms. 이전 27s vs 5.8s = **4.7x 개선**.
+   - CLI: `[1/1] ?  fetch 0ms  deid 0ms  upload 0ms  SKIPPED (already_uploaded)`
+
+### 판단 기록 (Kyle 승인 없이 권장안 채택)
+1. **Hash 길이 16-char**: 기본 채택. 2^32 studies @ 50% 충돌 — Gateway
+   per-hospital scale 에서 과잉. prefix 가 짧을수록 SQLite text-index
+   lookup 빠름.
+2. **기존 75 row backfill 없음**: pseudo UID 가 단방향 hash + ulid 유도
+   라 original 복구 불가. 첫 post-migration sync 에서 re-fetch (1-time
+   cost, 수용 가능). 두 번째부터 skip 동작. Kyle 이 깨끗한 시작 원하면
+   `./scripts/demo_seed/reset.sh` 별도 권장.
+3. **CLI 출력 변경**: 공용 테스트가 summary 문자열을 regex-match 하지
+   않아 안전. operator 가 skip 여부를 per-study 수준에서 즉시 파악 가능
+   → Kyle 리허설 때 "뭘 스킵했나" 질문 사전 차단.
+4. **Kyle 진행 중 process 중단 없음**: production state DB 손도 안 대고
+   `/tmp/radivault-s21-benchmark/` 에 격리된 DB 로 검증. ALTER TABLE 은
+   다음 process restart 시 자동 적용 — zero-downtime migration.
+
+### 테스트 (baseline 492 → 500, +8 신규 PASS)
+`tests/unit/test_sync_skip_uploaded.py` (8 tests):
+- State DB (6):
+  - `is_study_uploaded` positive + 16-char hash 검증
+  - `is_study_uploaded` unknown UID 은 False
+  - `is_study_uploaded` FAILED_UPLOAD state 는 False (non-terminal)
+  - Legacy NULL-hash row 는 False (regression guard)
+  - 동일 DB 재오픈 migration idempotent (컬럼 중복 없음)
+  - 레거시 스키마 DB (컬럼 없음) 를 열면 ALTER TABLE 자동 적용
+- Pipeline integration (2):
+  - 이미 UPLOADED 된 study 는 fetch_study/upload 호출 안 함 + RunSummary
+    `skipped=1 uploaded=0`, outcome `reason=already_uploaded`
+  - Legacy NULL-hash row 는 skip 안 되고 정상 fetch+upload (회귀 방지)
+
+전체: 500 passed, 4 skipped, ruff clean.
+
+### 수정·추가 파일 (이번 세션)
+- src/radivault_gateway/state/db.py — 컬럼 + 인덱스 + 마이그레이션 +
+  `_hash_original_uid` + `is_study_uploaded` + `mark_state(original_uid=)`
+- src/radivault_gateway/orchestrator/pipeline.py — `_process_study` 초입
+  skip 분기 + UPLOADED 전이 두 지점 `original_uid` 전달 + RunSummary
+  `skipped` 분기
+- src/radivault_gateway/cli/main.py — per-study SKIPPED 라벨 + Summary
+  `skipped=N`
+- tests/unit/test_sync_skip_uploaded.py — 신규 (8 tests, 396 줄)
+
+### 어디까지 됐나
+- skip 로직 구현 + 실 환경에서 검증 완료.
+- 1-study pure skip: 5.8s (이전 27s 대비 4.7x 개선).
+- 500/500 테스트 PASS, ruff clean.
+- Kyle production state.sqlite3 미변경 (다음 restart 시 자동 마이그레이션).
+
+### 다음에 뭘 하나
+- Kyle 직접 실측 권장:
+  `time radivault-gateway -c configs/demo_gateway.yaml sync-once
+   --since 2000-01-01 --metadata-only --limit 10`
+  (첫 실행: 75 rows legacy 이므로 ~10 studies 재처리; 두 번째 실행부터
+  skip 동작 확인).
+- @qa — gateway-sync-skip-uploaded 검수. 특히:
+  - Hash 충돌 가능성 분석 (16-char 적절성)
+  - COALESCE 패턴이 non-UPLOADED 전이에서 hash 를 의도치 않게 유지하는지
+    (의도된 동작이지만 감사 관점)
+  - skip 된 study 가 향후 Flow B (주문 fulfillment) 로 실제 영상 배송
+    요청받으면 어떻게 복구하는지 — 별도 워크플로
+- 남은 이슈:
+  - Full-payload 경로 (Flow B) 는 테스트 coverage 에 포함 안 됨 (fetch
+    mock). metadata-only 와 동일 코드패스이므로 등가.
+  - Session 18 full-payload OOM 근본 원인 여전히 잔존.

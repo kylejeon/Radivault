@@ -450,13 +450,19 @@ def sync_once(
     )
     for i, outcome in enumerate(summary.outcomes, 1):
         pseudo = outcome.pseudo_study_uid or "?"
+        # gateway-sync-skip-uploaded: surface the skip reason so operators can
+        # distinguish a true-UPLOADED cycle (first-time ingest) from a skipped
+        # one (already uploaded, fetch/de-id short-circuited).
+        state_label = outcome.state.value.upper()
+        if outcome.reason == "already_uploaded":
+            state_label = "SKIPPED (already_uploaded)"
         click.echo(
             f"[{i}/{summary.total}] {pseudo}  fetch {outcome.fetch_ms}ms  "
-            f"deid {outcome.deid_ms}ms  upload {outcome.upload_ms}ms  {outcome.state.value.upper()}"
+            f"deid {outcome.deid_ms}ms  upload {outcome.upload_ms}ms  {state_label}"
         )
     click.echo(
-        f"Summary  uploaded={summary.uploaded}  quarantined={summary.quarantined}  "
-        f"failed={summary.failed}"
+        f"Summary  uploaded={summary.uploaded}  skipped={summary.skipped}  "
+        f"quarantined={summary.quarantined}  failed={summary.failed}"
     )
     if summary.failed:
         sys.exit(1)

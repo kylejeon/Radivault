@@ -149,7 +149,12 @@ class Pipeline:
                 study, dry_run=dry_run, metadata_only=metadata_only
             )
             summary.outcomes.append(outcome)
-            if outcome.state == StudyState.UPLOADED:
+            if outcome.state == StudyState.UPLOADED and outcome.reason == "already_uploaded":
+                # gateway-sync-skip-uploaded: already ingested, short-circuited
+                # without touching PACS/de-id. Keep out of the uploaded counter
+                # so ``skipped`` accurately reflects no-op cycles.
+                summary.skipped += 1
+            elif outcome.state == StudyState.UPLOADED:
                 summary.uploaded += 1
             elif outcome.state == StudyState.QUARANTINED:
                 summary.quarantined += 1
@@ -179,6 +184,29 @@ class Pipeline:
         original_uid = study.study_instance_uid
         pseudo_uid: str | None = None
         fetch_dir: Path | None = None
+
+        # Gateway-side short-circuit (gateway-sync-skip-uploaded). Central's
+        # idempotency middleware already replays duplicate ingests correctly,
+        # but re-fetching and re-de-identifying an already-uploaded study
+        # wastes PACS bandwidth and CPU — noticeable during demo re-seeds and
+        # rehearsals. Skip before touching the filesystem so no tmp dirs are
+        # created. Applies equally to metadata-only (Flow A) and full-payload
+        # (Flow B) because both transitions write ``original_study_uid_hash``
+        # on the UPLOADED mark_state.
+        if self._db.is_study_uploaded(original_uid):
+            self._audit.append(
+                "sync.skipped",
+                target={"original_study_uid_hash": _short_hash(original_uid)},
+                meta={"reason": "already_uploaded"},
+            )
+            return StudyOutcome(
+                original_study_uid=original_uid,
+                pseudo_study_uid=None,
+                state=StudyState.UPLOADED,
+                reason="already_uploaded",
+                duration_ms=_elapsed_ms(started),
+            )
+
         try:
             fetch_dir = Path(tempfile.mkdtemp(prefix="radivault_fetch_"))
             fetch_started = datetime.now()
@@ -473,7 +501,12 @@ class Pipeline:
                 n_bytes=deid_result.n_bytes,
                 central_job_id=result.job_id,
             )
-            self._db.mark_state(pseudo_uid, StudyState.UPLOADED)
+            # Persist the original-UID hash alongside the UPLOADED mark so
+            # the next sync can short-circuit via ``is_study_uploaded`` —
+            # gateway-sync-skip-uploaded. Full-payload (Flow B) path.
+            self._db.mark_state(
+                pseudo_uid, StudyState.UPLOADED, original_uid=original_uid
+            )
             self._db.clear_retry(pseudo_uid)
 
             # Cleanup staging (FR-15)
@@ -841,7 +874,12 @@ class Pipeline:
             n_bytes=deid_result.n_bytes,
             central_job_id=result.job_id,
         )
-        self._db.mark_state(pseudo_uid, StudyState.UPLOADED)
+        # Persist the original-UID hash alongside the UPLOADED mark so a
+        # subsequent sync-once can short-circuit via ``is_study_uploaded`` —
+        # gateway-sync-skip-uploaded. Metadata-only (Flow A) path.
+        self._db.mark_state(
+            pseudo_uid, StudyState.UPLOADED, original_uid=original_uid
+        )
         self._db.clear_retry(pseudo_uid)
         # No final staging dir was written; just drop the in-memory tmp.
         shutil.rmtree(staging_dir, ignore_errors=True)
