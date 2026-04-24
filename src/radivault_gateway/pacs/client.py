@@ -55,6 +55,25 @@ class FetchResult:
     duration_ms: int = 0
 
 
+@dataclass(frozen=True)
+class StudyQidoSummary:
+    """Study-level counters extracted from a QIDO-RS ``/studies`` response.
+
+    Powers the Flow A (metadata-only) fast-path (gateway-flow-a-qido). QIDO
+    returns a one-row-per-study JSON payload that carries every field the
+    metadata-only manifest needs (``ModalitiesInStudy``,
+    ``NumberOfStudyRelatedInstances``) — replacing the per-instance
+    ``/studies/{uid}/metadata`` pull which on Orthanc is ~56x slower.
+    """
+
+    study_instance_uid: str
+    modalities: list[str]
+    n_instances: int
+    n_series: int
+    study_date: str | None = None
+    duration_ms: int = 0
+
+
 def _qido_value(item: dict[str, Any], tag: str, vr: str = "Value") -> Any:
     block = item.get(tag)
     if not block:
@@ -212,6 +231,83 @@ class DicomWebPacsClient:
             )
         return result
 
+    def fetch_study_qido_summary(self, study_instance_uid: str) -> StudyQidoSummary:
+        """Pull a single-study QIDO-RS row and return the counters Flow A needs.
+
+        Implements the gateway-flow-a-qido fast-path. Hits
+        ``GET /studies?StudyInstanceUID=<uid>`` — a kilobyte-scale response —
+        rather than ``/studies/{uid}/metadata`` which forces the PACS to read
+        every instance from disk (on a 192-slice CT: 2.25 MB payload / ~14 s
+        on Orthanc vs 1.2 KB / 0.25 s for QIDO).
+
+        The response is the standard DICOMweb JSON VR form
+        ``{"00080061": {"vr": "CS", "Value": ["CT"]}, ...}``. We defensively
+        tolerate missing ``Value`` arrays (Orthanc has emitted both
+        ``Value: null`` and a missing key in different builds) by falling
+        back to empty / zero defaults, matching the manifest contract
+        (``modalities=[]``, ``n_instances=0``).
+
+        Raises :class:`PacsError` when the study is not present in the
+        source PACS (empty array response).
+        """
+        url = f"{self.base_url}/studies"
+        params = {"StudyInstanceUID": study_instance_uid, "limit": 1}
+        started = time.time()
+        resp = self._request_with_retry("GET", url, params=params)
+        if resp.status_code >= 400:
+            raise PacsError(
+                f"QIDO study summary error {resp.status_code}: {resp.text[:200]}",
+                status_code=resp.status_code,
+            )
+        if resp.status_code == 204 or not resp.content:
+            raise PacsError(
+                f"study not found: {study_instance_uid}",
+                status_code=resp.status_code,
+            )
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise PacsError(
+                f"QIDO study summary: non-JSON response: {exc}",
+                status_code=resp.status_code,
+            ) from exc
+        if not isinstance(payload, list) or not payload:
+            raise PacsError(
+                f"study not found: {study_instance_uid}",
+                status_code=resp.status_code,
+            )
+        item = payload[0]
+        # ModalitiesInStudy (0008,0061) is VR=CS, multi-valued. When the PACS
+        # omits the block entirely (some mini DICOMweb servers do) or sets
+        # ``Value`` to null, default to an empty list so the manifest stays
+        # well-formed. The Hospital Portal dashboards render ``—`` for empty.
+        modalities_block = item.get("00080061") or {}
+        raw_modalities = modalities_block.get("Value") or []
+        modalities = [str(m) for m in raw_modalities if m is not None]
+        # NumberOfStudyRelatedInstances (0020,1208) — integer string per VR IS.
+        n_instances_raw = _qido_value(item, "00201208")
+        try:
+            n_instances = int(n_instances_raw) if n_instances_raw is not None else 0
+        except (TypeError, ValueError):
+            n_instances = 0
+        # NumberOfStudyRelatedSeries (0020,1206) — captured for audit / debug.
+        n_series_raw = _qido_value(item, "00201206")
+        try:
+            n_series = int(n_series_raw) if n_series_raw is not None else 0
+        except (TypeError, ValueError):
+            n_series = 0
+        study_date = _qido_value(item, "00080020")
+        study_date_str = str(study_date) if study_date is not None else None
+        duration_ms = int((time.time() - started) * 1000)
+        return StudyQidoSummary(
+            study_instance_uid=study_instance_uid,
+            modalities=modalities,
+            n_instances=n_instances,
+            n_series=n_series,
+            study_date=study_date_str,
+            duration_ms=duration_ms,
+        )
+
     # ---- WADO-RS ----
 
     def fetch_study(self, study_instance_uid: str, out_dir: Path) -> FetchResult:
@@ -244,7 +340,13 @@ class DicomWebPacsClient:
         )
 
     def fetch_study_metadata(self, study_instance_uid: str, out_dir: Path) -> FetchResult:
-        """Flow A (metadata-only) fetch.
+        """Flow A (metadata-only) fetch — **DEPRECATED in the fast-path**.
+
+        Retained for debug / legacy reproduction only. As of
+        gateway-flow-a-qido the metadata-only pipeline uses
+        :meth:`fetch_study_qido_summary` (a single QIDO row, ~0.25 s on
+        Orthanc) instead of this per-instance WADO metadata call (~14 s on
+        a 192-slice CT). No production code path invokes this method.
 
         Calls the DICOMweb ``/studies/{uid}/metadata`` endpoint (PS3.18 §10.4)
         with ``Accept: application/dicom+json`` and materialises one

@@ -1843,3 +1843,81 @@ PACS 대역/CPU 낭비. 리허설 재시드 속도 절반 수준. Gateway-side s
   - Full-payload 경로 (Flow B) 는 테스트 coverage 에 포함 안 됨 (fetch
     mock). metadata-only 와 동일 코드패스이므로 등가.
   - Session 18 full-payload OOM 근본 원인 여전히 잔존.
+
+## 2026-04-25 — Session 19 (Claude developer, gateway-flow-a-qido)
+
+### 뭘 했나
+Flow A (--metadata-only) 경로를 WADO `/studies/{uid}/metadata` per-instance
+pull + 합성 Part-10 파일 materialise + 전체 de-id 파이프라인에서
+**QIDO `/studies?StudyInstanceUID=<uid>` 단일 row + 정적 method code +
+JSON POST** 만으로 축소. PACS 부하 / wall-clock / 디스크 I/O 모두 제거.
+
+측정 근거 (Orthanc 로컬, Kyle 제공):
+- WADO `/studies/{uid}/metadata` (192 instance CT): 2.25 MB / ~14 s
+- QIDO `/studies?StudyInstanceUID=...` (1 row): 1.2 KB / ~0.25 s
+- 56x 속도 차. study 당 de-id 엔진 호출 1회 → 0회, tmp 디렉토리
+  write 192 파일 → 0 파일.
+
+### 수정·추가 파일 (이번 세션)
+- src/radivault_gateway/pacs/client.py
+  - `StudyQidoSummary` DTO 신규 (modalities, n_instances, n_series,
+    duration_ms)
+  - `fetch_study_qido_summary()` 신규 — QIDO 단일 row fetch, VR=CS null/
+    missing/빈배열 defensive 처리, VR=IS 파싱 실패 fallback 0
+  - `fetch_study_metadata()` DEPRECATED docstring 추가 (삭제는 안 함,
+    legacy/debug 재현용 보존)
+- src/radivault_gateway/pacs/__init__.py — `StudyQidoSummary` 노출
+- src/radivault_gateway/deid/method_codes.py — 신규 모듈:
+  `FLOW_A_METHOD_CODES_BY_RULESET` 정적 테이블 + `resolve_flow_a_method_codes()`
+  (ruleset 미등록 시 `ValueError`)
+- src/radivault_gateway/orchestrator/pipeline.py
+  - `_process_study()` 초입 분기: `metadata_only=True` → 새 전용 메서드로
+    위임 (기존 fetch+de-id+upload 전체 경로 건너뜀)
+  - `_process_study_metadata_only()` 신규 — pseudo_uid 도출 → QIDO fetch →
+    method codes 해결 → manifest 빌드 → JSON POST → mark UPLOADED+hash.
+    staging/de-id 완전 skip.
+  - 기존 `_run_metadata_only_upload()` (de-id 이후 manifest-only 업로드
+    헬퍼) 삭제 — 새 경로에서 더 이상 호출되지 않음.
+- tests/unit/test_pacs_client_qido_summary.py — 신규 (12 tests):
+  happy path, 각 필드 parsing, VR=null/missing/빈배열, VR=IS non-numeric
+  fallback, 404 / 204 / empty array / non-JSON / non-array 에러 모드.
+- tests/unit/test_pipeline_flow_a_qido.py — 신규 (8 tests):
+  QIDO 전용 호출 확인, WADO 경로 3종 (fetch_study / fetch_study_metadata)
+  호출 금지, 스테이징 I/O 0, manifest files=[]/bytes=0/method_codes 정적,
+  mark UPLOADED+hash, skip 분기가 QIDO 보다 먼저 실행, PacsError →
+  FAILED_FETCH, dry_run 업로드 생략, QIDO modalities 우선 + query fallback,
+  unknown ruleset → FAILED_DEID.
+- tests/unit/test_method_codes_flow_a.py — 신규 (4 tests): v0.1.0 해결,
+  copy 반환, 미지의 ruleset ValueError, empty string ValueError.
+- tests/unit/test_pacs_metadata_fetch.py — 파이프라인 통합 3건 rewrite:
+  `_MetadataPacsStub` 에 `fetch_study_qido_summary` 추가 + 기존 WADO
+  metadata 호출을 AssertionError 로 막고, burn-in-in-Flow-A 테스트는
+  **반대 의미** 로 재작성 (Flow A 는 burn-in 검사 안 함 → 업로드 성공,
+  Flow B 로 deferred).
+- tests/unit/test_upload_metadata_only.py — `_StubPacs` 에
+  `fetch_study_qido_summary` 추가 (n_instances=1 유지하여 기존 assert
+  호환).
+
+### 어디까지 됐나
+- 구현 + 테스트 완료.
+- Full suite: 523 passed, 4 skipped (baseline 500 대비 +23 신규, 0 회귀).
+- ruff clean.
+- Kyle 가 별도 터미널에서 돌리고 있는 sync-once 는 건드리지 않음
+  (실제 실행은 기존 sync 끝난 뒤 Kyle 이 결정).
+
+### 다음에 뭘 하나
+- Kyle 실측 제안 (기존 sync 종료 후):
+  `time radivault-gateway -c configs/demo_gateway.yaml sync-once
+   --since 2000-01-01 --metadata-only`
+  예상: 255 study × ~0.3 s ≈ 1~2 분 (기존 60분 대비 ~30x).
+- @qa — gateway-flow-a-qido 검수. 특히:
+  - QIDO 응답의 `ModalitiesInStudy` 가 비었을 때 query_studies fallback
+    로직이 실제 Orthanc/dcm4chee 모두에서 정상인지
+  - Flow A manifest 의 method_code_sequence=["113100"] 가 Central
+    ManifestValidator 에서 accept 되는지 (D-3 anonymization_flag 와 동등)
+  - Flow A 가 burn-in 검사를 안 함 → Flow B (order fulfillment) 시점에
+    반드시 pixel 검사가 돌아가야 함. 현재 order-fulfillment 설계가 이를
+    보장하는지 cross-check.
+- 남은 이슈:
+  - `fetch_study_metadata` 는 legacy 호환 목적으로 남아있지만 코드에서
+    호출자가 없음. 향후 v0.2 cleanup 에서 제거 여부 판단.

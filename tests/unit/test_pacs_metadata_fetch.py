@@ -203,36 +203,51 @@ def test_fetch_study_metadata_error_status_raises_pacserror(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Pipeline integration — metadata_only prefers fetch_study_metadata
+# Pipeline integration — metadata_only uses the QIDO fast-path
+# (gateway-flow-a-qido). The legacy ``fetch_study_metadata`` path is retained
+# for debug but never invoked by the orchestrator in metadata-only mode.
 # ---------------------------------------------------------------------------
 
 
 class _MetadataPacsStub:
-    """PACS stub that records which fetch method the orchestrator picked."""
+    """PACS stub that records which fetch method the orchestrator picked.
+
+    ``fetch_study_qido_summary`` is the Flow A call (gateway-flow-a-qido).
+    ``fetch_study_metadata`` + ``fetch_study`` are recorded so regressions
+    that reintroduce a WADO pull are caught.
+    """
 
     def __init__(self, studies):
         self._studies = studies
+        self.qido_calls: list[str] = []
         self.metadata_calls: list[str] = []
         self.full_calls: list[str] = []
 
     def query_studies(self, *a, **kw):
         return list(self._studies)
 
-    def fetch_study_metadata(self, study_uid, out_dir):
-        self.metadata_calls.append(study_uid)
-        # Synthesize a single metadata-only DICOM under out_dir using the
-        # helper under test — exercises the real JSON→Dataset→save_as path.
-        datasets = json_to_datasets(
-            [_sample_json(sop_uid=f"1.2.840.meta.{study_uid[-3:]}")]
+    def fetch_study_qido_summary(self, study_uid):
+        """Flow A fast-path. Returns study-level counters without any
+        per-instance I/O — matches the real QIDO response contract."""
+        from radivault_gateway.pacs.client import StudyQidoSummary
+
+        self.qido_calls.append(study_uid)
+        return StudyQidoSummary(
+            study_instance_uid=study_uid,
+            modalities=["CT"],
+            n_instances=1,
+            n_series=1,
+            study_date="20240101",
+            duration_ms=5,
         )
-        paths, total = write_datasets_to_dir(datasets, Path(out_dir))
 
-        class _Fetch:
-            def __init__(self) -> None:
-                self.instance_paths = paths
-                self.bytes_total = total
-
-        return _Fetch()
+    def fetch_study_metadata(self, study_uid, out_dir):  # pragma: no cover
+        # The Flow A QIDO fast-path replaced this call. A regression that
+        # re-enables it would show up here.
+        self.metadata_calls.append(study_uid)
+        raise AssertionError(
+            "fetch_study_metadata must not be invoked — Flow A uses QIDO"
+        )
 
     def fetch_study(self, study_uid, out_dir):  # pragma: no cover
         # If the orchestrator ever calls this branch in metadata_only=True
@@ -323,7 +338,13 @@ def metadata_pipeline(tmp_path):
     return pipeline, pacs_stub, captured
 
 
-def test_pipeline_metadata_only_uses_metadata_fetch_endpoint(metadata_pipeline):
+def test_pipeline_metadata_only_uses_qido_fast_path(metadata_pipeline):
+    """gateway-flow-a-qido: Flow A must use ``fetch_study_qido_summary`` and
+    must NOT invoke either ``fetch_study_metadata`` (WADO metadata) or
+    ``fetch_study`` (full multipart WADO). The QIDO call returns kilobyte-
+    scale counters in ~0.25 s vs ~14 s for a per-instance metadata pull on
+    a 192-slice CT — the fast-path is the entire point of the feature.
+    """
     pipeline, pacs_stub, captured = metadata_pipeline
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # pydicom emits UI-validation warnings on the synthetic UIDs
@@ -331,8 +352,9 @@ def test_pipeline_metadata_only_uses_metadata_fetch_endpoint(metadata_pipeline):
     assert summary.total == 2
     assert summary.uploaded == 2
     assert summary.failed == 0
-    # The orchestrator must have exclusively used the metadata path.
-    assert pacs_stub.metadata_calls == ["1.2.840.stub.m01", "1.2.840.stub.m02"]
+    # The orchestrator must have exclusively used the QIDO summary call.
+    assert pacs_stub.qido_calls == ["1.2.840.stub.m01", "1.2.840.stub.m02"]
+    assert pacs_stub.metadata_calls == []
     assert pacs_stub.full_calls == []
     # Central received the two JSON manifest POSTs on the Flow A endpoint.
     assert len(captured["requests"]) == 2
@@ -342,12 +364,13 @@ def test_pipeline_metadata_only_uses_metadata_fetch_endpoint(metadata_pipeline):
 
 def test_pipeline_full_payload_unchanged_when_metadata_only_false(metadata_pipeline):
     """Regression guard: without --metadata-only, the orchestrator must NOT
-    call ``fetch_study_metadata``. Flow B (order fulfillment) depends on
-    ``fetch_study`` remaining the default code path.
+    touch either ``fetch_study_metadata`` or ``fetch_study_qido_summary``.
+    Flow B (order fulfillment) depends on ``fetch_study`` remaining the
+    default code path.
     """
     pipeline, pacs_stub, _ = metadata_pipeline
 
-    # Swap in a second stub that raises if fetch_study_metadata is invoked.
+    # Swap in a second stub that raises if any Flow A method is invoked.
     class _FullPayloadOnlyStub:
         def __init__(self, studies):
             self._studies = studies
@@ -375,6 +398,11 @@ def test_pipeline_full_payload_unchanged_when_metadata_only_false(metadata_pipel
                 "fetch_study_metadata must not be called in full-payload mode"
             )
 
+        def fetch_study_qido_summary(self, study_uid):  # pragma: no cover
+            raise AssertionError(
+                "fetch_study_qido_summary is a Flow A call — not expected in Flow B"
+            )
+
     from radivault_gateway.pacs.client import StudySummary
 
     summaries = [
@@ -393,30 +421,27 @@ def test_pipeline_full_payload_unchanged_when_metadata_only_false(metadata_pipel
     assert stub.full_calls == ["1.2.840.stub.full01"]
 
 
-def test_pipeline_deid_engine_tolerates_missing_pixel_data(metadata_pipeline):
-    """Negative test: the Annex E de-ID engine must not raise on Datasets
-    that lack ``PixelData``. The burn-in check uses only ``(0028,0301)``
-    BurnedInAnnotation metadata so it remains accurate in Flow A.
+def test_pipeline_flow_a_does_not_inspect_burnin_annotation(metadata_pipeline):
+    """Flow A semantic change (gateway-flow-a-qido): burn-in detection is
+    deferred to Flow B.
+
+    Flow A no longer pulls per-instance tags (BurnedInAnnotation lives on
+    each instance), so a burn-in=YES study will upload to Central as a
+    metadata-only record. Actual pixel inspection + quarantine happens at
+    order-fulfillment time (Flow B) when pixels are materialised.
+
+    This is acceptable because the Flow A manifest does not transfer any
+    pixel data — there is no PHI exposure from the metadata-only upload.
     """
-    pipeline, pacs_stub, _ = metadata_pipeline
-    # Spike a second stub that returns a burn-in=YES instance — must be
-    # quarantined by the de-id engine just as if pixels were present.
-    class _BurnedInStub(_MetadataPacsStub):
-        def fetch_study_metadata(self, study_uid, out_dir):
-            self.metadata_calls.append(study_uid)
-            datasets = json_to_datasets(
-                [_sample_json(sop_uid=f"1.2.840.burned.{study_uid[-3:]}", burned="YES")]
-            )
-            paths, total = write_datasets_to_dir(datasets, Path(out_dir))
-
-            class _Fetch:
-                def __init__(self) -> None:
-                    self.instance_paths = paths
-                    self.bytes_total = total
-
-            return _Fetch()
-
+    pipeline, _, captured = metadata_pipeline
+    # The stub already returns the same QIDO counters for every UID; we
+    # simply assert that a study whose original instance *would* have
+    # burn-in=YES still uploads successfully in Flow A. This is the exact
+    # opposite of the old WADO-metadata path, which would have quarantined.
     from radivault_gateway.pacs.client import StudySummary
+
+    class _BurnedInStub(_MetadataPacsStub):
+        """Tagged subclass — same QIDO response, different test intent."""
 
     pipeline._pacs = _BurnedInStub(
         [
@@ -433,5 +458,9 @@ def test_pipeline_deid_engine_tolerates_missing_pixel_data(metadata_pipeline):
         warnings.simplefilter("ignore")
         summary = pipeline.run_once(metadata_only=True, limit=1)
     assert summary.total == 1
-    assert summary.quarantined == 1
-    assert summary.uploaded == 0
+    # Burn-in detection moved to Flow B; Flow A uploads without inspection.
+    assert summary.uploaded == 1
+    assert summary.quarantined == 0
+    # Central recorded exactly one Flow A manifest POST.
+    assert len(captured["requests"]) == 1
+    assert captured["requests"][0]["path"] == "/v1/ingest/studies/metadata"

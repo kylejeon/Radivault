@@ -241,9 +241,25 @@ def test_sync_once_metadata_only_flag_surfaced_in_help():
 class _StubPacs:
     def __init__(self, studies):
         self._studies = studies
+        self.qido_calls: list[str] = []
 
     def query_studies(self, *a, **kw):
         return list(self._studies)
+
+    def fetch_study_qido_summary(self, study_uid):
+        """Flow A QIDO fast-path (gateway-flow-a-qido). Returns a single-row
+        study summary without touching per-instance metadata."""
+        from radivault_gateway.pacs.client import StudyQidoSummary
+
+        self.qido_calls.append(study_uid)
+        return StudyQidoSummary(
+            study_instance_uid=study_uid,
+            modalities=["CT"],
+            n_instances=1,
+            n_series=1,
+            study_date="20240101",
+            duration_ms=3,
+        )
 
     def fetch_study(self, original_uid, fetch_dir):
         # Write a minimal DICOM file so the de-id engine has an instance to
