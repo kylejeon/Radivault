@@ -51,7 +51,7 @@ log = logging.getLogger("demo_seed.download")
 # Retry + fetch tuning (dev-spec FR-S-7)
 # ---------------------------------------------------------------------------
 
-DEFAULT_RETRIES = 3  # per-study attempt count
+DEFAULT_RETRIES = 5  # per-study attempt count (dev-spec FR-S-7)
 RETRY_BASE_SECONDS = 2.0  # exponential: 2s, 4s, 8s ...
 RETRY_JITTER_SECONDS = 1.0  # up to +1s jitter each sleep
 
