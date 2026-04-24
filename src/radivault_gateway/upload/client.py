@@ -147,6 +147,45 @@ class UploadClient:
             "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
+    def build_metadata_only_manifest(
+        self,
+        *,
+        gateway_id: str,
+        hospital_id: str,
+        pseudo_study_uid: str,
+        modalities: list[str],
+        ruleset_version: str,
+        salt_version: int,
+        method_codes: list[str],
+        n_instances: int,
+        total_bytes: int,
+    ) -> dict[str, Any]:
+        """Build a metadata-only manifest (Flow A — ARCHITECTURE.md §4).
+
+        Reuses the wire format of :meth:`build_manifest` so Central can reuse
+        the same ``ManifestValidator`` business rules. ``files`` is emitted as
+        an empty list; ``n_instances`` + ``total_bytes`` carry the logical
+        counts so the Hospital Portal dashboards can surface throughput even
+        when the pixel payload never left the Gateway.
+        """
+        return {
+            "manifest_version": 1,
+            "gateway_id": gateway_id,
+            "hospital_id": hospital_id,
+            "pseudo_study_uid": pseudo_study_uid,
+            "modalities": modalities,
+            "n_instances": n_instances,
+            "total_bytes": total_bytes,
+            "deid": {
+                "ruleset_version": ruleset_version,
+                "salt_version": salt_version,
+                "method_code_sequence": method_codes,
+            },
+            "anonymization_flag": "fully_anonymized",
+            "files": [],
+            "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
     def upload_study(
         self,
         manifest: dict[str, Any],
@@ -209,6 +248,75 @@ class UploadClient:
                 self._sleep_retry(retry_after)
                 continue
             # 5xx → retry
+            last_exc = UploadError(
+                f"server error {resp.status_code}: {resp.text[:200]}",
+                status_code=resp.status_code,
+                retryable=True,
+            )
+            if attempt < self.max_retries:
+                self._sleep_retry(delay)
+                delay = min(delay * self._retry_factor, self._retry_cap)
+        assert last_exc is not None
+        raise last_exc
+
+    def upload_study_metadata_only(
+        self,
+        manifest: dict[str, Any],
+    ) -> UploadResult:
+        """Upload a metadata-only manifest (Flow A).
+
+        Sends a single ``application/json`` POST to
+        ``/v1/ingest/studies/metadata``. No DICOM payload is transferred —
+        Central persists a study row with ``central_object_present=False``
+        so the fulfillment subsystem knows to request pixels from the
+        Gateway at order time (Flow B).
+
+        Retries 5xx + 429 identical to :meth:`upload_study` but uses a
+        distinct ``Idempotency-Key`` prefix (``meta-``) so a subsequent
+        full-payload upload of the same logical study cannot collide with
+        this record in the idempotency mirror.
+        """
+        url = f"{self.base_url}/v1/ingest/studies/metadata"
+        body = json.dumps(manifest).encode("utf-8")
+        idempotency_key = f"meta-{manifest['pseudo_study_uid']}"[:128]
+        request_headers = {
+            "Idempotency-Key": idempotency_key,
+            "Content-Type": "application/json",
+        }
+        attempt = 0
+        delay = self._retry_initial
+        started = time.time()
+        last_exc: UploadError | None = None
+        while attempt < self.max_retries:
+            attempt += 1
+            try:
+                resp = self._client.post(url, content=body, headers=request_headers)
+            except httpx.HTTPError as exc:
+                last_exc = UploadError(f"network error: {exc}", retryable=True)
+                if attempt < self.max_retries:
+                    self._sleep_retry(delay)
+                    delay *= self._retry_factor
+                continue
+            if resp.status_code in (200, 201, 202):
+                payload = resp.json() if resp.content else {}
+                duration = int((time.time() - started) * 1000)
+                return UploadResult(
+                    job_id=str(payload.get("job_id") or payload.get("central_job_id") or ""),
+                    received_at=payload.get("received_at"),
+                    bytes_sent=len(body),
+                    duration_ms=duration,
+                    manifest=manifest,
+                )
+            if resp.status_code in (400, 401, 403, 404, 409, 413, 415):
+                raise UploadError(
+                    f"metadata-only upload rejected {resp.status_code}: {resp.text[:200]}",
+                    status_code=resp.status_code,
+                    retryable=False,
+                )
+            if resp.status_code == 429:
+                retry_after = float(resp.headers.get("Retry-After", delay))
+                self._sleep_retry(retry_after)
+                continue
             last_exc = UploadError(
                 f"server error {resp.status_code}: {resp.text[:200]}",
                 status_code=resp.status_code,

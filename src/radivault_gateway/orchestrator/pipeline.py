@@ -89,8 +89,17 @@ class Pipeline:
         until: date | None = None,
         dry_run: bool = False,
         limit: int | None = None,
+        metadata_only: bool = False,
     ) -> RunSummary:
-        """Perform one full sync cycle. Returns a summary with per-study outcomes."""
+        """Perform one full sync cycle. Returns a summary with per-study outcomes.
+
+        When ``metadata_only`` is True the pipeline fetches + de-identifies
+        each study in memory, computes manifest-level counters, and POSTs only
+        the manifest to Central (Flow A — ARCHITECTURE.md §4). No staging
+        directory is written and no DICOM payload leaves the Gateway host.
+        The local fetch + de-id tmp directories are cleaned up exactly as in
+        Flow B so disk usage is bounded the same way.
+        """
         summary = RunSummary()
 
         if self._staging.backpressure_triggered():
@@ -136,7 +145,9 @@ class Pipeline:
         log.info("pacs query ok", extra={"returned": summary.total})
 
         for study in studies:
-            outcome = self._process_study(study, dry_run=dry_run)
+            outcome = self._process_study(
+                study, dry_run=dry_run, metadata_only=metadata_only
+            )
             summary.outcomes.append(outcome)
             if outcome.state == StudyState.UPLOADED:
                 summary.uploaded += 1
@@ -161,7 +172,9 @@ class Pipeline:
 
     # ---- study-level orchestration ----
 
-    def _process_study(self, study: StudySummary, *, dry_run: bool) -> StudyOutcome:
+    def _process_study(
+        self, study: StudySummary, *, dry_run: bool, metadata_only: bool = False
+    ) -> StudyOutcome:
         started = datetime.now()
         original_uid = study.study_instance_uid
         pseudo_uid: str | None = None
@@ -311,6 +324,23 @@ class Pipeline:
                     duration_ms=_elapsed_ms(started),
                     fetch_ms=fetch_ms,
                     deid_ms=deid_ms,
+                )
+
+            # Metadata-only branch (Flow A — ARCHITECTURE.md §4).
+            # Skip pixel stage + staging move + multipart upload entirely.
+            # The pseudo-UIDs, counters, and de-id audit trail are fully
+            # computed; we POST only the manifest to Central.
+            if metadata_only:
+                return self._run_metadata_only_upload(
+                    pseudo_uid=pseudo_uid,
+                    study=study,
+                    original_uid=original_uid,
+                    deid_result=deid_result,
+                    staging_dir=staging_dir,
+                    started=started,
+                    fetch_ms=fetch_ms,
+                    deid_ms=deid_ms,
+                    dry_run=dry_run,
                 )
 
             # v0.2 de-id-pixel: opt-in pixel stage (FR-31). Skipped entirely
@@ -670,6 +700,150 @@ class Pipeline:
             },
         )
         return None
+
+
+    # ---- metadata-only (Flow A) ----
+
+    def _run_metadata_only_upload(
+        self,
+        *,
+        pseudo_uid: str,
+        study: StudySummary,
+        original_uid: str,
+        deid_result,
+        staging_dir: Path,
+        started: datetime,
+        fetch_ms: int,
+        deid_ms: int,
+        dry_run: bool,
+    ) -> StudyOutcome:
+        """Upload manifest only (no DICOM payload) to Central.
+
+        The caller has already completed fetch + de-id + reverify. We:
+
+        1. Persist a ``deided`` study_job row (so status/counts reflect it).
+        2. Compute ``n_instances`` / ``total_bytes`` from ``deid_result``.
+        3. POST the metadata-only manifest to ``/v1/ingest/studies/metadata``.
+        4. Remove the in-memory staging tmp directory; no final staging move.
+
+        ``dry_run=True`` short-circuits the upload and leaves state at
+        ``deided`` — matching the full-payload contract.
+        """
+        # Persist a study_job row so ``gateway status`` counts reflect this
+        # study even though we never wrote a staging payload.
+        self._db.upsert_study_job(
+            pseudo_uid,
+            state=StudyState.DEIDED,
+            modalities=study.modalities_in_study,
+            n_instances=deid_result.n_instances,
+            n_bytes=deid_result.n_bytes,
+        )
+        self._db.mark_state(pseudo_uid, StudyState.DEIDED)
+        self._audit.append(
+            "staging.skipped",
+            target={"pseudo_study_uid": pseudo_uid},
+            meta={"mode": "metadata_only", "n_instances": deid_result.n_instances},
+        )
+
+        if dry_run:
+            self._audit.append(
+                "upload.skipped",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={"reason": "dry_run", "mode": "metadata_only"},
+            )
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            return StudyOutcome(
+                original_study_uid=original_uid,
+                pseudo_study_uid=pseudo_uid,
+                state=StudyState.DEIDED,
+                reason="dry_run",
+                duration_ms=_elapsed_ms(started),
+                fetch_ms=fetch_ms,
+                deid_ms=deid_ms,
+            )
+
+        manifest = self._upload.build_metadata_only_manifest(
+            gateway_id=self._cfg.agent.gateway_id,
+            hospital_id=self._cfg.agent.hospital_id,
+            pseudo_study_uid=pseudo_uid,
+            modalities=study.modalities_in_study,
+            ruleset_version=self._cfg.deid.ruleset_version,
+            salt_version=self._cfg.deid.salt_version,
+            method_codes=_method_codes(self._cfg),
+            n_instances=deid_result.n_instances,
+            total_bytes=deid_result.n_bytes,
+        )
+        self._audit.append(
+            "upload.started",
+            target={"pseudo_study_uid": pseudo_uid},
+            meta={
+                "n_files": 0,
+                "bytes": 0,
+                "mode": "metadata_only",
+                "n_instances": deid_result.n_instances,
+            },
+        )
+        self._db.mark_state(pseudo_uid, StudyState.UPLOADING)
+        upload_started = datetime.now()
+        try:
+            result = self._upload.upload_study_metadata_only(manifest)
+        except UploadError as exc:
+            self._audit.append(
+                "upload.failed",
+                target={"pseudo_study_uid": pseudo_uid},
+                meta={
+                    "error": str(exc),
+                    "status_code": exc.status_code,
+                    "mode": "metadata_only",
+                },
+            )
+            self._db.mark_state(pseudo_uid, StudyState.FAILED_UPLOAD, last_error=str(exc))
+            self._db.schedule_retry(
+                pseudo_uid,
+                (datetime.now(tz=UTC) + timedelta(minutes=5)).isoformat(),
+            )
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            return StudyOutcome(
+                original_study_uid=original_uid,
+                pseudo_study_uid=pseudo_uid,
+                state=StudyState.FAILED_UPLOAD,
+                reason=str(exc),
+                duration_ms=_elapsed_ms(started),
+                fetch_ms=fetch_ms,
+                deid_ms=deid_ms,
+            )
+        upload_ms = _elapsed_ms(upload_started)
+        self._audit.append(
+            "upload.completed",
+            target={"pseudo_study_uid": pseudo_uid},
+            meta={
+                "central_job_id": result.job_id,
+                "bytes": 0,
+                "duration_ms": upload_ms,
+                "mode": "metadata_only",
+            },
+        )
+        self._db.upsert_study_job(
+            pseudo_uid,
+            state=StudyState.UPLOADED,
+            modalities=study.modalities_in_study,
+            n_instances=deid_result.n_instances,
+            n_bytes=deid_result.n_bytes,
+            central_job_id=result.job_id,
+        )
+        self._db.mark_state(pseudo_uid, StudyState.UPLOADED)
+        self._db.clear_retry(pseudo_uid)
+        # No final staging dir was written; just drop the in-memory tmp.
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        return StudyOutcome(
+            original_study_uid=original_uid,
+            pseudo_study_uid=pseudo_uid,
+            state=StudyState.UPLOADED,
+            duration_ms=_elapsed_ms(started),
+            fetch_ms=fetch_ms,
+            deid_ms=deid_ms,
+            upload_ms=upload_ms,
+        )
 
 
 def _sample_pixel_context(staging_dir: Path) -> tuple[str, str | None]:

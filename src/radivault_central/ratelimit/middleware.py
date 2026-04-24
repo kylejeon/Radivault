@@ -61,7 +61,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         scope = None
         window: int | None = None
 
-        if path == "/v1/ingest/studies" and request.method.upper() == "POST":
+        if (
+            path in ("/v1/ingest/studies", "/v1/ingest/studies/metadata")
+            and request.method.upper() == "POST"
+        ):
             if self._over_limit(request, scope="ingest_min", window=60, limit=self._ingest_min):
                 scope = "per_min"
                 window = 60

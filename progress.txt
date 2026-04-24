@@ -1483,3 +1483,111 @@ CEO 미팅 D-14 데모 리허설 안전망. Playwright 1.59.1 + 3 spec 파일 +
   바로 확인 가능.
 - 선택적: bypassCSP 가 아닌 실제 CSP 수정 (`'unsafe-eval'` dev-only
   추가) — 별 건 backlog. CEO 미팅 D-14 내 불요.
+
+
+## 2026-04-24 — Session 19 (@developer, gateway-metadata-only-sync)
+
+### 뭘 했나
+Session 18 OOM/ERR_STORE_WRITE 근본 원인 해결: Gateway sync-once 가
+full-payload (메타+픽셀) 을 단일 multipart 로 쏴서 Central worker OOM.
+ARCHITECTURE.md §4 Flow A (메타만 상시) vs Flow B (주문 시 영상)
+분리를 v0.1 최소 침습으로 구현.
+
+### 구현 요약
+- **Gateway**:
+  - cli/main.py sync-once 에 `--metadata-only` flag 추가 (bilingual help).
+  - upload/client.py `build_metadata_only_manifest` + `upload_study_metadata_only`
+    (JSON POST, Idempotency-Key `meta-<uid>` prefix — 기존 `upload-<uid>`
+    와 namespace 분리).
+  - orchestrator/pipeline.py `run_once(metadata_only=bool)` 추가 +
+    `_run_metadata_only_upload` 헬퍼. 반 fetch + de-id + reverify 는 그대로,
+    staging final move + 픽셀 stage + multipart 업로드 전부 skip.
+    fetch_dir/deid tmp dir 정리는 Flow B 와 동일.
+- **Central**:
+  - manifest/schema.py `ManifestMetadataOnly(Manifest)` subclass —
+    `files: min_length=0`, `n_instances: ge=0`.
+  - manifest/validator.py `parse_and_validate_metadata_only` — 기존
+    anon flag / ruleset / salt / 113100 / hospital limits 재사용.
+  - db/repository.py `insert_study_metadata_only` — study row 만 생성
+    (n_series=0, central_object_present=False). series/instance row 없음.
+  - routers/ingest.py `POST /v1/ingest/studies/metadata` 신규 — JSON
+    only, S3 put skip, audit event `central.ingest.metadata_only.completed`.
+    기존 `/v1/ingest/studies` (full-payload) 는 무수정 — fulfillment 호환.
+  - idempotency/middleware.py IDEMPOTENT_PATHS 에 신규 path 추가.
+  - ratelimit/middleware.py ingest 카운터에 신규 path 포함.
+
+### 판단 기록 (Kyle 승인 없이 권장안 채택)
+1. CLI: `--metadata-only` flag 채택. 신규 서브커맨드 대비 기존 test
+   infrastructure 재사용, `--since/--until/--dry-run/--limit` 와 자연 조합.
+2. Endpoint: `/v1/ingest/studies/metadata` 신규 path 채택. query param
+   대비 라우팅 + 미들웨어 분기가 clean, OpenAPI doc 자동 분리.
+3. Column: `central_object_present` — 이미 fulfillment §14 C-1 기준으로
+   Alembic 0004 에 존재. ORM/DB 스키마 둘 다 최신. 추가 migration 불요.
+
+### Idempotency 설계 결정
+- 기존 mirror 테이블은 (key, hospital_pk) PK 로 path-agnostic.
+- `meta-<uid>` vs `upload-<uid>` 키 prefix 로 자연 namespace 분리.
+- 동일 pseudo_study_uid 에 대해 metadata-only → full-payload 시퀀스는
+  2번째 요청이 ERR_MANIFEST_DUP (study_exists check) 로 거절 — 정상
+  동작 (논리적 study 1회 ingest 만 허용).
+- 이 동작은 test `test_metadata_only_does_not_conflict_with_full_payload_idem_key`
+  에 문서화.
+
+### 검증 실측 (실 Orthanc + 실 Central)
+- `time radivault-gateway -c configs/demo_gateway.yaml sync-once --since
+  2000-01-01 --metadata-only --limit 3` 결과:
+  - uploaded=3 quarantined=0 failed=0
+  - 총 2:24 (PACS fetch 가 bottleneck — MR 1436 instance study 114s
+    fetch). upload 단계 자체는 58~178ms.
+  - Session 18 full-payload OOM 대비 하드 crash 없음.
+- DB 검증:
+  - `SELECT COUNT(*) FROM study` → 3
+  - central_object_present=false, n_series=0 전부 일관
+  - modality MR/CT/MR, n_instances 192/1436/55 정확히 Gateway 측 de-id
+    결과 반영.
+- Audit 검증:
+  - `central.ingest.metadata_only.completed` × 3 정확
+  - S3/MinIO leak 0 건 (storage put skip 입증).
+
+### 테스트 (baseline 452 → 481, 모두 PASS + ruff clean)
+- tests/central/unit/test_manifest_metadata_only.py (10 tests)
+- tests/central/integration/test_ingest_metadata_only.py (10 tests)
+- tests/unit/test_upload_metadata_only.py (9 tests; CLI flag, Upload
+  Client HTTP contract, Pipeline stub e2e)
+
+### 수정·추가 파일 (이번 세션)
+- src/radivault_gateway/cli/main.py — sync-once --metadata-only flag
+- src/radivault_gateway/upload/client.py — build + upload metadata-only
+- src/radivault_gateway/orchestrator/pipeline.py — _run_metadata_only_upload
+- src/radivault_central/manifest/schema.py — ManifestMetadataOnly
+- src/radivault_central/manifest/validator.py — parse_and_validate_metadata_only
+- src/radivault_central/manifest/__init__.py — export
+- src/radivault_central/db/repository.py — insert_study_metadata_only
+- src/radivault_central/routers/ingest.py — POST /v1/ingest/studies/metadata
+- src/radivault_central/idempotency/middleware.py — IDEMPOTENT_PATHS
+- src/radivault_central/ratelimit/middleware.py — metadata path 포함
+- tests/central/unit/test_manifest_metadata_only.py (신규)
+- tests/central/integration/test_ingest_metadata_only.py (신규)
+- tests/unit/test_upload_metadata_only.py (신규)
+
+### 어디까지 됐나
+- 실 TCIA 3 studies 로 sync-once --metadata-only 성공 검증 완료.
+- Central DB 3 rows, central_object_present=false, audit 3 events.
+- 481/481 단위/통합 테스트 PASS, ruff clean.
+
+### 다음에 뭘 하나
+- Kyle 수동 검증: 255 studies 전체 metadata-only sync
+  `time radivault-gateway -c configs/demo_gateway.yaml sync-once
+   --since 2000-01-01 --metadata-only` (기대: ~수분, PACS fetch bound).
+- @qa — gateway-metadata-only-sync 검수. 특히:
+  - ManifestMetadataOnly 가 기존 Manifest 업무 규칙을 빠짐없이 재사용
+    하는지 (anon flag / ruleset / salt / 113100).
+  - Flow A → Flow B 전환 시 central_object_present 가 false→true 로
+    플립되는 contract 는 본 PR scope 밖 (fulfillment 측 책임). 현재는
+    항상 false — 설계대로.
+  - idempotency namespace 분리 검증: meta-<uid> vs upload-<uid>.
+- 남은 이슈:
+  - full-payload `/v1/ingest/studies` endpoint 는 v0.1 그대로. 주문
+    fulfillment 가 영상 배송 시 사용. 본 PR 에선 무수정.
+  - Session 18 OOM 근본 원인 (worker memory + multipart limits) 은
+    여전히 full-payload 경로에 잔존. Flow B 동작 시점 재검토 필요.

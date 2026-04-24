@@ -417,6 +417,15 @@ def _print_diff(ds_orig: object, ds_after: object) -> None:
 @click.option("--until", type=click.DateTime(formats=["%Y-%m-%d"]), default=None)
 @click.option("--dry-run", is_flag=True, help="Fetch + de-id but do NOT upload")
 @click.option("--limit", type=int, default=None, help="Cap at N studies for this run")
+@click.option(
+    "--metadata-only",
+    is_flag=True,
+    default=False,
+    help=(
+        "Upload manifest only (no pixels). Flow A mode. / "
+        "메타만 업로드(픽셀 제외). Flow A 모드."
+    ),
+)
 @click.pass_context
 def sync_once(
     ctx: click.Context,
@@ -424,6 +433,7 @@ def sync_once(
     until: datetime | None,
     dry_run: bool,
     limit: int | None,
+    metadata_only: bool,
 ) -> None:
     cfg = _load_or_exit(ctx.obj["config_path"])
     configure_logging(
@@ -436,6 +446,7 @@ def sync_once(
         until=until.date() if until else None,
         dry_run=dry_run,
         limit=limit,
+        metadata_only=metadata_only,
     )
     for i, outcome in enumerate(summary.outcomes, 1):
         pseudo = outcome.pseudo_study_uid or "?"

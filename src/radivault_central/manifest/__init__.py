@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
-from radivault_central.manifest.schema import DeidBlock, Manifest, ManifestFile
+from radivault_central.manifest.schema import (
+    DeidBlock,
+    Manifest,
+    ManifestFile,
+    ManifestMetadataOnly,
+)
 from radivault_central.manifest.validator import ManifestValidator
 
-__all__ = ["DeidBlock", "Manifest", "ManifestFile", "ManifestValidator"]
+__all__ = [
+    "DeidBlock",
+    "Manifest",
+    "ManifestFile",
+    "ManifestMetadataOnly",
+    "ManifestValidator",
+]

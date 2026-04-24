@@ -18,7 +18,7 @@ from radivault_central.errors import (
     ManifestTooMany,
     ManifestVersion,
 )
-from radivault_central.manifest.schema import Manifest
+from radivault_central.manifest.schema import Manifest, ManifestMetadataOnly
 
 ALLOWED_ANON_FLAG = "fully_anonymized"
 REQUIRED_DEID_CODE = "113100"
@@ -32,14 +32,7 @@ class ManifestValidator:
     max_manifest_bytes: int = 1_048_576
 
     def parse_and_validate(self, raw: bytes) -> Manifest:
-        if not raw:
-            raise ManifestSchema(detail="empty manifest body")
-        if len(raw) > self.max_manifest_bytes:
-            raise ManifestTooBig(detail="manifest payload larger than limit")
-        try:
-            decoded = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ManifestSchema(detail=f"manifest JSON decode failed: {exc}") from exc
+        decoded = self._decode(raw)
         try:
             manifest = Manifest.model_validate(decoded)
         except ValidationError as exc:
@@ -54,6 +47,42 @@ class ManifestValidator:
         self._check_deid_methods(manifest)
         self._check_hospital_limits(manifest)
         return manifest
+
+    def parse_and_validate_metadata_only(self, raw: bytes) -> ManifestMetadataOnly:
+        """Parse + validate a metadata-only manifest (Flow A).
+
+        Re-uses every business rule applied to a full-payload manifest — the
+        anonymization flag, ruleset allowlist, salt version, and DICOM
+        method-code check — but accepts an empty ``files`` array and
+        ``n_instances == 0``. Downstream callers will persist the study row
+        with ``central_object_present=False``.
+        """
+        decoded = self._decode(raw)
+        try:
+            manifest = ManifestMetadataOnly.model_validate(decoded)
+        except ValidationError as exc:
+            first = exc.errors()[0]
+            loc = ".".join(str(p) for p in first.get("loc", [])) or "?"
+            raise ManifestSchema(detail=f"{loc}: {first.get('msg', 'invalid')}") from exc
+
+        self._check_version(manifest)
+        self._check_anonymization(manifest)
+        self._check_ruleset(manifest)
+        self._check_salt(manifest)
+        self._check_deid_methods(manifest)
+        self._check_hospital_limits(manifest)
+        return manifest
+
+    # ------------------------------------------------------------------
+    def _decode(self, raw: bytes) -> dict:
+        if not raw:
+            raise ManifestSchema(detail="empty manifest body")
+        if len(raw) > self.max_manifest_bytes:
+            raise ManifestTooBig(detail="manifest payload larger than limit")
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ManifestSchema(detail=f"manifest JSON decode failed: {exc}") from exc
 
     # ------------------------------------------------------------------
     def _check_version(self, manifest: Manifest) -> None:

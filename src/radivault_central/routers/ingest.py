@@ -16,6 +16,7 @@ from radivault_central.auth.middleware import require_hospital
 from radivault_central.db.repository import (
     get_hospital_by_pk,
     insert_study_full,
+    insert_study_metadata_only,
     study_exists,
 )
 from radivault_central.errors import (
@@ -26,6 +27,7 @@ from radivault_central.errors import (
     ManifestSchema,
     ManifestSha256,
     StorageWriteError,
+    UnsupportedMedia,
 )
 from radivault_central.manifest.validator import ManifestValidator
 from radivault_central.telemetry import (
@@ -264,4 +266,122 @@ async def post_ingest(request: Request) -> dict:
         "job_id": central_job_id,  # FR-70 backwards-compat
         "received_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "object_keys": uploaded_keys,
+    }
+
+
+@router.post("/v1/ingest/studies/metadata", status_code=201)
+async def post_ingest_metadata_only(request: Request) -> dict:
+    """Accept a metadata-only manifest (Flow A — ARCHITECTURE.md §4).
+
+    Accepts ``application/json`` only. No DICOM pixel payload is written to
+    object storage; the study row lands in central DB with
+    ``central_object_present=False`` so the fulfillment subsystem knows to
+    fan out a transfer_job on order confirmation (Flow B).
+
+    Idempotency contract is identical to ``/v1/ingest/studies``: callers MUST
+    supply an ``Idempotency-Key``. Gateways SHOULD use a distinct key prefix
+    (e.g. ``meta-<pseudo_study_uid>``) to avoid colliding with a full-payload
+    upload of the same logical study.
+    """
+    content_type = request.headers.get("Content-Type", "")
+    if not content_type.lower().startswith("application/json"):
+        raise UnsupportedMedia(
+            detail="/v1/ingest/studies/metadata requires application/json"
+        )
+
+    raw_manifest = await request.body()
+    hospital_pk, hospital_id = require_hospital(request)
+    session_factory = request.app.state.session_factory
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    manifest = None
+    started = time.time()
+    try:
+        with session_factory() as session:
+            hospital = get_hospital_by_pk(session, hospital_pk)
+            if hospital is None:
+                raise AuthMismatch(detail="hospital row missing")
+            validator = ManifestValidator(
+                hospital=hospital,
+                max_manifest_bytes=request.app.state.max_manifest_bytes,
+            )
+            manifest = validator.parse_and_validate_metadata_only(raw_manifest)
+            if manifest.hospital_id != hospital_id:
+                raise AuthMismatch(
+                    detail=(
+                        f"manifest.hospital_id={manifest.hospital_id!r} "
+                        f"!= token.hospital_id={hospital_id!r}"
+                    )
+                )
+            if study_exists(session, manifest.pseudo_study_uid):
+                raise ManifestDuplicate(
+                    detail=f"study already ingested: {manifest.pseudo_study_uid}"
+                )
+    except CentralError as exc:
+        code = exc.code
+        MANIFEST_REJECTIONS.labels(hospital_id=hospital_id, error_code=code).inc()
+        INGEST_REQUESTS.labels(hospital_id=hospital_id, status="rejected").inc()
+        gateway_id = (
+            manifest.gateway_id if manifest is not None else _peek_gateway_id(raw_manifest)
+        )
+        study_uid = (
+            manifest.pseudo_study_uid
+            if manifest is not None
+            else _peek_pseudo_study_uid(raw_manifest)
+        )
+        record_rejection(
+            session_factory,
+            hospital_pk=hospital_pk,
+            gateway_id=gateway_id,
+            status_code=exc.status_code,
+            error_code=code,
+            request_id=request_id,
+            pseudo_study_uid=study_uid,
+        )
+        raise
+
+    central_job_id = f"ingest_{ULID()!s}"
+    # DB commit — study row only, no series/instance/S3.
+    with session_factory() as session:
+        hospital = get_hospital_by_pk(session, hospital_pk)
+        assert hospital is not None
+        insert_study_metadata_only(
+            session,
+            hospital=hospital,
+            pseudo_study_uid=manifest.pseudo_study_uid,
+            gateway_id=manifest.gateway_id,
+            central_job_id=central_job_id,
+            n_instances=manifest.n_instances,
+            total_bytes=manifest.total_bytes,
+            modality=manifest.primary_modality(),
+        )
+        duration_ms = int((time.time() - started) * 1000)
+        record_ingest_event(
+            session,
+            hospital_pk=hospital_pk,
+            gateway_id=manifest.gateway_id,
+            event="central.ingest.metadata_only.completed",
+            status_code=201,
+            request_id=request_id,
+            central_job_id=central_job_id,
+            pseudo_study_uid=manifest.pseudo_study_uid,
+            bytes_received=len(raw_manifest),
+            duration_ms=duration_ms,
+        )
+        session.commit()
+
+    INGEST_REQUESTS.labels(hospital_id=hospital_id, status="accepted").inc()
+    # Metadata-only ingest does not move pixel bytes; we count manifest bytes
+    # so the per-hospital telemetry still reflects incoming traffic.
+    INGEST_BYTES.labels(hospital_id=hospital_id).inc(len(raw_manifest))
+    INGEST_INSTANCES.labels(hospital_id=hospital_id).inc(manifest.n_instances)
+    INGEST_DURATION.labels(hospital_id=hospital_id, outcome="accepted").observe(
+        time.time() - started
+    )
+
+    return {
+        "central_job_id": central_job_id,
+        "job_id": central_job_id,
+        "mode": "metadata_only",
+        "received_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

@@ -138,6 +138,67 @@ def insert_study_full(
     return study
 
 
+def insert_study_metadata_only(
+    session: Session,
+    *,
+    hospital: Hospital,
+    pseudo_study_uid: str,
+    gateway_id: str,
+    central_job_id: str,
+    n_instances: int,
+    total_bytes: int,
+    modality: str | None,
+    body_part: str | None = None,
+    manufacturer: str | None = None,
+    model_name: str | None = None,
+    pseudo_patient_key: str | None = None,
+) -> Study:
+    """Insert a Study row with ``central_object_present=False`` (Flow A).
+
+    Unlike :func:`insert_study_full`, no Series or Instance rows are written —
+    the Gateway has not uploaded any pixel payload yet. The fulfillment
+    subsystem (dev-spec-order-fulfillment §14 C-1) reads
+    ``study.central_object_present`` to decide whether to fan out a
+    transfer_job to the originating Gateway at order time.
+    """
+    patient_pk: int | None = None
+    if pseudo_patient_key:
+        pp = session.scalar(
+            select(PatientPseudo).where(
+                PatientPseudo.hospital_pk == hospital.hospital_pk,
+                PatientPseudo.pseudo_patient_key == pseudo_patient_key,
+            )
+        )
+        if pp is None:
+            pp = PatientPseudo(
+                hospital_pk=hospital.hospital_pk,
+                pseudo_patient_key=pseudo_patient_key,
+            )
+            session.add(pp)
+            session.flush()
+        patient_pk = pp.patient_pseudo_pk
+
+    study = Study(
+        pseudo_study_uid=pseudo_study_uid,
+        hospital_pk=hospital.hospital_pk,
+        patient_pseudo_pk=patient_pk,
+        n_instances=n_instances,
+        n_series=0,
+        total_bytes=total_bytes,
+        modality=modality,
+        body_part=body_part,
+        manufacturer=manufacturer,
+        model_name=model_name,
+        central_job_id=central_job_id,
+        gateway_id=gateway_id,
+        ingested_at=datetime.now(tz=UTC),
+        central_object_present=False,
+    )
+    session.add(study)
+    session.flush()
+    return study
+
+
 def insert_ingest_event(
     session: Session,
     *,

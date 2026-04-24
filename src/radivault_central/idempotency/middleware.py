@@ -37,6 +37,7 @@ _PATTERN = re.compile(r"^[A-Za-z0-9_.\-]{16,128}$")
 # Endpoints that require idempotency keys.
 IDEMPOTENT_PATHS = (
     "/v1/ingest/studies",
+    "/v1/ingest/studies/metadata",
     "/v1/audit/anchor",
 )
 

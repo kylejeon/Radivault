@@ -66,3 +66,21 @@ class Manifest(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
+
+
+class ManifestMetadataOnly(Manifest):
+    """Metadata-only ingest manifest (Flow A — dev-spec ARCHITECTURE.md §4).
+
+    Relaxes :class:`Manifest` so the Gateway can stream the study's metadata
+    without the DICOM pixel payload. The schema still asserts every field the
+    full-payload manifest asserts (including ``anonymization_flag`` D-3), but
+    ``files`` may be empty and ``n_instances`` may be 0. Downstream callers
+    build the study row in ``central.study`` with
+    ``central_object_present=False`` so the fulfillment subsystem treats the
+    row as cold storage that must be pulled from the gateway at order time.
+    """
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    n_instances: int = Field(ge=0)
+    files: list[ManifestFile] = Field(default_factory=list, min_length=0)
