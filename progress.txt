@@ -1261,3 +1261,32 @@ dev-spec 은 별도 파일 없이 buyer-portal-demo §8 에 embed — 신규 dev
 - Kyle 결정 사항 (진행 중):
   1. LIDC-IDRI DUA 체결 여부 → --accept-restricted 영구 활성 여부
   2. Demo 운영 계정 회전 정책 (rv_live_demo001 key expiry 180일 기본)
+
+## 2026-04-24 — Session 14 (Claude @qa, tcia-seed 검수)
+
+### 뭘 했나
+@qa 에이전트로 Session 13 tcia-seed 5 커밋 검수. docs/qa/qa-report-tcia-seed.md
+작성 (판정: PASS with minor issues).
+
+- 매트릭스: FR-S-1..12 + V-1..V-8 + AC-S-1..6 전수 구현-증거 매핑
+- 보안 P0 4개 독립 검증 (PHI 누출, plaintext key 로깅, RESTRICTED skip,
+  de-ID flag 검증) — 전부 Clear
+- Critical 0 / High 0 / Medium 5 (M-1~M-5, non-blocking) / Low 1 (M-6)
+- 실 실행 증거: pytest 452 PASS + 4 skipped / tests/demo_seed/ 45 PASS /
+  ruff clean / dry-run 으로 RESTRICTED skip 동작 관찰
+
+### 핵심 발견
+- M-1 retries 갭: 스펙 "5회" vs 구현 `DEFAULT_RETRIES = 3` (1줄 수정 권고)
+- M-2 10GB 캐시 경고 미구현 (FR-S-3)
+- M-3 --dry-run 이 disk 에 `_plan.txt` 생성 (network 0 이지만 disk 부작용)
+- 단위 테스트 공백: RESTRICTED skip, lock 파일 쓰기 테스트 없음
+
+### 어디까지 됐나
+- Kyle R-1 (실 TCIA 400-study 다운로드) 진행 가능 — 코드 블로커 없음
+- M-1..M-5 는 CEO 미팅 D-14 일정에 영향 없이 병행 수정 가능
+- @developer 재작업 필요 없음 (optional 1줄 수정만)
+
+### 다음에 뭘 하나
+- Kyle R-1 리허설 (실 TCIA 다운로드 + inject_all.sh 30분 목표 실측)
+- 선택적 @developer 호출: M-1 retries=5 로 1줄 수정 (재 QA 불요)
+- Kyle 결정 대기: FR-S-7 "5회 vs 3회" 방향, --accept-restricted 기본 정책
