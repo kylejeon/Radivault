@@ -1,0 +1,60 @@
+# Central Ingest — demo/CEO-rehearsal override (Option B host bind mount).
+#
+# Bind-mounted read-only over /etc/radivault-central/ingest.yml by
+# docker-compose.central.yml so image rebuilds are not required.
+#
+# Differences vs configs/central.docker.yaml (prod-shape defaults):
+#   rate_limit.hospital_ingest_per_min   60 → 600   (sync-once bursts clean)
+#   rate_limit.hospital_ingest_per_hour  2000 → 20000
+# All other sections track configs/central.docker.yaml verbatim.
+
+version: 1
+
+app:
+  env: "dev"
+  api_contract_version: "1"
+  workers: 2
+
+db:
+  dsn: "postgresql+psycopg://central_app:central_app@postgres:5432/central"
+  migration_dsn: "postgresql+psycopg://central_migrator:central_migrator@postgres:5432/central"
+  pool_size: 10
+  max_overflow: 10
+
+redis:
+  url: "redis://redis:6379/0"
+  idempotency_ttl_seconds: 86400
+
+storage:
+  provider: "minio"
+  endpoint_url: "http://minio:9000"
+  region: "us-east-1"
+  bucket: "radivault-ingest-dev"
+  force_path_style: true
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin"
+  local_root: "/var/lib/radivault-central/objects"
+  allow_unencrypted: true
+  allow_insecure: true
+
+auth:
+  hash_algorithm: "argon2id"
+  argon2:
+    time_cost: 3
+    memory_cost_kib: 65536
+    parallelism: 2
+
+rate_limit:
+  hospital_ingest_per_min: 600
+  hospital_ingest_per_hour: 20000
+  hospital_anchor_per_min: 6
+  ip_global_per_min: 300
+
+observability:
+  log_level: "INFO"
+  json_logs: true
+
+ops:
+  anchor_lag_warn_seconds: 10800
+  anchor_lag_block_enabled: false
+  max_manifest_bytes: 1048576

@@ -76,6 +76,10 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      # Demo override: raises hospital_ingest_per_min 60→600 without rebuilding
+      # the image. Swap/remove for production; see configs/central.demo.yaml.
+      - ./configs/central.demo.yaml:/etc/radivault-central/ingest.yml:ro
     environment:
       RV_CENTRAL_CONFIG: /etc/radivault-central/ingest.yml
       DATABASE_URL: postgresql+psycopg://central_app:central_app@postgres:5432/central
