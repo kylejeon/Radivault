@@ -399,10 +399,12 @@ def _iter_study_targets(
     # Sample more patients than we need so studies-per-patient variance
     # doesn't starve us of targets.
     max_patients = max(collection.target_count * PATIENTS_MULTIPLIER, collection.target_count)
+    # TCIA v3 API returns "PatientId" (lowercase d). Keep PatientID/patientId
+    # fallbacks for older tcia_utils or future schema drift.
     patient_ids = [
-        (p.get("PatientID") or p.get("patientId"))
+        (p.get("PatientId") or p.get("PatientID") or p.get("patientId"))
         for p in patients
-        if p.get("PatientID") or p.get("patientId")
+        if (p.get("PatientId") or p.get("PatientID") or p.get("patientId"))
     ][:max_patients]
 
     targets: list[tuple[str, str]] = []

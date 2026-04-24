@@ -17,7 +17,9 @@ collections:
     body_part: ABDOMEN
     target_count: 50
     license: CC-BY
-  - name: QIN-BRAIN-DSC-MRI
+  # QIN-BRAIN-DSC-MRI removed from TCIA catalog (2026-04-24 verification).
+  # Replaced with UPENN-GBM: 630 patients, MR+BRAIN, CC-BY. (Session 16.)
+  - name: UPENN-GBM
     modality: MR
     body_part: BRAIN
     target_count: 100

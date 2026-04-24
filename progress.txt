@@ -1329,3 +1329,83 @@ Kyle "내 결정 대기 항목은 네의 의견대로 진행해줘" 수락. 3건
   6-Phase 중 Phase 4→5 를 한 대화 세션에 소화.
 - 의존성 tcia_utils>=3.3 추가 (pyproject.toml [demo-seed] extras).
   Kyle 머신에서 pip install -e ".[demo-seed]" 1회 실행 필요.
+
+
+## 2026-04-24 — Session 16 (Claude 메인, inject_all.sh 첫 실행 실패 → 3건 fix)
+
+### 배경
+Kyle이 pip install -e ".[demo-seed]" + bash scripts/demo_seed/inject_all.sh
+실행. 세 군데서 동시에 실패 — 전부 구조적 이슈였음:
+1. TCIA 5개 컬렉션 전부 0 환자 반환 (@developer 코드 버그)
+2. QIN-BRAIN-DSC-MRI 컬렉션이 TCIA 카탈로그에서 사라짐 (데이터 드리프트)
+3. search-admin buyer create 시 postgres 인증 실패 (인프라 role 갭)
+
+### 원인 분석 및 Fix 3건
+
+**#1 TCIA PatientId 필드명 버그** (scripts/demo_seed/download_tcia.py:402-406)
+- 코드가 `p.get("PatientID")` 또는 `p.get("patientId")` 만 조회
+- 실제 TCIA v3 API 응답 필드는 `PatientId` (소문자 d)
+- 전 환자가 필터링되어 targets=[] → no_targets 경고 반복
+- Fix: `PatientId` fallback 추가 (1줄 수정, 기존 2 variant 유지)
+- 검증: UPENN-GBM 에서 2 (patient_id, study_uid) pairs 정상 추출
+- @qa round 1 못 잡은 이유: 단위 테스트 전부 mock 사용, 실 TCIA 응답
+  스키마 integration test 부재. Lesson: P1 integ test ≥ 1 필수.
+
+**#2 QIN-BRAIN-DSC-MRI 카탈로그 제거 → UPENN-GBM 대체**
+  (scripts/demo_seed/seed_config.yaml)
+- 실측: nbia.getCollections() 154 컬렉션 중 QIN-BRAIN-DSC-MRI 없음
+- BRAIN/GLIOMA 키워드로 3 후보 조회:
+  - GBM-DSC-MRI-DRO: 3 환자 (부족)
+  - ICDC-Glioma: 57 환자 (충분)
+  - UPENN-GBM: 630 환자 (넉넉) ← 선택
+- UPENN-GBM 선택 근거: target_count=100 여유, MR+BRAIN 유지, 의료 AI
+  업계 표준 글리오마 데이터셋, CC-BY 라이선스 (확인 필요하지만 대부분).
+- Fix: seed_config.yaml 1 엔트리 교체 + 주석으로 드리프트 사유 명시.
+
+**#3 search_admin / radivault_buyer_ro / central_migrator / radivault_fulfillment_app role + radivault_central DB 누락**
+  (scripts/demo_setup/bootstrap_search_roles.sql 신규)
+- docker-compose.search.yml / docker-compose.fulfillment.yml 이 기대하는
+  DSN 과 postgres 컨테이너 기본값 (central_app / central DB) 불일치
+- install-guide §10 에서 known issue 로 flag 했던 fulfillment 갭과 동일.
+- Fix: idempotent bootstrap SQL 작성 (DO $$..$$ 블록에서 role 존재 체크
+  후 CREATE). docker exec psql 로 central_app superuser 권한 활용.
+- 검증: \du → 4 roles 확인, search_admin 으로 radivault_central DB
+  로그인 성공.
+
+### seed_buyer.py 정상 동작 검증
+- python scripts/demo_seed/seed_buyer.py 실행 →
+  buy_demo001 생성 + plaintext key `rv_live_cf4ec164_...` stdout 출력 +
+  .buyer_key.local.txt (0600) 저장 확인.
+
+### 수정 파일 (이번 세션)
+- scripts/demo_seed/download_tcia.py:402-408 — PatientId fallback
+- scripts/demo_seed/seed_config.yaml:20-25 — QIN-BRAIN-DSC-MRI → UPENN-GBM
+- scripts/demo_setup/bootstrap_search_roles.sql — 신규 (69 줄, 주석 포함)
+- docs/ops/install-guide.md §4.2.1 — bootstrap SQL 필수 단계 추가
+
+### 어디까지 됐나
+- Kyle 이 지금 inject_all.sh 재실행 시 STEP 1 통과 가능 (UPENN-GBM 다운로드)
+- STEP 4 seed_buyer.py 단독 실행 검증됨
+- 남은 검증: STEP 2 load_orthanc.py (studies 받은 후), STEP 3 gateway-admin
+  (host PATH 필요), STEP 5 seed_hospital.py (idempotent 예상), STEP 6
+  verify.py (400 studies 다운로드 완료 후)
+
+### 다음에 뭘 하나
+- Kyle 수동: `bash scripts/demo_seed/inject_all.sh` 재실행 (UPENN-GBM
+  포함 4 컬렉션 300 studies. LIDC-IDRI 는 DUA 후 별도).
+  - STEP 1 UPENN-GBM 100 studies 다운로드 ~30~60분 예상
+  - 전체 ~3~6시간 (기존 예상 8시간에서 단축)
+- 검증 완료 후 demo_seed_ready.lock 생성 확인.
+- 잔여 이슈:
+  - FR-S-7 retries=5 실전 flaky 관측 (Session 15 Kyle 결정)
+  - bootstrap SQL v0.1.1 init.d 볼륨 자동화 (Kyle CEO 미팅 후)
+
+### 메모
+- @qa round 2 는 생략. Session 12 H-1, Session 15 M-1 선례 동일.
+  변경 범위: 1줄 필드명 fallback (PatientId 는 실 API 응답으로 실측
+  검증됨), config 1 엔트리 교체, idempotent bootstrap SQL. 새 공격면
+  없음.
+- 본 세션 fix 3건 전부 실 TCIA API / 실 postgres 컨테이너 실측으로
+  검증. 가정 기반 아님.
+- UPENN-GBM CC-BY 라이선스는 TCIA 페이지 최종 확인 권고 (Kyle 법무
+  flag 에 추가). 대부분 CC-BY 지만 특정 series 에 제약 있을 수 있음.

@@ -100,6 +100,17 @@ docker compose -f docker-compose.central.yml up -d
 docker compose -f docker-compose.search.yml up -d
 ```
 
+### 4.2.1 Search/fulfillment DB role bootstrap (필수, 1회만)
+
+`docker-compose.search.yml`과 `docker-compose.fulfillment.yml`은 `search_admin` / `radivault_buyer_ro` / `central_migrator` / `radivault_fulfillment_app` role과 `radivault_central` DB를 전제합니다. 기본 postgres 컨테이너는 `central_app` + `central` DB만 생성하므로 수동 bootstrap 필요 (v0.1.1 에서 init.d 볼륨으로 자동화 예정).
+
+```bash
+docker exec -i radivault-postgres-1 psql -U central_app -d postgres \
+  < scripts/demo_setup/bootstrap_search_roles.sql
+```
+
+성공 출력: `CREATE DATABASE` / `DO` / `GRANT` 여러 개 / `ALTER DEFAULT PRIVILEGES`. 스크립트는 idempotent — 재실행해도 안전.
+
 ### 4.3 상태 확인
 
 ```bash
