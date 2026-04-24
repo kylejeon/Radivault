@@ -6,6 +6,12 @@ single-threaded per study, so we keep the API simple for testability).
 WADO-RS payloads arrive as multipart/related; we parse them into individual
 Part 10 DICOM byte blobs and write one file per instance into the target
 directory.
+
+QIDO pagination: :meth:`DicomWebPacsClient.query_studies` is internally
+paged (default page size = 500 rows) and transparently returns the full
+result set to callers. Orthanc and DCM4CHE both cap a single QIDO response
+at a small default (Orthanc = 100 unless the client overrides ``limit``);
+callers never see page boundaries.
 """
 
 from __future__ import annotations
@@ -189,46 +195,120 @@ class DicomWebPacsClient:
 
     # ---- QIDO ----
 
+    # Max QIDO pages we will ever walk in a single ``query_studies`` call.
+    # 200 pages * default page size 500 = 100,000 studies. Production Korean
+    # hospitals emit << 10k studies/day; this cap is a cheap infinite-loop
+    # guard against a broken PACS that keeps echoing full pages.
+    _QIDO_MAX_PAGES = 200
+
     def query_studies(
         self,
         study_date_from: date,
         study_date_to: date,
         modalities: Iterable[str] | None = None,
-        limit: int = 100,
+        limit: int = 500,
         offset: int = 0,
     ) -> list[StudySummary]:
-        params: dict[str, Any] = {
-            "StudyDate": f"{study_date_from.strftime('%Y%m%d')}-{study_date_to.strftime('%Y%m%d')}",
-            "limit": limit,
-            "offset": offset,
-        }
-        if modalities:
-            params["ModalitiesInStudy"] = ",".join(modalities)
+        """Return every QIDO ``/studies`` row matching the date window.
+
+        ``limit`` and ``offset`` are **internal pagination** knobs, not a
+        user-facing result cap: ``limit`` sets the page size per QIDO
+        request (default 500, chosen so a typical hospital day fits in a
+        single round-trip) and ``offset`` is the starting cursor. The method
+        walks pages — issuing ``GET /studies?...&limit=<page>&offset=<cur>``
+        until the server returns fewer than ``limit`` rows (or zero), then
+        returns the concatenated, UID-deduped list.
+
+        Rationale for the bug this fixes: Orthanc caps an unbounded QIDO
+        request at 100 rows. Before pagination was added the gateway silently
+        processed only the first 100 studies of a 255-study source, which
+        violated the sync-once "all matches in window" contract.
+
+        Raises :class:`PacsError` on unrecoverable HTTP errors or when the
+        server emits more than ``_QIDO_MAX_PAGES`` full pages (cheap
+        infinite-loop guard).
+        """
         url = f"{self.base_url}/studies"
-        resp = self._request_with_retry("GET", url, params=params)
-        if resp.status_code == 204 or not resp.content:
-            return []
-        if resp.status_code >= 400:
-            raise PacsError(
-                f"QIDO error {resp.status_code}: {resp.text[:200]}",
-                status_code=resp.status_code,
-            )
-        items = resp.json() if resp.content else []
-        result: list[StudySummary] = []
-        for item in items:
-            study_uid = _qido_value(item, "0020000D")
-            if not study_uid:
-                continue
-            modalities_val = item.get("00080061", {}).get("Value", []) or []
-            result.append(
-                StudySummary(
-                    study_instance_uid=str(study_uid),
-                    patient_id=str(_qido_value(item, "00100020") or ""),
-                    study_date=str(_qido_value(item, "00080020") or ""),
-                    modalities_in_study=[str(m) for m in modalities_val],
-                    num_instances=_qido_value(item, "00201208"),
+        study_date_param = (
+            f"{study_date_from.strftime('%Y%m%d')}-"
+            f"{study_date_to.strftime('%Y%m%d')}"
+        )
+        base_params: dict[str, Any] = {"StudyDate": study_date_param}
+        if modalities:
+            base_params["ModalitiesInStudy"] = ",".join(modalities)
+
+        page_size = limit
+        cursor = offset
+        pages_fetched = 0
+        all_rows: list[StudySummary] = []
+        started = time.time()
+
+        while True:
+            if pages_fetched >= self._QIDO_MAX_PAGES:
+                raise PacsError(
+                    f"QIDO pagination exceeded max_pages={self._QIDO_MAX_PAGES}"
                 )
+            params = {**base_params, "limit": page_size, "offset": cursor}
+            resp = self._request_with_retry("GET", url, params=params)
+            pages_fetched += 1
+
+            if resp.status_code == 204 or not resp.content:
+                # Empty body = end of results. Terminate.
+                break
+            if resp.status_code >= 400:
+                raise PacsError(
+                    f"QIDO error {resp.status_code}: {resp.text[:200]}",
+                    status_code=resp.status_code,
+                )
+            items = resp.json() if resp.content else []
+            page_len = len(items) if isinstance(items, list) else 0
+            log.debug(
+                "qido page",
+                extra={"offset": cursor, "returned": page_len},
             )
+            if not isinstance(items, list) or page_len == 0:
+                break
+
+            for item in items:
+                study_uid = _qido_value(item, "0020000D")
+                if not study_uid:
+                    continue
+                modalities_val = item.get("00080061", {}).get("Value", []) or []
+                all_rows.append(
+                    StudySummary(
+                        study_instance_uid=str(study_uid),
+                        patient_id=str(_qido_value(item, "00100020") or ""),
+                        study_date=str(_qido_value(item, "00080020") or ""),
+                        modalities_in_study=[str(m) for m in modalities_val],
+                        num_instances=_qido_value(item, "00201208"),
+                    )
+                )
+
+            # Partial page ⇒ last page reached. Avoids one extra empty
+            # round-trip when the tail exactly matches the page size.
+            if page_len < page_size:
+                break
+            cursor += page_size
+
+        # StudyInstanceUID dedupe while preserving first-seen order. Guards
+        # against duplicates that appear near page boundaries when the PACS
+        # sort order is unstable (Orthanc sorts by StudyDate without a
+        # stable tie-breaker).
+        deduped: dict[str, StudySummary] = {}
+        for row in all_rows:
+            if row.study_instance_uid not in deduped:
+                deduped[row.study_instance_uid] = row
+        result = list(deduped.values())
+
+        duration_ms = int((time.time() - started) * 1000)
+        log.info(
+            "qido pagination done",
+            extra={
+                "total": len(result),
+                "pages": pages_fetched,
+                "duration_ms": duration_ms,
+            },
+        )
         return result
 
     def fetch_study_qido_summary(self, study_instance_uid: str) -> StudyQidoSummary:

@@ -1921,3 +1921,22 @@ JSON POST** 만으로 축소. PACS 부하 / wall-clock / 디스크 I/O 모두 �
 - 남은 이슈:
   - `fetch_study_metadata` 는 legacy 호환 목적으로 남아있지만 코드에서
     호출자가 없음. 향후 v0.2 cleanup 에서 제거 여부 판단.
+
+---
+
+## 2026-04-25 — QIDO pagination fix
+
+- 뭘 했나: 라이브 데모에서 sync-once --metadata-only 가 255 study 중
+  100 건만 처리하던 버그 수정. DicomWebPacsClient.query_studies 가 QIDO
+  /studies 를 단 한 번만 호출하고 끝나던 구조를, 내부 auto-pagination
+  (기본 page size 500, max_pages 200) 루프로 재작성. 응답 길이 < page
+  size 또는 빈 배열일 때 종료하고, 페이지 경계에서 StudyInstanceUID 기준
+  dedupe 수행. 호출부 (orchestrator.pipeline.py) 는 시그니처 그대로
+  호환되므로 변경 없음.
+- 어디까지: 523 → 530 passed (신규 7개). 수정 파일:
+  src/radivault_gateway/pacs/client.py,
+  tests/unit/test_pacs_query_studies_pagination.py. 새 기본값 limit=500
+  은 Orthanc 응답에서 1 round-trip 에 일반적인 병원 하루치 study 를 다
+  담을 수 있는 크기.
+- 다음: Kyle 이 진행 중인 sync 를 마친 뒤 sync-once 재실행 → 255/255
+  업로드 확인. QA 검수 시 pagination 경계 동작 + max_pages guard 재확인.
