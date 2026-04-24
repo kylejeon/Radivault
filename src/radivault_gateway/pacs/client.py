@@ -22,6 +22,11 @@ from typing import Any
 
 import httpx
 
+from radivault_gateway.pacs.dicom_json import (
+    json_to_datasets,
+    write_datasets_to_dir,
+)
+
 log = logging.getLogger("radivault.pacs")
 
 
@@ -230,6 +235,66 @@ class DicomWebPacsClient:
             path.write_bytes(part)
             paths.append(path)
             total_bytes += len(part)
+        duration_ms = int((time.time() - started) * 1000)
+        return FetchResult(
+            study_instance_uid=study_instance_uid,
+            instance_paths=paths,
+            bytes_total=total_bytes,
+            duration_ms=duration_ms,
+        )
+
+    def fetch_study_metadata(self, study_instance_uid: str, out_dir: Path) -> FetchResult:
+        """Flow A (metadata-only) fetch.
+
+        Calls the DICOMweb ``/studies/{uid}/metadata`` endpoint (PS3.18 §10.4)
+        with ``Accept: application/dicom+json`` and materialises one
+        pixel-free Part-10 ``.dcm`` file per instance under ``out_dir``. The
+        return shape matches :meth:`fetch_study` so the orchestrator can swap
+        implementations without touching its downstream de-ID / staging
+        bookkeeping (FR-6..FR-15 operate on filesystem inputs).
+
+        No pixel data ever crosses the wire — the JSON payload references
+        ``PixelData`` as a ``BulkDataURI`` which we drop (see
+        :mod:`radivault_gateway.pacs.dicom_json`). Typical Orthanc responses
+        are a few KB per instance versus several MB for a full WADO-RS
+        multipart, yielding the 10-100x fetch-time win Flow A was designed
+        for (ARCHITECTURE.md §4).
+        """
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        url = f"{self.base_url}/studies/{study_instance_uid}/metadata"
+        headers = {"Accept": "application/dicom+json"}
+        started = time.time()
+        resp = self._request_with_retry("GET", url, headers=headers)
+        if resp.status_code >= 400:
+            raise PacsError(
+                f"WADO metadata error {resp.status_code}: {resp.text[:200]}",
+                status_code=resp.status_code,
+            )
+        # 204 = study empty → return a zero-instance result rather than raising;
+        # the orchestrator audits ``n_instances=0`` and moves on.
+        if resp.status_code == 204 or not resp.content:
+            duration_ms = int((time.time() - started) * 1000)
+            return FetchResult(
+                study_instance_uid=study_instance_uid,
+                instance_paths=[],
+                bytes_total=0,
+                duration_ms=duration_ms,
+            )
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise PacsError(
+                f"WADO metadata: non-JSON response: {exc}",
+                status_code=resp.status_code,
+            ) from exc
+        if not isinstance(payload, list):
+            raise PacsError(
+                f"WADO metadata: expected JSON array, got {type(payload).__name__}",
+                status_code=resp.status_code,
+            )
+        datasets = json_to_datasets(payload)
+        paths, total_bytes = write_datasets_to_dir(datasets, out_dir)
         duration_ms = int((time.time() - started) * 1000)
         return FetchResult(
             study_instance_uid=study_instance_uid,

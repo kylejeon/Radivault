@@ -1591,3 +1591,124 @@ ARCHITECTURE.md §4 Flow A (메타만 상시) vs Flow B (주문 시 영상)
     fulfillment 가 영상 배송 시 사용. 본 PR 에선 무수정.
   - Session 18 OOM 근본 원인 (worker memory + multipart limits) 은
     여전히 full-payload 경로에 잔존. Flow B 동작 시점 재검토 필요.
+
+
+## 2026-04-24 — Session 20 (@developer, gateway-wado-metadata-fetch)
+
+### 뭘 했나
+Session 19 메타-only 업로드 경로는 있었지만 PACS fetch 는 여전히 full
+DICOM binary 를 multipart/related 로 받아와 1 study 당 114s 걸림 (1436-
+instance MR 기준). 이번 세션에서 fetch 자체를 DICOMweb 표준 WADO-RS
+metadata 엔드포인트 (`/studies/{uid}/metadata`) 로 전환. 픽셀 0 바이트
+수신.
+
+### 구현 요약
+- **`src/radivault_gateway/pacs/dicom_json.py` 신규** (112 줄):
+  - `json_to_dataset(dict) -> Dataset` — DICOM JSON (PS3.18 §F) →
+    pydicom Dataset. `BulkDataURI` 는 `_drop_bulk_data` 핸들러로 None
+    반환 → Dataset 에서 자동 제거 (PixelData 포함).
+  - `json_to_datasets(list[dict]) -> list[Dataset]` — 스터디 레벨 배열
+    변환, 말포르메 스킵 + WARN 로그.
+  - `write_datasets_to_dir(datasets, out_dir) -> (paths, total_bytes)` —
+    `enforce_file_format=True` + 128 NUL preamble 로 Part-10 파일 쓰기.
+    기존 de-id 엔진이 그대로 소비.
+  - Group-0002 (file-meta) 요소는 `FileMetaDataset` 로 분리, 누락 시
+    `TransferSyntaxUID=ExplicitVRLittleEndian` + `MediaStorageSOPClassUID`
+    fallback 백필.
+- **`DicomWebPacsClient.fetch_study_metadata`** (client.py):
+  - `GET {base}/studies/{uid}/metadata` + `Accept: application/dicom+json`.
+  - 204 empty → zero-instance FetchResult.
+  - non-JSON / non-array → PacsError.
+  - 기존 `_request_with_retry` 재사용 → 5xx/network retry 동일.
+  - 반환 shape 은 `FetchResult` 로 `fetch_study()` 와 동일 → orchestrator
+    분기가 최소 변경.
+- **`Pipeline._process_study`** 패치 (pipeline.py):
+  - `if metadata_only and hasattr(self._pacs, "fetch_study_metadata")`:
+    `fetch_study_metadata()` 호출, 그 외엔 기존 `fetch_study()` 그대로.
+  - de-id / reverify / staging / audit 코드 무수정 (Flow A/B 분기 없음).
+  - `_run_metadata_only_upload` (Session 19) 은 완전 무수정.
+  - `_run_full_upload` 경로 (주문 fulfillment) 무수정 — Flow B 의존성
+    보존.
+
+### 실측 검증 (실 Orthanc + 실 Central)
+- 3-study 벤치마크 (`sync-once --metadata-only --limit 3`):
+  - **Session 19 baseline: 2m24s (144s)**
+  - **Session 20 actual: 27.4s (5.25x 개선, 목표 30s 이내 달성)**
+  - 스터디별 fetch: 1.3s / 19.3s / 0.9s (1436-instance MR 이 19s 대부분
+    차지 — Session 19 의 114s 대비 동일 스터디 6x 개선)
+  - de-id: 0.4s / 3.3s / 0.1s — PixelData 없어 file I/O 감소
+  - upload: 77ms / 66ms / 47ms (manifest JSON only)
+  - 3 studies uploaded=3, failed=0, quarantined=0.
+- Central 감사 로그:
+  - `central.ingest.metadata_only.completed` × 3
+  - `bytes_received` 서버 측: 424 / 439 / 423 bytes (manifest JSON 크기)
+  - 픽셀 바이트 0.
+- Orthanc metadata 응답: 192 instances × ~12KB/inst JSON = 2.25MB.
+  저장된 Part-10 파일: ~2.9KB/inst = 553KB total (MR 1study).
+
+### 판단 기록 (Kyle 승인 없이 권장안 채택)
+1. **total_bytes 산정**: `deid_result.n_bytes` 재사용 (기존 pipeline 코드).
+   metadata-only 모드에선 Part-10 synthetic 파일들의 디스크 크기 (~455KB
+   for 192-inst MR) 이므로 물리적으로 정확. 0 고정 대비 장점: 동일 업로드
+   API shape 유지, 센트럴 쪽 통계 영향 없음.
+2. **De-ID 엔진 pixel_available 플래그**: 불필요했음. 기존 `_check_quarantine`
+   은 `(0028,0301)` BurnedInAnnotation **메타 태그** 만 체크 → PixelData
+   없어도 정확히 동작. 기존 엔진 무수정.
+3. **Dataset save_as vs in-memory de-id**: save_as 채택 (Option A). 이유
+   — de-id 엔진 + reverify 가 파일시스템 디렉토리 입력 전제, 재작성하면
+   Flow A/B bit-equivalence (AC-15) 깨질 수 있음. Synthetic Part-10
+   파일 쓰기 I/O 는 2.9KB/file 로 무시 가능.
+4. **Dataset.is_little_endian / is_implicit_VR deprecation**: pydicom 3.x
+   에서 WARN, 4.0 에서 제거 예정. `file_meta.TransferSyntaxUID` 가
+   authoritative. 로그 플러딩 방지 위해 설정 생략.
+5. **state.sqlite3 lock 회피**: Kyle 이 병렬로 sync-once --metadata-only
+   (Session 19 code) 돌리고 있어 별도 config (`/tmp/radivault-s20-test/`)
+   + 격리된 state DB 로 벤치마크. 그의 프로세스 무중단.
+
+### 테스트 (neighboring baseline 481 → 492, +11 신규 PASS)
+- `tests/unit/test_pacs_metadata_fetch.py` (11 tests):
+  - json_to_dataset: core fields + PixelData drop
+  - json_to_dataset: file_meta backfill
+  - json_to_datasets: malformed 스킵
+  - write_datasets_to_dir: dcmread round-trip
+  - fetch_study_metadata: 200 happy path + URL + Accept 헤더 검증
+  - fetch_study_metadata: 204 empty study
+  - fetch_study_metadata: non-array body → PacsError
+  - fetch_study_metadata: 404 → PacsError with status_code
+  - Pipeline: metadata_only 모드가 fetch_study_metadata 경로 사용 (full
+    fetch_study 는 assert 로 fail-safe)
+  - Pipeline: full-payload 모드는 fetch_study 만 호출 (regression guard)
+  - De-ID: BurnedInAnnotation=YES 스터디 quarantine (PixelData 없어도
+    metadata 태그만으로 정확)
+- 전체 파이프라인 테스트 스위트: 492 PASS (481 baseline 유지)
+- ruff clean
+
+### 수정·추가 파일 (이번 세션)
+- src/radivault_gateway/pacs/dicom_json.py — 신규 (112 줄)
+- src/radivault_gateway/pacs/client.py — fetch_study_metadata 메서드
+- src/radivault_gateway/pacs/__init__.py — json_to_dataset/s export
+- src/radivault_gateway/orchestrator/pipeline.py — metadata_only 분기 (7 줄)
+- tests/unit/test_pacs_metadata_fetch.py — 신규 (11 tests, 387 줄)
+
+### 어디까지 됐나
+- 3-study 벤치마크 27.4s (5.25x 개선, < 30s 목표 달성)
+- 255 studies 기대 시간: ~38분 (Session 19 기준 1~2h → 5x+ 개선 반영)
+- Kyle 리허설 재시드 가능한 수준에 도달.
+- 492/492 테스트 PASS, ruff clean.
+
+### 다음에 뭘 하나
+- @qa — gateway-wado-metadata-fetch 검수. 특히:
+  - dicom_json.py 엣지케이스 (sequence VR, private tags, non-ASCII PN)
+  - fetch_study_metadata 의 retry 경로가 fetch_study 와 동일 정책인지
+  - Pipeline 분기 hasattr() 기반 — 타입 힌트 강화 제안 있을 수 있음
+- Kyle 수동 검증: 255 studies 전체로 실측
+  `time radivault-gateway -c configs/demo_gateway.yaml sync-once
+   --since 2000-01-01 --metadata-only`
+  (기대: ~30-40분, Session 19 1~2h 대비 3x+ 개선)
+- 남은 이슈:
+  - full-payload `/v1/ingest/studies` 경로는 v0.1 무수정 (fulfillment
+    Flow B 의존성).
+  - Session 18 OOM 근본 원인 (worker memory + multipart limits) 은
+    여전히 full-payload 경로에 잔존. Flow B 동작 시점 재검토 필요.
+  - pydicom v4.0 migration: Dataset.is_little_endian/is_implicit_VR
+    deprecated → file_meta.TransferSyntaxUID 로 이미 통일됨.

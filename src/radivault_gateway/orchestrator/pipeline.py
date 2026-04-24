@@ -183,7 +183,17 @@ class Pipeline:
             fetch_dir = Path(tempfile.mkdtemp(prefix="radivault_fetch_"))
             fetch_started = datetime.now()
             try:
-                fetch = self._pacs.fetch_study(original_uid, fetch_dir)
+                # Flow A (metadata_only): pull DICOM JSON from
+                # WADO-RS ``/metadata`` and synthesize Part-10 files without
+                # pixel data. Flow B (full-payload): standard multipart
+                # WADO-RS ``/studies/{uid}`` which transfers every frame.
+                # The de-ID / reverify / staging code below is identical in
+                # both cases — the only difference is what lives on disk
+                # under ``fetch_dir``.
+                if metadata_only and hasattr(self._pacs, "fetch_study_metadata"):
+                    fetch = self._pacs.fetch_study_metadata(original_uid, fetch_dir)
+                else:
+                    fetch = self._pacs.fetch_study(original_uid, fetch_dir)
             except PacsError as exc:
                 self._audit.append(
                     "pacs.fetch.failed",
