@@ -144,6 +144,42 @@ class StudyNotFound(SearchError):
     message_ko = "스터디를 찾을 수 없습니다."
 
 
+# --- Preview / sample download (dev-spec-buyer-browse-preview FR-API-1) -----
+class PreviewNotVerified(SearchError):
+    code = "ERR_PREVIEW_NOT_VERIFIED"
+    status_code = 403
+    message_en = "This study has not passed PHI verification."
+    message_ko = "이 스터디는 PHI 검증을 통과하지 않았습니다."
+
+
+class FrameNotFound(SearchError):
+    code = "ERR_FRAME_NOT_FOUND"
+    status_code = 404
+    message_en = "Requested preview frame not found."
+    message_ko = "요청한 프리뷰 프레임을 찾을 수 없습니다."
+
+
+class SampleInstanceMissing(SearchError):
+    code = "ERR_SAMPLE_INSTANCE_MISSING"
+    status_code = 409
+    message_en = "Sample instance is not configured for this study."
+    message_ko = "이 스터디에는 샘플 인스턴스가 구성되지 않았습니다."
+
+
+class QuotaExceededError(SearchError):
+    code = "ERR_QUOTA_EXCEEDED"
+    status_code = 429
+    message_en = "Daily sample download limit reached."
+    message_ko = "일일 샘플 다운로드 한도에 도달했습니다."
+
+
+class PresignFailed(SearchError):
+    code = "ERR_PRESIGN_FAILED"
+    status_code = 500
+    message_en = "Sample download could not be prepared."
+    message_ko = "샘플 다운로드를 준비하지 못했습니다."
+
+
 # ---------------------------------------------------------------------------
 # Handler installation — envelope shaping identical to central-ingest.
 # ---------------------------------------------------------------------------
@@ -250,12 +286,17 @@ __all__ = [
     "CursorVersion",
     "DbUnavailable",
     "FilterTooMany",
+    "FrameNotFound",
     "IdempUnavailable",
     "PageLimit",
+    "PresignFailed",
+    "PreviewNotVerified",
     "QueryTimeout",
     "QueryTooBroad",
+    "QuotaExceededError",
     "RateLimited",
     "RequestSchema",
+    "SampleInstanceMissing",
     "ScopeForbidden",
     "SearchError",
     "StudyNotFound",

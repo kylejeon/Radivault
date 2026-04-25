@@ -39,7 +39,12 @@ log = logging.getLogger("radivault_search.ratelimit")
 
 # Only these endpoints are subject to per-buyer rate-limit. Probes/version/
 # metrics bypass.
-PROTECTED_PREFIXES = ("/v1/search/",)
+#
+# ``/v1/studies/`` and ``/v1/account/quota`` are added by the buyer-browse-
+# preview workflow (dev-spec-buyer-browse-preview FR-API-1) so the same
+# tier-based RPM/daily caps apply to thumbnail/frame/sample-download
+# requests as to /v1/search/*.
+PROTECTED_PREFIXES = ("/v1/search/", "/v1/studies/", "/v1/account/quota")
 
 
 @dataclass

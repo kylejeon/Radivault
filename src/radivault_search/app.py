@@ -32,6 +32,8 @@ from radivault_search.db.session import get_engine, get_session_factory
 from radivault_search.errors import register_exception_handlers
 from radivault_search.logging_config import configure_logging
 from radivault_search.ratelimit.middleware import RateLimitMiddleware, TierLimits
+from radivault_search.preview import preview_router
+from radivault_search.preview.storage import LocalPreviewStore, S3PreviewStore
 from radivault_search.routers import (
     facets_router,
     hospitals_router,
@@ -113,6 +115,40 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     app.state.env = settings.app.env
     app.state.migrations_state = "head"
 
+    # Preview cache adapter (dev-spec-buyer-browse-preview FR-API-1).
+    # In test mode use a temp local FS; production reads MinIO env vars.
+    if testing:
+        import tempfile
+
+        preview_root = tempfile.mkdtemp(prefix="rv_preview_test_")
+        app.state.preview_store = LocalPreviewStore(preview_root)
+    else:
+        endpoint = os.environ.get("RV_PREVIEW_S3_ENDPOINT")
+        bucket = os.environ.get("RV_PREVIEW_S3_BUCKET", "radivault-preview")
+        access_key = os.environ.get("RV_PREVIEW_S3_ACCESS_KEY")
+        secret_key = os.environ.get("RV_PREVIEW_S3_SECRET_KEY")
+        region = os.environ.get("RV_PREVIEW_S3_REGION", "us-east-1")
+        # Allow http:// in non-prod envs so MinIO local works without TLS.
+        is_prod = settings.app.env == "prod"
+        if endpoint:
+            app.state.preview_store = S3PreviewStore(
+                bucket=bucket,
+                region=region,
+                endpoint_url=endpoint,
+                access_key_id=access_key,
+                secret_access_key=secret_key,
+                allow_insecure=not is_prod,
+            )
+        else:
+            # Filesystem fallback for dev environments without MinIO.
+            preview_root = os.environ.get(
+                "RV_PREVIEW_LOCAL_ROOT", "/var/lib/radivault/preview"
+            )
+            app.state.preview_store = LocalPreviewStore(preview_root)
+    app.state.sample_download_daily_limit = int(
+        os.environ.get("RV_SAMPLE_DOWNLOAD_DAILY_LIMIT", "1")
+    )
+
     # Middleware — outermost first.
     app.add_middleware(
         RateLimitMiddleware,
@@ -146,6 +182,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     app.include_router(search_router)
     app.include_router(facets_router)
     app.include_router(hospitals_router)
+    app.include_router(preview_router)
 
     @app.get("/metrics", include_in_schema=False)
     def metrics() -> Response:
