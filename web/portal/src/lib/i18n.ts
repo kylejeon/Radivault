@@ -359,6 +359,67 @@ const en = {
     mobileFallbackBody:
       "RadiVault Marketplace is optimised for ≥ 1280 px screens. Switch to a desktop browser for the full experience.",
   },
+  // dev-spec-buyer-browse-preview / design-spec §14.1
+  preview: {
+    unavailableShort: "Preview unavailable",
+    unavailablePending: "PHI verification pending",
+    unavailablePhi: "Preview blocked — PHI detected",
+    unavailableModality: "Preview not available for this modality",
+    thumbnailRetry: "Retry",
+    thumbnailFailed: "Preview failed",
+    browseVerified: "Browse verified studies",
+  },
+  viewer: {
+    sliderLabel: "Slice number",
+    sliceCounter: "Slice {n} of {total}",
+    keyboardHint: "↑↓ Slices  +/- Zoom  Drag Pan  Wheel Slices",
+    keyboardHintSingleFrame: "+/- Zoom  Drag Pan",
+    loadingFirstSlice: "Loading slice {n} of {total}",
+    loadFailedTitle: "Could not load slice viewer",
+    loadFailedBody: "The preview service is temporarily unavailable.",
+    loadFailedRetry: "Retry",
+    frameFailedShort: "Slice {n} failed to load",
+    frameFailedRetry: "Retry",
+    frameFailedSkip: "Skip to next slice",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    zoomReset: "Reset zoom",
+    brightnessLabel: "Brightness",
+    contrastLabel: "Contrast",
+    previousSlice: "Previous slice",
+    nextSlice: "Next slice",
+  },
+  samd: {
+    disclaimer:
+      "Display only — not for diagnostic use. RadiVault is not a medical device. Refer to your DICOM-conformant viewer for clinical decisions.",
+    tciaAttribution: "Demo data based on TCIA — CC BY 3.0/4.0.",
+  },
+  sampleDownload: {
+    sectionTitle: "Sample download",
+    cta: "Download sample DICOM",
+    ctaPreparing: "Preparing…",
+    description: "Get one DICOM file for pydicom inspection.",
+    tooltipNotVerified:
+      "Preview unavailable for this study. PHI verification pending.",
+    tooltipQuotaExceeded: "Daily limit reached. Resets at 00:00 KST.",
+    toastStarted: "Download started — your browser will save the file.",
+    toastFailed: "Sample download failed — please try again.",
+    toastQuotaExceeded: "Daily limit reached. Try again tomorrow.",
+  },
+  cohortCta: {
+    sectionTitle: "Add to cohort",
+    description:
+      "Place a full order for all studies in cohort. 5-phase delivery.",
+  },
+  quota: {
+    todayInline: "Today: {used}/{limit}",
+    todayInlineSuffix: "sample downloads",
+    resetsAt: "Resets at 00:00 KST",
+    resetsIn: "Resets in {h}h {m}m",
+    dailySectionTitle: "Daily quota",
+    sampleDownloadsLabel: "Sample DICOM downloads",
+    usedLabel: "Used: {used} / {limit}",
+  },
   // Buyer-auth — design-spec-buyer-auth §5..§8.
   auth: {
     common: {
@@ -817,6 +878,69 @@ export type Dict = {
     revealStubCta: string;
     mobileFallbackTitle: string;
     mobileFallbackBody: string;
+  };
+  // dev-spec-buyer-browse-preview / design-spec §14.1
+  preview: {
+    unavailableShort: string;
+    unavailablePending: string;
+    unavailablePhi: string;
+    unavailableModality: string;
+    thumbnailRetry: string;
+    thumbnailFailed: string;
+    browseVerified: string;
+  };
+  // design-spec §14.2 — SliceViewer UI strings (K-1 default: full i18n)
+  viewer: {
+    sliderLabel: string;
+    sliceCounter: string;
+    keyboardHint: string;
+    keyboardHintSingleFrame: string;
+    loadingFirstSlice: string;
+    loadFailedTitle: string;
+    loadFailedBody: string;
+    loadFailedRetry: string;
+    frameFailedShort: string;
+    frameFailedRetry: string;
+    frameFailedSkip: string;
+    zoomIn: string;
+    zoomOut: string;
+    zoomReset: string;
+    brightnessLabel: string;
+    contrastLabel: string;
+    previousSlice: string;
+    nextSlice: string;
+  };
+  // design-spec §14.3 — SaMD compliance footer
+  samd: {
+    disclaimer: string;
+    tciaAttribution: string;
+  };
+  // design-spec §14.4 — Sample download CTA
+  sampleDownload: {
+    sectionTitle: string;
+    cta: string;
+    ctaPreparing: string;
+    description: string;
+    tooltipNotVerified: string;
+    tooltipQuotaExceeded: string;
+    toastStarted: string;
+    toastFailed: string;
+    toastQuotaExceeded: string;
+  };
+  // design-spec §14.5 — Cohort CTA separation
+  cohortCta: {
+    sectionTitle: string;
+    description: string;
+  };
+  // design-spec §14.6 — Quota indicator
+  quota: {
+    todayInline: string;
+    todayInlineSuffix: string;
+    resetsAt: string;
+    resetsIn: string;
+    dailySectionTitle: string;
+    sampleDownloadsLabel: string;
+    usedLabel: string;
   };
   auth: {
     common: {
@@ -1352,6 +1476,67 @@ const ko: Dict = {
     mobileFallbackTitle: "데스크톱 환경 권장",
     mobileFallbackBody:
       "RadiVault Marketplace 는 1280 px 이상 화면에 최적화되어 있습니다. 전체 기능을 위해 데스크톱 브라우저를 사용해 주세요.",
+  },
+  // dev-spec-buyer-browse-preview / design-spec §14 (KR)
+  preview: {
+    unavailableShort: "미리보기 없음",
+    unavailablePending: "PHI 검증 대기 중",
+    unavailablePhi: "미리보기 차단 — PHI 감지",
+    unavailableModality: "이 모달리티는 미리보기 미지원",
+    thumbnailRetry: "재시도",
+    thumbnailFailed: "미리보기 실패",
+    browseVerified: "검증된 study 보기",
+  },
+  viewer: {
+    sliderLabel: "슬라이스 번호",
+    sliceCounter: "슬라이스 {n} / {total}",
+    keyboardHint: "↑↓ 슬라이스  +/- 확대  드래그 이동  휠 슬라이스",
+    keyboardHintSingleFrame: "+/- 확대  드래그 이동",
+    loadingFirstSlice: "슬라이스 {n} / {total} 로딩 중",
+    loadFailedTitle: "슬라이스 뷰어를 불러올 수 없습니다",
+    loadFailedBody: "미리보기 서비스가 일시적으로 응답하지 않습니다.",
+    loadFailedRetry: "재시도",
+    frameFailedShort: "슬라이스 {n} 로드 실패",
+    frameFailedRetry: "재시도",
+    frameFailedSkip: "다음 슬라이스로",
+    zoomIn: "확대",
+    zoomOut: "축소",
+    zoomReset: "확대 초기화",
+    brightnessLabel: "밝기",
+    contrastLabel: "대비",
+    previousSlice: "이전 슬라이스",
+    nextSlice: "다음 슬라이스",
+  },
+  samd: {
+    disclaimer:
+      "표시 전용 — 진단 용도 사용 금지. RadiVault 는 의료기기가 아닙니다. 임상 판단은 DICOM 인증 뷰어에서 수행해주세요.",
+    tciaAttribution: "데모 데이터는 TCIA 기반 — CC BY 3.0/4.0.",
+  },
+  sampleDownload: {
+    sectionTitle: "샘플 다운로드",
+    cta: "샘플 DICOM 다운로드",
+    ctaPreparing: "준비 중…",
+    description: "pydicom 검증용 DICOM 파일 1 건을 받습니다.",
+    tooltipNotVerified:
+      "이 study 는 미리보기를 사용할 수 없습니다. PHI 검증 대기 중.",
+    tooltipQuotaExceeded:
+      "일일 한도에 도달했습니다. 00:00 KST 에 초기화됩니다.",
+    toastStarted: "다운로드를 시작했습니다 — 브라우저에서 파일이 저장됩니다.",
+    toastFailed: "샘플 다운로드에 실패했습니다 — 잠시 후 다시 시도해 주세요.",
+    toastQuotaExceeded: "일일 한도에 도달했습니다. 내일 다시 시도해 주세요.",
+  },
+  cohortCta: {
+    sectionTitle: "코호트에 추가",
+    description: "코호트의 모든 study 에 대한 정식 주문. 5 단계 배송.",
+  },
+  quota: {
+    todayInline: "오늘: {used}/{limit}",
+    todayInlineSuffix: "샘플 다운로드",
+    resetsAt: "00:00 KST 에 초기화",
+    resetsIn: "{h}시간 {m}분 후 초기화",
+    dailySectionTitle: "일일 쿼터",
+    sampleDownloadsLabel: "샘플 DICOM 다운로드",
+    usedLabel: "사용: {used} / {limit}",
   },
   // Buyer-auth — design-spec-buyer-auth §11 i18n.
   auth: {

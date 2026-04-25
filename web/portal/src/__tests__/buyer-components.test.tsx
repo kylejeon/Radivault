@@ -12,10 +12,8 @@ import { describe, it, expect } from "vitest";
 import { BuyerModalityBadge } from "@/components/buyer/ModalityBadge";
 import { FederatedSignal } from "@/components/buyer/FederatedSignal";
 import { StudyCard } from "@/components/buyer/StudyCard";
-import {
-  StudyDetailPanel,
-  ViewerStub,
-} from "@/components/buyer/StudyDetailPanel";
+import { StudyDetailPanel } from "@/components/buyer/StudyDetailPanel";
+import { ModalityFallback } from "@/components/preview/ModalityFallback";
 import {
   EMPTY_FACET_STATE,
   FacetSidebar,
@@ -112,26 +110,38 @@ describe("StudyDetailPanel (§11.4)", () => {
       { pseudo_series_uid: "2.25.bbb", modality: "CT", n_instances: 64 },
     ],
   };
-  it("renders metadata grid + series + viewer stub", () => {
+  it("renders metadata grid + series + sample download card", () => {
     render(<StudyDetailPanel study={detail} />);
     expect(screen.getByTestId("study-detail-panel")).toBeInTheDocument();
     expect(screen.getByText(/SIEMENS/)).toBeInTheDocument();
     expect(screen.getByText(/SOMATOM Force/)).toBeInTheDocument();
-    expect(screen.getByTestId("viewer-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("sample-download-card")).toBeInTheDocument();
+    expect(screen.getByTestId("cohort-card")).toBeInTheDocument();
   });
-  it("exposes the Add to cohort button", () => {
+  it("exposes both Add to cohort buttons (header + sidebar)", () => {
     render(<StudyDetailPanel study={detail} />);
     expect(screen.getByTestId("add-to-cohort")).toBeInTheDocument();
+    expect(screen.getByTestId("add-to-cohort-sidebar")).toBeInTheDocument();
+  });
+  it("falls back to ModalityFallback when preview_status is not 'verified'", () => {
+    render(
+      <StudyDetailPanel
+        study={{ ...detail, preview_status: "pending" }}
+      />,
+    );
+    expect(screen.getByTestId("modality-fallback")).toBeInTheDocument();
   });
 });
 
-describe("ViewerStub", () => {
-  it("renders the EN copy and the demo CTA", () => {
-    render(<ViewerStub />);
+describe("ModalityFallback (design-spec §11)", () => {
+  it("renders the EN unavailable copy", () => {
+    render(<ModalityFallback variant="unavailable-pending" />);
     expect(
-      screen.getByText(/DICOM viewer not included in v0.1/),
+      screen.getByText(/Preview unavailable/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Request viewer integration demo/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Browse verified studies/),
+    ).toBeInTheDocument();
   });
 });
 

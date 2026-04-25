@@ -165,6 +165,8 @@ def run_search(
                 hospital_pk=r.hospital_pk, global_salt=global_salt, buyer_pk=buyer_pk
             ),
             ingested_at=r.ingested_at,
+            preview_status=getattr(r, "preview_status", None),
+            preview_slice_count=getattr(r, "preview_slice_count", None),
         )
         for r in page_rows
     ]
@@ -306,4 +308,6 @@ def load_study_detail(
         ),
         ingested_at=study.ingested_at,
         series=series_out,
+        preview_status=getattr(study, "preview_status", None),
+        preview_slice_count=getattr(study, "preview_slice_count", None),
     )

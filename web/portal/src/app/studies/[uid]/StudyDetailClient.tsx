@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Toaster } from "react-hot-toast";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import {
   StudyDetailPanel,
   type StudyDetail,
 } from "@/components/buyer/StudyDetailPanel";
+import { SaMDFooter } from "@/components/preview/SaMDFooter";
 import { getDict, type Locale } from "@/lib/i18n";
 
 const COHORT_STORAGE_KEY = "radivault.cohort.v1";
@@ -133,11 +135,21 @@ export function StudyDetailClient({
   }
 
   return (
-    <StudyDetailPanel
-      study={study}
-      onAddToCohort={addToCohort}
-      alreadyInCohort={inCohort}
-      locale={locale}
-    />
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: { fontSize: "13px" },
+        }}
+      />
+      <StudyDetailPanel
+        study={study}
+        onAddToCohort={addToCohort}
+        alreadyInCohort={inCohort}
+        locale={locale}
+      />
+      <SaMDFooter locale={locale} />
+    </>
   );
 }

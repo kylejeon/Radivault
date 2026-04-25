@@ -55,6 +55,12 @@ class StudyItem(BaseModel):
     total_bytes: int
     hospital_opaque_id: str
     ingested_at: datetime
+    # dev-spec-buyer-browse-preview FR-PREVIEW-1: preview gate exposure on
+    # search results so the StudyCard can render the JPEG slot vs the
+    # placeholder without an extra round-trip. Both fields are optional —
+    # older response shapes still validate.
+    preview_status: str | None = None
+    preview_slice_count: int | None = None
 
 
 class FacetValue(BaseModel):

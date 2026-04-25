@@ -3,18 +3,24 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { BuyerModalityBadge } from "./ModalityBadge";
+import { StudyThumbnail, type PreviewStatus } from "@/components/preview/StudyThumbnail";
 
 /**
  * StudyCard {#study-card-v1} — design-spec-portal-redesign §11.3.
  * FR-BP-4: 9-column DataTable row at the heart of `/search` middle pane.
  *
- * Columns: checkbox · modality · body_part · age_bucket · sex · n_instances ·
- * size_mb · study_year · hospital_opaque_id. The row is keyboard-navigable;
- * Enter routes to `/studies/[id]`, Space toggles the checkbox.
+ * Columns: checkbox · thumbnail · modality · body_part · age_bucket · sex ·
+ * n_instances · size_mb · study_year · hospital_opaque_id. The row is
+ * keyboard-navigable; Enter routes to `/studies/[id]`, Space toggles the
+ * checkbox.
  *
  * Hover tooltip shows the per-hospital cumulative study count when provided
  * (FR-BP-4 micro-tooltip). The full pseudo_study_uid is exposed via the
  * `<code>` element's `title` attribute so power users can copy it.
+ *
+ * Preview thumbnail (dev-spec-buyer-browse-preview FR-PREVIEW-1) renders to
+ * the left of the modality badge — verified study shows JPEG, others show
+ * a modality-specific glyph placeholder.
  */
 
 export type StudyCardItem = {
@@ -27,6 +33,9 @@ export type StudyCardItem = {
   total_bytes: number;
   study_date_shifted: string | null;
   hospital_opaque_id: string | null;
+  // dev-spec-buyer-browse-preview FR-PREVIEW-1 — optional so legacy
+  // search responses without preview_status fall back to placeholder.
+  preview_status?: PreviewStatus | null;
 };
 
 export type StudyCardProps = {
@@ -100,6 +109,13 @@ export function StudyCard({
         }}
         aria-label={`Select study ${study.pseudo_study_uid.slice(-8)}`}
         className="size-4 shrink-0 cursor-pointer"
+      />
+      <StudyThumbnail
+        studyUid={study.pseudo_study_uid}
+        status={study.preview_status ?? "pending"}
+        modality={study.modality}
+        size={64}
+        locale={locale}
       />
       <div className="w-16 shrink-0">
         <BuyerModalityBadge modality={study.modality} />

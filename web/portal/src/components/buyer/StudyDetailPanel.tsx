@@ -1,17 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { BuyerModalityBadge } from "./ModalityBadge";
+import { SliceViewerOrFallback } from "@/components/SliceViewer";
+import { SampleDownloadButton } from "@/components/preview/SampleDownloadButton";
+import {
+  QuotaIndicator,
+  type QuotaState,
+} from "@/components/preview/QuotaIndicator";
+import { getDict, type Locale } from "@/lib/i18n";
 
 /**
- * StudyDetailPanel {#study-detail-v1} — design-spec-portal-redesign §11.4.
- * FR-BP-8: full-page study detail at `/studies/[id]`. Sections (top→bottom):
+ * StudyDetailPanel {#study-detail-v1} — design-spec-portal-redesign §11.4
+ * extended by design-spec-buyer-browse-preview §7.
+ *
+ * Layout (top→bottom):
  *
  *   1. Header bar (back link · UID · "Add to cohort").
  *   2. Hospital origin row.
- *   3. Metadata 2-col grid (StudyItem fields).
- *   4. Series list table (SearchStudyDetail.series).
- *   5. ViewerStub placeholder ("DICOM viewer not included in v0.1").
+ *   3. Main grid 1fr · 320px:
+ *      - Left  : SliceViewer (verified) | ModalityFallback
+ *      - Right : Sample download CTA · Quota · Cohort CTA · Series list
+ *   4. Metadata 2-col grid (StudyItem fields).
+ *
+ * SaMD footer is owned by the page wrapper (StudyDetailClient), not this
+ * component, because it needs to be page-sticky.
  */
 
 export type SeriesSummary = {
@@ -35,13 +49,22 @@ export type StudyDetail = {
   hospital_opaque_id: string | null;
   ingested_at: string | null;
   series: SeriesSummary[];
+  // dev-spec-buyer-browse-preview FR-DATA-1 — when absent, we treat the
+  // study as 'pending' (safe default) so the viewer falls back.
+  preview_status?:
+    | "verified"
+    | "pending"
+    | "phi_detected"
+    | "not_applicable"
+    | null;
+  preview_slice_count?: number | null;
 };
 
 export type StudyDetailPanelProps = {
   study: StudyDetail;
   onAddToCohort?: () => void;
   alreadyInCohort?: boolean;
-  locale?: "en" | "ko";
+  locale?: Locale;
 };
 
 function shortHospital(id: string | null): string {
@@ -55,6 +78,7 @@ export function StudyDetailPanel({
   alreadyInCohort,
   locale = "en",
 }: StudyDetailPanelProps) {
+  const dict = getDict(locale);
   const t =
     locale === "ko"
       ? {
@@ -63,9 +87,6 @@ export function StudyDetailPanel({
           inCohort: "✓ 이미 코호트에 있음",
           metaTitle: "STUDY 메타데이터",
           seriesTitle: "SERIES",
-          viewerTitle: "DICOM 뷰어 — v0.1 미포함",
-          viewerBody: "픽셀 데이터는 주문 처리 후 제공됩니다.",
-          viewerCta: "뷰어 통합 데모 요청 →",
           modality: "모달리티",
           bodyPart: "신체 부위",
           age: "연령",
@@ -86,9 +107,6 @@ export function StudyDetailPanel({
           inCohort: "✓ Already in cohort",
           metaTitle: "STUDY METADATA",
           seriesTitle: "SERIES",
-          viewerTitle: "DICOM viewer not included in v0.1.",
-          viewerBody: "Pixel data available after order fulfillment.",
-          viewerCta: "Request viewer integration demo →",
           modality: "Modality",
           bodyPart: "Body Part",
           age: "Age Bucket",
@@ -105,6 +123,37 @@ export function StudyDetailPanel({
         };
 
   const totalMb = (study.total_bytes / (1024 * 1024)).toFixed(1);
+  const previewStatus = study.preview_status ?? "pending";
+  const sliceCount = study.preview_slice_count ?? 1;
+
+  // Quota state — fetched on mount + bumped optimistically by the
+  // SampleDownloadButton via onQuotaUpdate.
+  const [quota, setQuota] = useState<QuotaState | null>(null);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/account/quota");
+        if (!active) return;
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          daily_used: number;
+          daily_limit: number;
+          resets_at: string | null;
+        };
+        setQuota({
+          used: body.daily_used,
+          limit: body.daily_limit,
+          resetsAtIso: body.resets_at,
+        });
+      } catch {
+        /* tolerate — UI will show skeleton */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div data-testid="study-detail-panel" className="flex flex-col gap-5">
@@ -144,13 +193,102 @@ export function StudyDetailPanel({
         <span className="text-text-muted">· {t.hospital}</span>
       </div>
 
-      {/* 3. Metadata + Series */}
-      <div className="grid grid-cols-1 gap-5 desktop:grid-cols-2">
+      {/* 3. Viewer + Sidebar grid (design-spec §7.6) */}
+      <div className="grid grid-cols-1 gap-5 desktop:grid-cols-[minmax(0,1fr)_320px]">
+        <SliceViewerOrFallback
+          studyUid={study.pseudo_study_uid}
+          sliceCount={sliceCount}
+          previewStatus={previewStatus}
+          modality={study.modality}
+          locale={locale}
+        />
+        <aside className="flex flex-col gap-4">
+          {/* Sample download card */}
+          <section
+            data-testid="sample-download-card"
+            className="rounded-md border border-border bg-bg p-4"
+          >
+            <h3 className="mb-3 text-sm font-semibold text-text">
+              {dict.sampleDownload.sectionTitle}
+            </h3>
+            <SampleDownloadButton
+              studyUid={study.pseudo_study_uid}
+              previewStatus={previewStatus}
+              quota={quota}
+              onQuotaUpdate={setQuota}
+              locale={locale}
+            />
+            <p className="mt-2 text-xs text-text-muted">
+              {dict.sampleDownload.description}
+            </p>
+            <div className="mt-3">
+              <QuotaIndicator state={quota} variant="inline" locale={locale} />
+            </div>
+          </section>
+
+          {/* Cohort card — visually separated (design-spec §9.2) */}
+          <section
+            data-testid="cohort-card"
+            className="rounded-md border border-border bg-bg p-4"
+          >
+            <h3 className="mb-3 text-sm font-semibold text-text">
+              {dict.cohortCta.sectionTitle}
+            </h3>
+            <button
+              type="button"
+              onClick={onAddToCohort}
+              disabled={alreadyInCohort}
+              data-testid="add-to-cohort-sidebar"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border-strong px-4 py-3 text-sm font-medium text-text hover:bg-bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span aria-hidden>+</span>
+              <span>{alreadyInCohort ? t.inCohort : t.add}</span>
+            </button>
+            <p className="mt-2 text-xs text-text-muted">
+              {dict.cohortCta.description}
+            </p>
+          </section>
+
+          {/* Series list */}
+          <section className="rounded-md border border-border bg-bg p-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              {t.seriesTitle} ({study.series.length})
+            </h3>
+            {study.series.length === 0 ? (
+              <p className="text-sm text-text-muted">—</p>
+            ) : (
+              <ul className="flex flex-col divide-y divide-border text-sm">
+                {study.series.map((s, i) => (
+                  <li
+                    key={s.pseudo_series_uid}
+                    className="flex items-center justify-between gap-2 py-2"
+                  >
+                    <span className="text-text-muted">{i + 1}</span>
+                    <code
+                      className="flex-1 truncate font-mono text-xs text-text"
+                      title={s.pseudo_series_uid}
+                    >
+                      …{s.pseudo_series_uid.slice(-10)}
+                    </code>
+                    <BuyerModalityBadge modality={s.modality} size="sm" />
+                    <span className="font-mono text-xs text-text-muted">
+                      {s.n_instances}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </aside>
+      </div>
+
+      {/* 4. Metadata grid */}
+      <div className="grid grid-cols-1 gap-5 desktop:grid-cols-1">
         <section className="rounded-md border border-border bg-bg p-4">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
             {t.metaTitle}
           </h2>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm desktop:grid-cols-4">
             <MetaRow label={t.modality}>
               <BuyerModalityBadge modality={study.modality} />
             </MetaRow>
@@ -175,46 +313,7 @@ export function StudyDetailPanel({
             </MetaRow>
           </dl>
         </section>
-
-        <section className="rounded-md border border-border bg-bg p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            {t.seriesTitle} ({study.series.length})
-          </h2>
-          {study.series.length === 0 ? (
-            <p className="text-sm text-text-muted">—</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-text-muted">
-                <tr>
-                  <th className="pb-2 text-left">#</th>
-                  <th className="pb-2 text-left">UID</th>
-                  <th className="pb-2 text-left">Mod</th>
-                  <th className="pb-2 text-right">Inst</th>
-                </tr>
-              </thead>
-              <tbody>
-                {study.series.map((s, i) => (
-                  <tr key={s.pseudo_series_uid} className="border-t border-border">
-                    <td className="py-1.5 text-text-muted">{i + 1}</td>
-                    <td className="py-1.5 font-mono text-xs text-text">
-                      …{s.pseudo_series_uid.slice(-12)}
-                    </td>
-                    <td className="py-1.5">
-                      <BuyerModalityBadge modality={s.modality} size="sm" />
-                    </td>
-                    <td className="py-1.5 text-right font-mono">
-                      {s.n_instances}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
       </div>
-
-      {/* 5. ViewerStub */}
-      <ViewerStub locale={locale} />
     </div>
   );
 }
