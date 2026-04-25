@@ -101,6 +101,16 @@ export function OrderReviewClient({ locale = "en" }: { locale?: Locale }) {
     setError(null);
     try {
       const idemKey = crypto.randomUUID();
+      // FR-BP-9 / AC-BP-8 — auto-inject allowed_hospitals scope so the
+      // fulfillment service only fans out to the hospitals already
+      // represented in the cohort. HIGH-4 fix from qa-report-portal-redesign.
+      const allowedHospitals = Array.from(
+        new Set(
+          items
+            .map((i) => i.hospital_opaque_id ?? null)
+            .filter((v): v is string => !!v),
+        ),
+      ).sort();
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: {
@@ -109,6 +119,7 @@ export function OrderReviewClient({ locale = "en" }: { locale?: Locale }) {
         },
         body: JSON.stringify({
           pseudo_study_uids: items.map((i) => i.pseudo_study_uid),
+          allowed_hospitals: allowedHospitals,
           notes: `dua_version=${DUA_VERSION}`,
         }),
       });

@@ -39,15 +39,30 @@ export async function POST(req: Request) {
   }
   const body = (await req.json().catch(() => ({}))) as {
     pseudo_study_uids?: string[];
+    allowed_hospitals?: string[];
     notes?: string;
   };
   const idemKey = req.headers.get("Idempotency-Key") ?? crypto.randomUUID();
+  // FR-BP-9 / AC-BP-8 (HIGH-4 fix): forward the cohort-derived hospital
+  // scope to fulfillment so federated cohort orders fan out only to the
+  // hospitals already represented in the cohort. Drop empty / non-string
+  // entries defensively — fulfillment treats `[]` as "any hospital" which
+  // is the wrong default for federated AC scoping.
+  const allowedHospitals = Array.from(
+    new Set(
+      (body.allowed_hospitals ?? [])
+        .filter((h): h is string => typeof h === "string" && h.length > 0),
+    ),
+  ).sort();
   const res = await upstreamFetch(bases.fulfillment, "/v1/orders", {
     method: "POST",
     bearer: session.apiKey,
     headers: { "Idempotency-Key": idemKey },
     body: {
       pseudo_study_uids: body.pseudo_study_uids ?? [],
+      ...(allowedHospitals.length > 0
+        ? { allowed_hospitals: allowedHospitals }
+        : {}),
       agreement_hash: STUB_AGREEMENT_HASH,
       notes: body.notes,
     },

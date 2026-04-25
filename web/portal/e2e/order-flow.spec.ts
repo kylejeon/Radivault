@@ -113,4 +113,51 @@ test.describe("Order placement flow (v0.2 /orders/new)", () => {
       page.getByRole("link", { name: /Back to search/i }),
     ).toBeVisible();
   });
+
+  test("AC-BP-8 — POST /api/orders body carries the allowed_hospitals scope", async ({
+    page,
+  }) => {
+    // Capture the body the BFF receives so we can assert the federated
+    // cohort scope (HIGH-4 fix from qa-report-portal-redesign).
+    let captured: { allowed_hospitals?: string[] } | null = null;
+    await page.route("**/api/orders", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      captured = JSON.parse(route.request().postData() ?? "{}") as {
+        allowed_hospitals?: string[];
+      };
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          order_id: ORDER_ID,
+          state: "queued",
+          buyer_phase: "accepted",
+        }),
+      });
+    });
+
+    await page.goto("/search");
+    // Pick the first 3 studies — DEFAULT_STUDIES spans both HOSP-001 and
+    // HOSP-002, so the cohort is federated.
+    const cbs = page.getByRole("checkbox", { name: /Select study/i });
+    for (let i = 0; i < 3; i += 1) await cbs.nth(i).check();
+    await page.getByTestId("cohort-review-cta").click();
+    await page.waitForURL(/\/orders\/new$/);
+
+    await page.getByTestId("dua-checkbox").check();
+    await page.getByTestId("place-order").click();
+    await page.waitForURL(`**/orders/${ORDER_ID}`, { timeout: 10_000 });
+
+    expect(captured).not.toBeNull();
+    const scope = captured!.allowed_hospitals ?? [];
+    // Must be a non-empty deduped sorted array of opaque hospital ids
+    // pulled from the cart's hospital_opaque_id field.
+    expect(scope.length).toBeGreaterThan(0);
+    expect(new Set(scope).size).toBe(scope.length);
+    const sorted = [...scope].sort();
+    expect(sorted).toEqual(scope);
+  });
 });
