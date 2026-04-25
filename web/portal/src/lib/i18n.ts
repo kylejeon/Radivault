@@ -233,6 +233,36 @@ const en = {
     account: "Account",
     signOut: "Sign out",
   },
+  // FR-BP-20 — post-sign-in dashboard tiles (MEDIUM-3 fix).
+  dashboard: {
+    pageTitle: "Dashboard",
+    welcome: "Welcome back",
+    tiles: {
+      activeOrders: {
+        title: "Active orders",
+        empty: "No active orders.",
+        cta: "Place a new order",
+      },
+      recentSearches: {
+        title: "Recent searches",
+        empty: "No saved searches yet.",
+        cta: "Open search",
+      },
+      pendingInvoices: {
+        title: "Pending invoices",
+        body: "Invoicing handled offline in v0.1.",
+      },
+      apiUsage: {
+        title: "API usage this month",
+        body: "Monthly quota detail surfaces in v0.1.1.",
+      },
+      announcements: {
+        title: "Platform announcements",
+        body: "v0.2 pixel de-id ruleset rollout begins next week. See changelog.",
+        cta: "View changelog",
+      },
+    },
+  },
   search: {
     pageTitle: "Search",
     facetTitle: {
@@ -564,6 +594,17 @@ export type Dict = {
     docs: string;
     account: string;
     signOut: string;
+  };
+  dashboard: {
+    pageTitle: string;
+    welcome: string;
+    tiles: {
+      activeOrders: { title: string; empty: string; cta: string };
+      recentSearches: { title: string; empty: string; cta: string };
+      pendingInvoices: { title: string; body: string };
+      apiUsage: { title: string; body: string };
+      announcements: { title: string; body: string; cta: string };
+    };
   };
   search: {
     pageTitle: string;
@@ -951,6 +992,35 @@ const ko: Dict = {
     docs: "문서",
     account: "계정",
     signOut: "로그아웃",
+  },
+  dashboard: {
+    pageTitle: "대시보드",
+    welcome: "다시 오신 것을 환영합니다",
+    tiles: {
+      activeOrders: {
+        title: "진행 중 주문",
+        empty: "진행 중인 주문이 없습니다.",
+        cta: "새 주문 시작",
+      },
+      recentSearches: {
+        title: "최근 검색",
+        empty: "저장된 검색이 없습니다.",
+        cta: "검색 열기",
+      },
+      pendingInvoices: {
+        title: "대기 중 인보이스",
+        body: "v0.1 에서는 인보이스가 오프라인으로 처리됩니다.",
+      },
+      apiUsage: {
+        title: "이번 달 API 사용량",
+        body: "월별 쿼터 상세는 v0.1.1 에서 제공됩니다.",
+      },
+      announcements: {
+        title: "플랫폼 공지",
+        body: "v0.2 픽셀 비식별화 ruleset 적용이 다음 주 시작됩니다. 체인지로그를 확인하세요.",
+        cta: "체인지로그 보기",
+      },
+    },
   },
   search: {
     pageTitle: "검색",

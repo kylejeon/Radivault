@@ -16,7 +16,7 @@ export function MarketplaceNav({
   active,
   locale = "en",
 }: {
-  active?: "/search" | "/orders" | "/docs" | "/account";
+  active?: "/dashboard" | "/search" | "/orders" | "/docs" | "/account";
   locale?: Locale;
 }) {
   const dict = getDict(locale);
@@ -31,7 +31,7 @@ export function MarketplaceNav({
     <header className="sticky top-0 z-20 border-b border-border bg-bg">
       <div className="mx-auto flex h-16 max-w-app items-center justify-between px-6">
         <Link
-          href="/search"
+          href="/dashboard"
           aria-label="RadiVault Marketplace home"
           className="flex items-center gap-2"
         >

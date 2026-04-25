@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { POST, __resetRateLimiter } from "@/app/api/contact/route";
+import { POST } from "@/app/api/contact/route";
+import { contactRateLimiter } from "@/lib/rate-limit";
 
 function buildRequest(
   body: unknown,
@@ -35,7 +36,7 @@ const VALID_BODY = {
 
 describe("/api/contact POST", () => {
   beforeEach(() => {
-    __resetRateLimiter();
+    contactRateLimiter.reset();
   });
 
   it("accepts a well-formed body with consent and returns 202", async () => {

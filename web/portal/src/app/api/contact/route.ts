@@ -22,6 +22,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { contactRateLimiter } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -40,39 +41,6 @@ const ContactSchema = z.object({
 });
 
 type ContactBody = z.infer<typeof ContactSchema>;
-
-// ---------------------------------------------------------------------------
-// Rate limiter (in-memory token bucket — see module header)
-// ---------------------------------------------------------------------------
-
-const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-
-type Bucket = { count: number; resetAt: number };
-
-const buckets = new Map<string, Bucket>();
-
-function rateCheck(ip: string): { ok: boolean; retryAfterSeconds?: number } {
-  const now = Date.now();
-  const existing = buckets.get(ip);
-  if (!existing || existing.resetAt < now) {
-    buckets.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return { ok: true };
-  }
-  if (existing.count >= RATE_LIMIT_MAX) {
-    return {
-      ok: false,
-      retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
-    };
-  }
-  existing.count += 1;
-  return { ok: true };
-}
-
-/** Test seam — wipe the bucket between tests so they stay independent. */
-export function __resetRateLimiter(): void {
-  buckets.clear();
-}
 
 // ---------------------------------------------------------------------------
 // Route
@@ -111,7 +79,7 @@ async function relayToSlack(body: ContactBody): Promise<void> {
 
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  const rate = rateCheck(ip);
+  const rate = contactRateLimiter.check(ip);
   if (!rate.ok) {
     return NextResponse.json(
       {
@@ -121,7 +89,7 @@ export async function POST(req: Request) {
       {
         status: 429,
         headers: {
-          "Retry-After": String(rate.retryAfterSeconds ?? 60),
+          "Retry-After": String(rate.retryAfterSeconds),
         },
       },
     );
