@@ -381,6 +381,9 @@ const en = {
         emailHelper: "Use your work email; the API key is bound to this address.",
         password: "Password",
         passwordHelper: "8–64 characters. Long passphrases recommended.",
+        confirmPassword: "Confirm password",
+        confirmPasswordHelper: "Re-enter the password to confirm.",
+        confirmPasswordMismatch: "Passwords do not match.",
         organization: "Organization",
         organizationHelper: "Company or research group.",
         intent: "I'm using RadiVault for",
@@ -835,6 +838,9 @@ export type Dict = {
         emailHelper: string;
         password: string;
         passwordHelper: string;
+        confirmPassword: string;
+        confirmPasswordHelper: string;
+        confirmPasswordMismatch: string;
         organization: string;
         organizationHelper: string;
         intent: string;
@@ -1369,6 +1375,9 @@ const ko: Dict = {
         emailHelper: "API 키는 이 이메일에 연결됩니다.",
         password: "비밀번호",
         passwordHelper: "8–64자. 긴 패스프레이즈를 권장합니다.",
+        confirmPassword: "비밀번호 확인",
+        confirmPasswordHelper: "비밀번호를 한 번 더 입력하세요.",
+        confirmPasswordMismatch: "비밀번호가 일치하지 않습니다.",
         organization: "기관명",
         organizationHelper: "회사 또는 연구 그룹.",
         intent: "이용 목적",

@@ -32,6 +32,7 @@ export function SignupForm({
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [organization, setOrganization] = useState("");
   const [intent, setIntent] = useState<
     "research" | "commercial-ai" | "clinical-trial" | "other"
@@ -58,13 +59,17 @@ export function SignupForm({
   const [otpOpen, setOtpOpen] = useState(false);
   const [revealKey, setRevealKey] = useState<string | null>(null);
 
-  const enReady = enConsent.tosPrivacy && email && password && organization;
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const enReady =
+    enConsent.tosPrivacy && email && password && confirmPassword && passwordsMatch && organization;
   const koReady =
     koConsent.collectUse &&
     koConsent.thirdParty &&
     koConsent.crossBorder &&
     email &&
     password &&
+    confirmPassword &&
+    passwordsMatch &&
     organization;
   const formReady = locale === "ko" ? koReady : enReady;
 
@@ -113,6 +118,10 @@ export function SignupForm({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submitting || !formReady) return;
+    if (password !== confirmPassword) {
+      setFieldErrors({ confirmPassword: t.signup.fields.confirmPasswordMismatch });
+      return;
+    }
     setSubmitting(true);
     setTopError(null);
     setFieldErrors({});
@@ -246,6 +255,38 @@ export function SignupForm({
           meterOk={t.common.passwordMeterOk}
           meterStrong={t.common.passwordMeterStrong}
           meterMax={t.common.passwordMeterMax}
+        />
+        <PasswordInput
+          id="signup-confirm-password"
+          label={t.signup.fields.confirmPassword}
+          required
+          value={confirmPassword}
+          onChange={(v) => {
+            setConfirmPassword(v);
+            if (fieldErrors.confirmPassword) {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.confirmPassword;
+                return next;
+              });
+            }
+          }}
+          showStrengthMeter={false}
+          passwordType="new"
+          helper={
+            confirmPassword.length > 0 && !passwordsMatch
+              ? undefined
+              : t.signup.fields.confirmPasswordHelper
+          }
+          error={
+            fieldErrors.confirmPassword ??
+            (confirmPassword.length > 0 && !passwordsMatch
+              ? t.signup.fields.confirmPasswordMismatch
+              : null)
+          }
+          requiredLabel={t.common.requiredLabel}
+          showLabel={t.common.showPassword}
+          hideLabel={t.common.hidePassword}
         />
         <TextInput
           id="signup-organization"
