@@ -131,7 +131,11 @@ class FacetsResponse(BaseModel):
     sex: list[FacetValue] = Field(default_factory=list)
     age_bucket: list[FacetValue] = Field(default_factory=list)
     manufacturer: list[FacetValue] = Field(default_factory=list)
+    # metadata-thumbnail-ingest FR-FACET-1 — 8 facets total. ``model_name`` is
+    # study.manufacturer_model_name; ``contrast_used`` is a v0.1.5 stub.
+    model_name: list[FacetValue] = Field(default_factory=list)
     year: list[FacetValue] = Field(default_factory=list)
+    contrast_used: list[FacetValue] = Field(default_factory=list)
     computed_at: datetime
 
 

@@ -20,7 +20,9 @@ FACET_FIELDS = (
     "sex",
     "age_bucket",
     "manufacturer",
+    "model_name",
     "year",
+    "contrast_used",
 )
 
 MAX_BUCKETS = 50
@@ -42,7 +44,9 @@ def compute_facets(
     base_filters = list(where_clauses)
 
     # Simple string-valued facets.
-    for field in ("modality", "body_part", "manufacturer"):
+    # metadata-thumbnail-ingest FR-FACET-1: ``model_name`` is the new 8th
+    # facet (study.model_name = ManufacturerModelName).
+    for field in ("modality", "body_part", "manufacturer", "model_name"):
         col = getattr(Study, field)
         stmt = (
             select(col, func.count(Study.study_pk))
@@ -52,6 +56,13 @@ def compute_facets(
         )
         rows = session.execute(stmt).all()
         result[field] = _shape_rows(rows)
+
+    # contrast_used — v0.1.5 stub. Single null bucket counting all rows so the
+    # buyer portal facet panel still renders without a 404.
+    contrast_total = session.execute(
+        select(func.count(Study.study_pk)).where(*base_filters)
+    ).scalar_one()
+    result["contrast_used"] = _shape_rows([(None, int(contrast_total or 0))])
 
     # sex / age_bucket come from patient_pseudo.
     sex_stmt = (

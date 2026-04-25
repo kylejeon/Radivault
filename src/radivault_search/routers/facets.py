@@ -42,7 +42,9 @@ async def get_facets(request: Request) -> JSONResponse:
         sex=facets.get("sex", []),
         age_bucket=facets.get("age_bucket", []),
         manufacturer=facets.get("manufacturer", []),
+        model_name=facets.get("model_name", []),
         year=facets.get("year", []),
+        contrast_used=facets.get("contrast_used", []),
         computed_at=datetime.now(tz=UTC),
     )
     payload = resp.model_dump(mode="json")
