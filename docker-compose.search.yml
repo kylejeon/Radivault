@@ -1,62 +1,47 @@
 # Dev compose stack for radivault_search (dev-spec FR-63).
 #
-# Brings up postgres + redis + radivault_search. Reuses postgres/redis images
-# compatible with docker-compose.central.yml so you can run both stacks
-# together against the same data.
+# 2026-04-25 (Option A): postgres + redis 정의 제거. 본 compose 는 search
+# 컨테이너만 정의하며, postgres/redis 는 docker-compose.central.yml 이
+# 미리 기동한 컨테이너를 공용 네트워크 (project=radivault) 로 재사용.
+# 이전 버전은 별도 postgres + radivault_central DB 를 띄웠는데 study/
+# hospital sync 가 없어 buyer search 가 0건 반환했고, search.yml 의
+# postgres 정의가 central_pgdata 와 다른 볼륨을 가리켜 `up -d` 시
+# 데이터 볼륨이 swap 되는 사고가 발생.
 #
-# Migrations are applied by `ingest-admin migrate up` (central image) or
-# `search-admin migrate up` (search image) — both point at the same alembic
-# tree (dev-spec §4.13, FR-68).
+# 사용:
+#   1) docker compose -f docker-compose.central.yml up -d  (postgres+redis 포함)
+#   2) docker compose -f docker-compose.search.yml up -d   (search 만)
+#
+# 마이그/시드는 ingest-admin migrate up + bootstrap_search_tables.sql
+# (alembic 우회, search-admin migrate up 은 컨테이너 패키징 이슈로 사용 안 함).
 
 services:
-  postgres:
-    image: postgres:15
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: central_migrator
-      POSTGRES_PASSWORD: central_migrator
-      POSTGRES_DB: radivault_central
-    ports:
-      - "5432:5432"
-    volumes:
-      - search_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U central_migrator -d radivault_central"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   search:
     build:
       context: .
       dockerfile: Dockerfile.search
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    # postgres/redis 호스트명은 docker-compose.central.yml 의 동일
+    # project=radivault 네트워크에서 resolve 됨.
+    networks:
+      - default
     ports:
       - "8001:8001"
     environment:
       RV_SEARCH_CONFIG: /etc/radivault-search/search.yml
-      DATABASE_URL: postgresql+psycopg://radivault_buyer_ro:radivault_buyer_ro@postgres:5432/radivault_central
-      ADMIN_DATABASE_URL: postgresql+psycopg://search_admin:search_admin@postgres:5432/radivault_central
-      MIGRATION_DATABASE_URL: postgresql+psycopg://central_migrator:central_migrator@postgres:5432/radivault_central
+      # Option A (2026-04-25): search 가 central-ingest 와 동일 DB(`central`)
+      # 를 본다 (dev-spec-metadata-index.md L.991 정합).
+      DATABASE_URL: postgresql+psycopg://radivault_buyer_ro:radivault_buyer_ro@postgres:5432/central
+      ADMIN_DATABASE_URL: postgresql+psycopg://search_admin:search_admin@postgres:5432/central
+      MIGRATION_DATABASE_URL: postgresql+psycopg://central_migrator:central_migrator@postgres:5432/central
       REDIS_URL: redis://redis:6379/1
       FILTER_HASH_GLOBAL_SALT: "replace-me-in-prod"
       WORKERS: "5"
 
-volumes:
-  search_pgdata:
+# postgres + redis 는 docker-compose.central.yml 에서 관리.
+# 볼륨 정의 없음 — central 의 central_pgdata 만 사용.
+
+networks:
+  default:
+    name: radivault_default
+    external: true

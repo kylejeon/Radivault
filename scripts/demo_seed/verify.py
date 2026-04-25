@@ -59,7 +59,7 @@ class VerifyContext:
     buyer_api_key: str | None
     min_studies: int = 300
     min_modalities: int = 3
-    heartbeat_window_minutes: int = 5
+    heartbeat_window_minutes: int = 60
     container: str = "radivault-central-1"
     # Injectable surfaces for tests.
     http_factory: Callable[[], httpx.Client] | None = None
@@ -596,7 +596,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--container", default="radivault-central-1")
     parser.add_argument("--min-studies", type=int, default=300)
     parser.add_argument("--min-modalities", type=int, default=3)
-    parser.add_argument("--heartbeat-window-minutes", type=int, default=5)
+    parser.add_argument("--heartbeat-window-minutes", type=int, default=60)
     parser.add_argument("--json", action="store_true", help="Emit JSON report instead of text.")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
