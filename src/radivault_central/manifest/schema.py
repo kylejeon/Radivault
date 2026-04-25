@@ -4,11 +4,17 @@ The schema is a **superset** of the Gateway Agent v0.1 manifest — it requires
 ``anonymization_flag`` in addition to everything Gateway already sends. See
 Gateway dev-spec §6.4 and Central dev-spec §13 (delta D-3) for the cross-team
 contract.
+
+dev-spec-metadata-thumbnail-ingest §6.1 — manifest schema v2 ADDITIVE fields:
+``body_part_examined``, ``patient_sex``, ``patient_age_bucket``,
+``manufacturer``, ``manufacturer_model_name``, ``study_date_shifted``,
+``study_year``, ``series[]``, ``thumbnail`` (base64-embedded JPEG bytes).
+``manifest_version`` is widened to allow ``2`` so v1 callers remain accepted.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -36,8 +42,49 @@ class AuditRef(BaseModel):
     hash: str
 
 
+class SeriesEntryV2(BaseModel):
+    """v2 series array entry (FR-META-1)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    pseudo_series_uid: str
+    modality: str | None = None
+    n_instances: int = Field(ge=0)
+    body_part: str | None = None
+    series_description_clean: str | None = None
+    slice_thickness_mm: float | None = None
+    kvp: float | None = None
+
+
+class ThumbnailV2(BaseModel):
+    """v2 thumbnail object (FR-META-1, FR-THUMB-2).
+
+    Carries the base64-encoded JPEG payload inline so the wire format remains a
+    single multipart manifest part. ~30KB / study is well below the 1 MB
+    manifest cap. Central decodes ``data_b64`` and PUTs to MinIO under
+    ``radivault-preview/thumbnails/{pseudo_study_uid}.jpg``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
+    bytes: int = Field(ge=1, le=1_048_576)
+    format: Literal["JPEG"] = "JPEG"
+    width: int = 256
+    height: int = 256
+    source_instance_uid_pseudo: str | None = None
+    slice_index: int | None = None
+    slice_count: int | None = None
+    phi_scrub_status: Literal["passed", "skipped_burned_in", "skipped_unknown"]
+    phi_scrub_method: str = "burned_in_tag_gate"
+    data_b64: str  # base64 of JPEG payload
+
+
 class Manifest(BaseModel):
-    """Canonical ingest manifest (dev-spec §6.5)."""
+    """Canonical ingest manifest (dev-spec §6.5).
+
+    v1 + v2 (metadata-thumbnail-ingest FR-META-1) shape — additive only.
+    """
 
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
 
@@ -53,6 +100,18 @@ class Manifest(BaseModel):
     files: list[ManifestFile] = Field(min_length=1)
     generated_at: str
     audit_ref: AuditRef | None = None
+
+    # v2 additive — all Optional so v1 manifests remain valid.
+    body_part_examined: str | None = None
+    patient_sex: Literal["M", "F", "O"] | None = None
+    patient_age_bucket: str | None = None  # "30-34", "90+"
+    manufacturer: str | None = Field(default=None, max_length=64)
+    manufacturer_model_name: str | None = Field(default=None, max_length=128)
+    study_date_shifted: str | None = None  # ISO YYYY-MM-DD
+    study_year: int | None = None
+    n_series: int | None = None  # derived; None on v1
+    series: list[SeriesEntryV2] = Field(default_factory=list)
+    thumbnail: ThumbnailV2 | None = None
 
     @field_validator("anonymization_flag")
     @classmethod

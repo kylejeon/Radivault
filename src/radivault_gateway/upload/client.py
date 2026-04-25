@@ -110,7 +110,16 @@ class UploadClient:
         salt_version: int,
         method_codes: list[str],
         dcm_files: list[Path],
+        study_metadata: Any | None = None,
+        thumbnail: Any | None = None,
     ) -> dict[str, Any]:
+        """Build the v1+v2 ingest manifest.
+
+        ``study_metadata`` is the optional :class:`StudyMetadata` from
+        ``radivault_gateway.extract`` (FR-META-2). ``thumbnail`` is the optional
+        :class:`ThumbnailResult` from ``radivault_gateway.thumbnail``
+        (FR-THUMB-1). Both are absent on Flow A / older callers.
+        """
         files_meta: list[dict[str, Any]] = []
         total_bytes = 0
         for path in sorted(dcm_files):
@@ -123,8 +132,8 @@ class UploadClient:
                 }
             )
             total_bytes += len(data)
-        return {
-            "manifest_version": 1,
+        manifest: dict[str, Any] = {
+            "manifest_version": 2 if (study_metadata or thumbnail) else 1,
             "gateway_id": gateway_id,
             "hospital_id": hospital_id,
             "pseudo_study_uid": pseudo_study_uid,
@@ -146,6 +155,35 @@ class UploadClient:
             "files": files_meta,
             "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
+        if study_metadata is not None:
+            sd = study_metadata
+            manifest["body_part_examined"] = getattr(sd, "body_part_examined", None)
+            manifest["patient_sex"] = getattr(sd, "patient_sex", None)
+            manifest["patient_age_bucket"] = getattr(sd, "patient_age_bucket", None)
+            manifest["manufacturer"] = getattr(sd, "manufacturer", None)
+            manifest["manufacturer_model_name"] = getattr(sd, "manufacturer_model_name", None)
+            sd_date = getattr(sd, "study_date_shifted", None)
+            manifest["study_date_shifted"] = sd_date.isoformat() if sd_date else None
+            manifest["study_year"] = getattr(sd, "study_year", None)
+            manifest["n_series"] = getattr(sd, "n_series", None)
+            manifest["series"] = list(getattr(sd, "series", []) or [])
+        if thumbnail is not None:
+            import base64
+
+            manifest["thumbnail"] = {
+                "sha256": thumbnail.sha256,
+                "bytes": len(thumbnail.bytes),
+                "format": thumbnail.format,
+                "width": thumbnail.width,
+                "height": thumbnail.height,
+                "source_instance_uid_pseudo": thumbnail.source_instance_uid_pseudo,
+                "slice_index": thumbnail.slice_index,
+                "slice_count": thumbnail.slice_count,
+                "phi_scrub_status": thumbnail.phi_scrub_status,
+                "phi_scrub_method": thumbnail.phi_scrub_method,
+                "data_b64": base64.b64encode(thumbnail.bytes).decode("ascii"),
+            }
+        return manifest
 
     def build_metadata_only_manifest(
         self,

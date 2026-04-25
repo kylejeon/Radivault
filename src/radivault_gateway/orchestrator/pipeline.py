@@ -431,6 +431,31 @@ class Pipeline:
                     deid_ms=deid_ms,
                 )
 
+            # metadata-thumbnail-ingest FR-META-2 + FR-THUMB-1: extract the
+            # 12 buyer-facet fields and the middle-slice thumbnail from the
+            # de-id'd staged DICOM files BEFORE upload. Failures degrade
+            # gracefully — the manifest just falls back to v1 shape.
+            try:
+                from radivault_gateway.extract import extract_study_metadata
+                from radivault_gateway.thumbnail import generate_thumbnail
+
+                study_metadata = extract_study_metadata(staged_files)
+                primary_modality = (
+                    study.modalities_in_study[0] if study.modalities_in_study else None
+                )
+                thumb = generate_thumbnail(
+                    staged_files,
+                    modality=primary_modality,
+                    body_part=study_metadata.body_part_examined,
+                )
+            except Exception as exc:  # noqa: BLE001 — never fail ingest on metadata
+                log.warning(
+                    "metadata_extract_failed",
+                    extra={"event": "metadata.extract.error", "error": str(exc)[:200]},
+                )
+                study_metadata = None
+                thumb = None
+
             # Upload
             manifest = self._upload.build_manifest(
                 gateway_id=self._cfg.agent.gateway_id,
@@ -441,6 +466,8 @@ class Pipeline:
                 salt_version=self._cfg.deid.salt_version,
                 method_codes=_method_codes(self._cfg),
                 dcm_files=staged_files,
+                study_metadata=study_metadata,
+                thumbnail=thumb,
             )
             self._audit.append(
                 "upload.started",

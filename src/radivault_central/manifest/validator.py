@@ -86,7 +86,10 @@ class ManifestValidator:
 
     # ------------------------------------------------------------------
     def _check_version(self, manifest: Manifest) -> None:
-        if manifest.manifest_version != 1:
+        # metadata-thumbnail-ingest FR-META-1: accept v1 (legacy) and v2 (new
+        # study/series/thumbnail fields). Higher versions are rejected so the
+        # cross-team contract stays explicit.
+        if manifest.manifest_version not in (1, 2):
             raise ManifestVersion(
                 detail=f"manifest_version={manifest.manifest_version} unsupported"
             )

@@ -70,9 +70,17 @@ def test_valid_manifest_passes():
 
 
 def test_manifest_version_rejected():
+    # metadata-thumbnail-ingest FR-META-1: v1 + v2 are accepted; v3 is not.
     v = ManifestValidator(_hospital())
     with pytest.raises(ManifestVersion):
-        v.parse_and_validate(_raw(_manifest(manifest_version=2)))
+        v.parse_and_validate(_raw(_manifest(manifest_version=3)))
+
+
+def test_manifest_v2_accepted():
+    """metadata-thumbnail-ingest FR-META-1: v2 with no v2 fields still parses."""
+    v = ManifestValidator(_hospital())
+    m = v.parse_and_validate(_raw(_manifest(manifest_version=2)))
+    assert m.manifest_version == 2
 
 
 def test_manifest_bad_anonymization_flag():

@@ -16,6 +16,9 @@ dependencies = [
     "pydantic>=2.6",
     "pydicom>=2.4",
     "pyyaml>=6.0",
+    # metadata-thumbnail-ingest FR-THUMB-1: ingest-time JPEG generation.
+    "Pillow>=10.0",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
