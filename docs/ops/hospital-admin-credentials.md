@@ -1,5 +1,10 @@
 # Hospital admin credentials (demo)
 
+> **Internal use only.** This file lives in a private repository. If the
+> repo ever goes public, rotate every plaintext token below BEFORE the
+> push (LOW-A, qa-report-buyer-portal-redesign-v2). Pilot deployments
+> use SSO (FR-HO-2) and never see this file.
+>
 > **Scope**: D-day demo only. These are *not* pilot credentials.
 >
 > **Source of truth**: `web/portal/.env.local` (`RV_HOSPITAL_ADMIN_TOKENS`).
