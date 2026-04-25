@@ -59,6 +59,16 @@ export const env = {
   get nodeEnv() {
     return optional("NODE_ENV", "development");
   },
+  // ---- buyer-auth (dev-spec-buyer-auth FR-AUTH-12) -------------------------
+  get buyerAuthSkipEmailVerify() {
+    return optional("BUYER_AUTH_SKIP_EMAIL_VERIFY", "true") === "true";
+  },
+  get buyerAuthPwdResetDisabled() {
+    return optional("BUYER_AUTH_PWD_RESET_DISABLED", "false") === "true";
+  },
+  get buyerAuthDemoSeed() {
+    return optional("BUYER_AUTH_DEMO_SEED", "true") === "true";
+  },
 };
 
 export const isDemoOperatorAllowed = () => env.demoopToken.length > 0;

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.60.0",
+    "argon2": "^0.44.0",
     "clsx": "^2.1.1",
     "iron-session": "^8.0.4",
     "next": "14.2.15",

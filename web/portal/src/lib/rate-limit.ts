@@ -53,3 +53,40 @@ export const contactRateLimiter = makeRateLimiter({
   max: 5,
   windowMs: 60_000,
 });
+
+// dev-spec-buyer-auth §5 FR-AUTH-1..6 rate limit table. All in-memory
+// (Q10 default). Tests reset between cases via the ``reset()`` method.
+//   signup            1/min/IP
+//   signin (IP)       5/min/IP
+//   signin (account) 10/hour/account  → ERR_ACCOUNT_LOCKED 423 + 15m lockout
+//   resend-otp        3/15min/account
+//   pwd-reset (IP)    3/hour/IP
+export const signupRateLimiter = makeRateLimiter({
+  max: 1,
+  windowMs: 60_000,
+});
+
+export const signinIpRateLimiter = makeRateLimiter({
+  max: 5,
+  windowMs: 60_000,
+});
+
+export const signinAccountRateLimiter = makeRateLimiter({
+  max: 10,
+  windowMs: 60 * 60_000,
+});
+
+export const otpResendRateLimiter = makeRateLimiter({
+  max: 3,
+  windowMs: 15 * 60_000,
+});
+
+export const passwordResetIpRateLimiter = makeRateLimiter({
+  max: 3,
+  windowMs: 60 * 60_000,
+});
+
+export const apiKeyRotateRateLimiter = makeRateLimiter({
+  max: 3,
+  windowMs: 60 * 60_000,
+});
