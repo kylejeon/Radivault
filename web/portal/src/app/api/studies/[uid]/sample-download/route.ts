@@ -5,11 +5,16 @@
  * the search service sample-download endpoint. Response envelope includes
  * ``quota_after`` (K-3 default) so the UI can update the QuotaIndicator
  * with a single round-trip.
+ *
+ * D-13 BLOCKER fix: route accepts either the legacy paste-mode ``apiKey``
+ * OR the v0.2 email/password ``buyerPk``. v0.2 sessions resolve via
+ * INTERNAL_SEARCH_KEY (see src/lib/buyer-bearer.ts).
  */
 
 import { NextResponse } from "next/server";
 import { bases, upstreamFetch } from "@/lib/upstream";
 import { getBuyerSession } from "@/lib/session";
+import { actingBuyerHeaders, bearerForBuyer } from "@/lib/buyer-bearer";
 
 type SampleDownloadResponse = {
   presigned_url: string;
@@ -37,13 +42,10 @@ export async function POST(
       { status: 401 },
     );
   }
-  if (!session.apiKey) {
+  const resolved = bearerForBuyer(session);
+  if (!resolved.ok) {
     return NextResponse.json(
-      {
-        error: "ERR_AUTH_EXPIRED",
-        detail:
-          "Session has no API key — paste-mode signin required for sample download.",
-      },
+      { error: "ERR_AUTH_EXPIRED", detail: resolved.reason },
       { status: 401 },
     );
   }
@@ -54,7 +56,8 @@ export async function POST(
     `/v1/studies/${encodeURIComponent(uid)}/sample-download`,
     {
       method: "POST",
-      bearer: session.apiKey,
+      bearer: resolved.bearer,
+      headers: actingBuyerHeaders(session, resolved.mode),
       // Empty body — the upstream endpoint takes no parameters today.
       body: {},
     },

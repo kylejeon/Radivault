@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { bases, upstreamFetch } from "@/lib/upstream";
 import { getBuyerSession } from "@/lib/session";
+import { actingBuyerHeaders, bearerForBuyer } from "@/lib/buyer-bearer";
 
 /**
  * BFF: GET /api/search/studies/[uid]
@@ -14,9 +15,16 @@ export async function GET(
   context: { params: Promise<{ uid: string }> },
 ) {
   const session = await getBuyerSession();
-  if (!session.apiKey) {
+  if (!session.buyerPk && !session.apiKey) {
     return NextResponse.json(
       { error: "ERR_AUTH_EXPIRED", detail: "No session" },
+      { status: 401 },
+    );
+  }
+  const resolved = bearerForBuyer(session);
+  if (!resolved.ok) {
+    return NextResponse.json(
+      { error: "ERR_AUTH_EXPIRED", detail: resolved.reason },
       { status: 401 },
     );
   }
@@ -25,7 +33,8 @@ export async function GET(
     bases.search,
     `/v1/search/studies/${encodeURIComponent(uid)}`,
     {
-      bearer: session.apiKey,
+      bearer: resolved.bearer,
+      headers: actingBuyerHeaders(session, resolved.mode),
     },
   );
   if (!res.ok) {

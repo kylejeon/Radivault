@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { bases, upstreamFetch } from "@/lib/upstream";
 import { getBuyerSession } from "@/lib/session";
+import { actingBuyerHeaders, bearerForBuyer } from "@/lib/buyer-bearer";
 
 // FR-A-32: deterministic v0.1 stub for the agreement hash. Production will
 // replace this with a signed MSA digest once billing v0.2 lands.
@@ -11,14 +12,22 @@ const STUB_AGREEMENT_HASH = createHash("sha256")
 
 export async function GET() {
   const session = await getBuyerSession();
-  if (!session.apiKey) {
+  if (!session.buyerPk && !session.apiKey) {
     return NextResponse.json(
       { error: "ERR_AUTH_EXPIRED", detail: "No session" },
       { status: 401 },
     );
   }
+  const resolved = bearerForBuyer(session);
+  if (!resolved.ok) {
+    return NextResponse.json(
+      { error: "ERR_AUTH_EXPIRED", detail: resolved.reason },
+      { status: 401 },
+    );
+  }
   const res = await upstreamFetch(bases.fulfillment, "/v1/orders", {
-    bearer: session.apiKey,
+    bearer: resolved.bearer,
+    headers: actingBuyerHeaders(session, resolved.mode),
   });
   if (!res.ok) {
     return NextResponse.json(
@@ -31,9 +40,16 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await getBuyerSession();
-  if (!session.apiKey) {
+  if (!session.buyerPk && !session.apiKey) {
     return NextResponse.json(
       { error: "ERR_AUTH_EXPIRED", detail: "No session" },
+      { status: 401 },
+    );
+  }
+  const resolved = bearerForBuyer(session);
+  if (!resolved.ok) {
+    return NextResponse.json(
+      { error: "ERR_AUTH_EXPIRED", detail: resolved.reason },
       { status: 401 },
     );
   }
@@ -56,8 +72,11 @@ export async function POST(req: Request) {
   ).sort();
   const res = await upstreamFetch(bases.fulfillment, "/v1/orders", {
     method: "POST",
-    bearer: session.apiKey,
-    headers: { "Idempotency-Key": idemKey },
+    bearer: resolved.bearer,
+    headers: {
+      "Idempotency-Key": idemKey,
+      ...actingBuyerHeaders(session, resolved.mode),
+    },
     body: {
       pseudo_study_uids: body.pseudo_study_uids ?? [],
       ...(allowedHospitals.length > 0

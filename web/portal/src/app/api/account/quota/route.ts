@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { bases, upstreamFetch } from "@/lib/upstream";
 import { getBuyerSession } from "@/lib/session";
+import { actingBuyerHeaders, bearerForBuyer } from "@/lib/buyer-bearer";
 
 type QuotaResponse = {
   daily_used: number;
@@ -28,9 +29,10 @@ export async function GET() {
       { status: 401 },
     );
   }
-  if (!session.apiKey) {
+  const resolved = bearerForBuyer(session);
+  if (!resolved.ok) {
     return NextResponse.json(
-      { error: "ERR_AUTH_EXPIRED", detail: "Session has no API key" },
+      { error: "ERR_AUTH_EXPIRED", detail: resolved.reason },
       { status: 401 },
     );
   }
@@ -38,7 +40,10 @@ export async function GET() {
   const res = await upstreamFetch<QuotaResponse>(
     bases.search,
     "/v1/account/quota",
-    { bearer: session.apiKey },
+    {
+      bearer: resolved.bearer,
+      headers: actingBuyerHeaders(session, resolved.mode),
+    },
   );
   if (!res.ok) {
     return NextResponse.json(
