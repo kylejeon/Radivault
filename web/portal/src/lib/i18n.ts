@@ -317,6 +317,129 @@ const en = {
     mobileFallbackBody:
       "RadiVault Marketplace is optimised for ≥ 1280 px screens. Switch to a desktop browser for the full experience.",
   },
+  // Hospital console — design-spec-portal-redesign §17~§19 / FR-HO-*.
+  hospital: {
+    title: {
+      dashboard: "병원 콘솔 대시보드",
+      audit: "감사 로그",
+      quota: "쿼터 상세",
+    },
+    nav: {
+      wordmark: "RadiVault 병원 콘솔",
+      dashboard: "대시",
+      orders: "주문",
+      audit: "감사",
+      settings: "설정",
+      signOut: "로그아웃",
+    },
+    tile: {
+      uploadedStudies: "업로드 study",
+      totalBytes: "Total bytes",
+      modalityDist: "Modality 분포",
+      auditChain: "Audit chain 상태",
+      gatewayHb: "Gateway 신호",
+      quota: "쿼터 (일·월·동시)",
+      revenue: "이번 달 수익",
+      orderInflow: "주문 들어온 study",
+      ruleset: "Ruleset / Salt / Pixel",
+      today: "오늘",
+      cumulative: "누적",
+      monthOverMonth: "전월 대비",
+      revenueDisclaimer: "시뮬레이션 — v0.2 정산 대기",
+      orderInflowSubtitle: "이번 달 들어온 주문",
+      orderInflowEmpty: "이번 달 들어온 주문 없음",
+      buyerMasked: "buyer ****",
+      lastSignal: "마지막 신호",
+      gatewayDisconnected: "Gateway 미연결",
+      modalityNoData: "데이터 없음",
+      ruleset_label: "de-id ruleset",
+      salt_label: "salt 버전",
+      pixelEngine_label: "pixel engine",
+      saltRotateNext: "다음 salt rotate",
+      versionFetchFailed: "버전 정보 미수신",
+    },
+    auditChain: {
+      ok: "정상",
+      stale: "지연",
+      broken: "체인 끊김",
+      lastAnchor: "최근 앵커",
+      retry: "상태 확인 불가 — 재시도",
+    },
+    quota: {
+      daily: "일일 업로드",
+      monthly: "월간 업로드",
+      concurrent: "동시 업로드",
+      reset: "리셋",
+      maxConcurrentLabel: "현재 max_concurrent_uploads",
+      maxConcurrentNote: "Gateway config 기준, 변경은 운영팀 문의",
+      enforceDisclaimer: "v0.1 한도 집행 없음 — 표시만. v0.1.1 부터 enforce.",
+      fetchFailed: "쿼터 조회 실패",
+      partialFailed: "조회 실패",
+    },
+    audit: {
+      title: "감사 로그",
+      filterLabel: "필터",
+      filter24h: "최근 24시간",
+      column: {
+        time: "시각 (KST)",
+        type: "type",
+        hash: "hash prefix",
+        chain: "chain",
+      },
+      empty: "최근 24시간 감사 이벤트 없음",
+      fetchFailed: "로그 조회 실패 — 재시도",
+      loadMore: "더 보기",
+      stubNote:
+        "v0.1 — 최근 20 이벤트만 표시합니다. 페이징·필터는 v0.1.1 에서 제공됩니다.",
+    },
+    contactButton: {
+      label: "1:1 문의",
+      open: "1:1 문의 열기",
+      close: "닫기",
+      cardTitle: "문의 채널 선택",
+      kakao: "카카오톡으로 문의하기",
+      kakaoChannel: "플러스친구 @radivault",
+      email: "이메일로 문의하기",
+      emailAddress: "contact@radivault.io",
+      hours: "평일 09:00–18:00 KST 응답",
+    },
+    footer: {
+      columns: {
+        product: {
+          title: "제품·솔루션",
+          links: [
+            "데이터 마켓플레이스",
+            "병원 파트너십",
+            "De-ID 엔진",
+          ],
+        },
+        tech: {
+          title: "기술",
+          links: ["Gateway Agent", "감사 앵커 체인", "API 문서"],
+        },
+        company: {
+          title: "회사",
+          links: ["소개", "채용", "뉴스"],
+        },
+        legal: {
+          title: "법적",
+          links: [
+            "개인정보처리방침",
+            "이용약관",
+            "위치기반서비스 약관",
+            "청소년보호정책",
+          ],
+        },
+      },
+      legalBlockTitle: "주식회사 라디볼트 (RadiVault Inc.)",
+      compliance: {
+        pipa: "PIPA §28-8 기준 준수",
+        isms: "ISMS-P 준비 중",
+        iso: "ISO 27001 정렬",
+      },
+      hours: "평일 09:00–18:00 KST",
+    },
+  },
 } satisfies Dict;
 
 export type Dict = {
@@ -513,6 +636,93 @@ export type Dict = {
     revealStubCta: string;
     mobileFallbackTitle: string;
     mobileFallbackBody: string;
+  };
+  hospital: {
+    title: { dashboard: string; audit: string; quota: string };
+    nav: {
+      wordmark: string;
+      dashboard: string;
+      orders: string;
+      audit: string;
+      settings: string;
+      signOut: string;
+    };
+    tile: {
+      uploadedStudies: string;
+      totalBytes: string;
+      modalityDist: string;
+      auditChain: string;
+      gatewayHb: string;
+      quota: string;
+      revenue: string;
+      orderInflow: string;
+      ruleset: string;
+      today: string;
+      cumulative: string;
+      monthOverMonth: string;
+      revenueDisclaimer: string;
+      orderInflowSubtitle: string;
+      orderInflowEmpty: string;
+      buyerMasked: string;
+      lastSignal: string;
+      gatewayDisconnected: string;
+      modalityNoData: string;
+      ruleset_label: string;
+      salt_label: string;
+      pixelEngine_label: string;
+      saltRotateNext: string;
+      versionFetchFailed: string;
+    };
+    auditChain: {
+      ok: string;
+      stale: string;
+      broken: string;
+      lastAnchor: string;
+      retry: string;
+    };
+    quota: {
+      daily: string;
+      monthly: string;
+      concurrent: string;
+      reset: string;
+      maxConcurrentLabel: string;
+      maxConcurrentNote: string;
+      enforceDisclaimer: string;
+      fetchFailed: string;
+      partialFailed: string;
+    };
+    audit: {
+      title: string;
+      filterLabel: string;
+      filter24h: string;
+      column: { time: string; type: string; hash: string; chain: string };
+      empty: string;
+      fetchFailed: string;
+      loadMore: string;
+      stubNote: string;
+    };
+    contactButton: {
+      label: string;
+      open: string;
+      close: string;
+      cardTitle: string;
+      kakao: string;
+      kakaoChannel: string;
+      email: string;
+      emailAddress: string;
+      hours: string;
+    };
+    footer: {
+      columns: {
+        product: { title: string; links: ReadonlyArray<string> };
+        tech: { title: string; links: ReadonlyArray<string> };
+        company: { title: string; links: ReadonlyArray<string> };
+        legal: { title: string; links: ReadonlyArray<string> };
+      };
+      legalBlockTitle: string;
+      compliance: { pipa: string; isms: string; iso: string };
+      hours: string;
+    };
   };
 };
 
@@ -804,6 +1014,128 @@ const ko: Dict = {
     mobileFallbackTitle: "데스크톱 환경 권장",
     mobileFallbackBody:
       "RadiVault Marketplace 는 1280 px 이상 화면에 최적화되어 있습니다. 전체 기능을 위해 데스크톱 브라우저를 사용해 주세요.",
+  },
+  hospital: {
+    title: {
+      dashboard: "병원 콘솔 대시보드",
+      audit: "감사 로그",
+      quota: "쿼터 상세",
+    },
+    nav: {
+      wordmark: "RadiVault 병원 콘솔",
+      dashboard: "대시",
+      orders: "주문",
+      audit: "감사",
+      settings: "설정",
+      signOut: "로그아웃",
+    },
+    tile: {
+      uploadedStudies: "업로드 study",
+      totalBytes: "Total bytes",
+      modalityDist: "Modality 분포",
+      auditChain: "Audit chain 상태",
+      gatewayHb: "Gateway 신호",
+      quota: "쿼터 (일·월·동시)",
+      revenue: "이번 달 수익",
+      orderInflow: "주문 들어온 study",
+      ruleset: "Ruleset / Salt / Pixel",
+      today: "오늘",
+      cumulative: "누적",
+      monthOverMonth: "전월 대비",
+      revenueDisclaimer: "시뮬레이션 — v0.2 정산 대기",
+      orderInflowSubtitle: "이번 달 들어온 주문",
+      orderInflowEmpty: "이번 달 들어온 주문 없음",
+      buyerMasked: "buyer ****",
+      lastSignal: "마지막 신호",
+      gatewayDisconnected: "Gateway 미연결",
+      modalityNoData: "데이터 없음",
+      ruleset_label: "de-id ruleset",
+      salt_label: "salt 버전",
+      pixelEngine_label: "pixel engine",
+      saltRotateNext: "다음 salt rotate",
+      versionFetchFailed: "버전 정보 미수신",
+    },
+    auditChain: {
+      ok: "정상",
+      stale: "지연",
+      broken: "체인 끊김",
+      lastAnchor: "최근 앵커",
+      retry: "상태 확인 불가 — 재시도",
+    },
+    quota: {
+      daily: "일일 업로드",
+      monthly: "월간 업로드",
+      concurrent: "동시 업로드",
+      reset: "리셋",
+      maxConcurrentLabel: "현재 max_concurrent_uploads",
+      maxConcurrentNote: "Gateway config 기준, 변경은 운영팀 문의",
+      enforceDisclaimer: "v0.1 한도 집행 없음 — 표시만. v0.1.1 부터 enforce.",
+      fetchFailed: "쿼터 조회 실패",
+      partialFailed: "조회 실패",
+    },
+    audit: {
+      title: "감사 로그",
+      filterLabel: "필터",
+      filter24h: "최근 24시간",
+      column: {
+        time: "시각 (KST)",
+        type: "type",
+        hash: "hash prefix",
+        chain: "chain",
+      },
+      empty: "최근 24시간 감사 이벤트 없음",
+      fetchFailed: "로그 조회 실패 — 재시도",
+      loadMore: "더 보기",
+      stubNote:
+        "v0.1 — 최근 20 이벤트만 표시합니다. 페이징·필터는 v0.1.1 에서 제공됩니다.",
+    },
+    contactButton: {
+      label: "1:1 문의",
+      open: "1:1 문의 열기",
+      close: "닫기",
+      cardTitle: "문의 채널 선택",
+      kakao: "카카오톡으로 문의하기",
+      kakaoChannel: "플러스친구 @radivault",
+      email: "이메일로 문의하기",
+      emailAddress: "contact@radivault.io",
+      hours: "평일 09:00–18:00 KST 응답",
+    },
+    footer: {
+      columns: {
+        product: {
+          title: "제품·솔루션",
+          links: [
+            "데이터 마켓플레이스",
+            "병원 파트너십",
+            "De-ID 엔진",
+          ],
+        },
+        tech: {
+          title: "기술",
+          links: ["Gateway Agent", "감사 앵커 체인", "API 문서"],
+        },
+        company: {
+          title: "회사",
+          links: ["소개", "채용", "뉴스"],
+        },
+        legal: {
+          title: "법적",
+          links: [
+            "개인정보처리방침",
+            "이용약관",
+            "위치기반서비스 약관",
+            "청소년보호정책",
+          ],
+        },
+      },
+      legalBlockTitle: "주식회사 라디볼트 (RadiVault Inc.)",
+      compliance: {
+        pipa: "PIPA §28-8 기준 준수",
+        isms: "ISMS-P 준비 중",
+        iso: "ISO 27001 정렬",
+      },
+      hours: "평일 09:00–18:00 KST",
+    },
   },
 };
 
