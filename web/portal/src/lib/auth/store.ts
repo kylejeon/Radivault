@@ -503,10 +503,26 @@ export class AuthStoreError extends Error {
   }
 }
 
-// Singleton — kept module-local. Tests reach in via getAuthStore().reset().
-let singleton: AuthStore | null = null;
+// Singleton — pinned on globalThis so Next.js dev-mode module re-imports
+// (Fast Refresh + per-request route compilation) don't blow away the
+// in-memory state between signup and signin within the same test run.
+//
+// In production (``next start``) and vitest (single Node process) this
+// behaves identically to a module-local ``let`` — globalThis is the same
+// object across all imports.
+const SINGLETON_KEY = "__radivault_auth_store_v1__";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __radivault_auth_store_v1__: AuthStore | undefined;
+}
 
 export function getAuthStore(): AuthStore {
-  if (!singleton) singleton = new MemoryAuthStore();
-  return singleton;
+  const g = globalThis as typeof globalThis & {
+    [SINGLETON_KEY]?: AuthStore;
+  };
+  if (!g[SINGLETON_KEY]) {
+    g[SINGLETON_KEY] = new MemoryAuthStore();
+  }
+  return g[SINGLETON_KEY] as AuthStore;
 }

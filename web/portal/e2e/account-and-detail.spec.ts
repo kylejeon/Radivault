@@ -18,24 +18,28 @@ test.describe("/account (FR-BP-13)", () => {
     await injectBuyerSession(context);
   });
 
-  test("renders profile + Stripe-masked api key + reveal-once stub", async ({
+  test("renders profile + Stripe-masked api key + Regenerate/Revoke", async ({
     page,
   }) => {
     await page.goto("/account");
     // Page-level heading.
     await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
-    // Stripe-style mask: prefix + ***...****<last8>. The fake e2e key
-    // ends in ".....00000000" — first 8 chars + last 8 chars only.
+    // v0.2 (dev-spec-buyer-auth FR-AUTH-8) mask: rv_live_<4>…<4>.
+    // Legacy session payload (injectBuyerSession) carries an apiKey only,
+    // so the /account server page falls into the legacy mask branch but
+    // emits the new v0.2 format (single source of truth in
+    // src/lib/auth/api-key.ts maskApiKey).
     const masked = await page
       .getByTestId("account-apikey-masked")
       .textContent();
     expect(masked).toMatch(/^rv_live_/);
-    expect(masked).toContain("***...****");
-    // Raw key prefix `e2edemo_` (the seal payload) must NEVER show up.
-    expect(masked).not.toContain("e2edemo_");
+    expect(masked).toContain("…");
+    // Raw key body (`e2edemo_…`) must NEVER show up un-masked.
+    expect(masked).not.toContain("e2edemo_00000000");
 
-    // Reveal-once button is present (K-11 stubbed but wired).
-    await expect(page.getByTestId("account-reveal-once")).toBeVisible();
+    // FR-AUTH-8 actions are wired: Regenerate + Revoke buttons present.
+    await expect(page.getByTestId("account-regenerate")).toBeVisible();
+    await expect(page.getByTestId("account-revoke")).toBeVisible();
   });
 });
 
