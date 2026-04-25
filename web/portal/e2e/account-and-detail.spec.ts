@@ -79,10 +79,14 @@ test.describe("/studies/[uid] (FR-BP-8)", () => {
     await expect(page.getByTestId("study-detail-panel")).toBeVisible();
     await expect(page.getByText("SIEMENS")).toBeVisible();
     await expect(page.getByText("SOMATOM Force")).toBeVisible();
-    // Viewer stub renders.
-    await expect(page.getByTestId("viewer-stub")).toBeVisible();
-    // Add to cohort button present and enabled.
+    // dev-spec-buyer-browse-preview FR-PREVIEW: viewer + sample download
+    // card replace the legacy viewer stub.
+    await expect(page.getByTestId("sample-download-card")).toBeVisible();
+    await expect(page.getByTestId("cohort-card")).toBeVisible();
+    // Add to cohort button present and enabled (header chip).
     await expect(page.getByTestId("add-to-cohort")).toBeVisible();
+    // SaMD disclaimer always rendered on /studies/[uid].
+    await expect(page.getByTestId("samd-disclaimer")).toBeVisible();
   });
 
   test("404 from upstream surfaces the page-level not-found state", async ({
