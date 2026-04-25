@@ -103,6 +103,43 @@ html[lang="ko"] body,
   background: #94a3b8;
 }
 
+/* design-spec-portal-redesign §11.1 — tinted variant used in DataTable rows
+ * (lighter bg + dark fg). WCAG AA-corrected (MG bumped to #9d174d). */
+.badge-modality-tint {
+  @apply inline-flex min-w-[2.25rem] items-center justify-center rounded-sm px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-tight;
+}
+.badge-modality-tint.ct {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.badge-modality-tint.mr {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.badge-modality-tint.mg {
+  background: #fce7f3;
+  color: #9d174d;
+}
+.badge-modality-tint.cr,
+.badge-modality-tint.dx,
+.badge-modality-tint.dr {
+  background: #dcfce7;
+  color: #15803d;
+}
+.badge-modality-tint.pt {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.badge-modality-tint.us {
+  background: #ffedd5;
+  color: #c2410c;
+}
+.badge-modality-tint.xa,
+.badge-modality-tint.unknown {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 /* Phase stepper dot colour (FR-A-38). */
 .phase-dot {
   @apply inline-block size-2.5 rounded-full;

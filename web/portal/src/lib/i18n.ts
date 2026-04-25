@@ -215,6 +215,108 @@ const en = {
     comingSoon:
       "v0.1 stub — full control documentation publishes alongside the SOC 2 Type II audit window.",
   },
+  // Buyer portal — design-spec-portal-redesign §11~§14.
+  buyerNav: {
+    wordmark: "RadiVault Marketplace",
+    search: "Search",
+    orders: "Orders",
+    docs: "Docs",
+    account: "Account",
+    signOut: "Sign out",
+  },
+  search: {
+    pageTitle: "Search",
+    facetTitle: {
+      modality: "Modality",
+      bodyPart: "Body part",
+      ageBucket: "Age bucket",
+      sex: "Sex",
+      manufacturer: "Manufacturer",
+      year: "Year",
+      minHospitals: "Federated across at least N hospitals",
+    },
+    clearFilters: "Clear all filters",
+    showing: "Showing {n} of {total}",
+    loadMore: "Load more",
+    emptyTitle: "No studies match these filters",
+    emptyBody:
+      "Try widening your date range or removing the min-hospitals constraint.",
+    cohortTitle: "Cohort",
+    cohortReviewCta: "Review order",
+    recentSearches: "Recent searches",
+  },
+  study: {
+    backToResults: "Back to results",
+    addToCohort: "Add to cohort",
+    alreadyInCohort: "Already in cohort",
+    metaTitle: "Study metadata",
+    seriesTitle: "Series",
+    metaLabels: {
+      modality: "Modality",
+      bodyPart: "Body part",
+      ageBucket: "Age bucket",
+      sex: "Sex",
+      manufacturer: "Manufacturer",
+      model: "Model",
+      studyDate: "Study date",
+      totalBytes: "Total bytes",
+      instances: "Instance count",
+      seriesCount: "Series count",
+      ingested: "Ingested at",
+    },
+    viewerStubTitle: "DICOM viewer not included in v0.1.",
+    viewerStubBody: "Pixel data available after order fulfillment.",
+    viewerStubCta: "Request viewer integration demo",
+    notFoundTitle: "Study not found",
+    notFoundBody:
+      "This study id is not visible to your account. It may have been removed or the cohort moved on.",
+  },
+  orders: {
+    listTitle: "Orders",
+    cartTitle: "Cohort",
+    summaryStudies: "Studies",
+    summaryHospitals: "Hospitals",
+    summaryTotalSize: "Total size",
+    summaryEstimatedCost: "Estimated cost",
+    pricingMasked: "Contact for pricing",
+    duaCheckbox:
+      "I agree to the Data Use Agreement (v0.1.0). The data will only be used within the approved scope.",
+    duaLink: "View DUA",
+    submitCta: "Place order",
+    submitting: "Submitting…",
+    saveDraftCta: "Save as draft",
+    backToSearch: "Back to search",
+    duaRequiredHint: "Please agree to the Data Use Agreement to continue.",
+    cohortEmptyTitle: "No studies selected",
+    cohortEmptyBody:
+      "Pick a cohort from search before placing an order.",
+    distributionTitle: "Hospital distribution",
+    modalityBreakdownTitle: "Modality breakdown",
+  },
+  account: {
+    pageTitle: "Account",
+    profileTitle: "Profile",
+    apiKeysTitle: "API keys",
+    issueNewKey: "Issue new",
+    revealOnce: "Reveal once",
+    billingTitle: "Billing",
+    billingBody: "Invoicing handled offline in v0.1.",
+    contactBilling: "Contact billing",
+    apiKeyMasked: "rv_live_***...****cf4ec164",
+    profileFields: {
+      buyerId: "Buyer id",
+      email: "Email",
+      tier: "Tier",
+      createdAt: "Created",
+      quotaRemaining: "Quota remaining",
+    },
+    revealStubBody:
+      "API key reveal is available in v0.1.1. Contact support to rotate.",
+    revealStubCta: "Contact support",
+    mobileFallbackTitle: "Best viewed on desktop",
+    mobileFallbackBody:
+      "RadiVault Marketplace is optimised for ≥ 1280 px screens. Switch to a desktop browser for the full experience.",
+  },
 } satisfies Dict;
 
 export type Dict = {
@@ -317,6 +419,101 @@ export type Dict = {
     successPlaceholder: string;
   };
   trustCenter: { pageTitle: string; pageSubtitle: string; comingSoon: string };
+  buyerNav: {
+    wordmark: string;
+    search: string;
+    orders: string;
+    docs: string;
+    account: string;
+    signOut: string;
+  };
+  search: {
+    pageTitle: string;
+    facetTitle: {
+      modality: string;
+      bodyPart: string;
+      ageBucket: string;
+      sex: string;
+      manufacturer: string;
+      year: string;
+      minHospitals: string;
+    };
+    clearFilters: string;
+    showing: string;
+    loadMore: string;
+    emptyTitle: string;
+    emptyBody: string;
+    cohortTitle: string;
+    cohortReviewCta: string;
+    recentSearches: string;
+  };
+  study: {
+    backToResults: string;
+    addToCohort: string;
+    alreadyInCohort: string;
+    metaTitle: string;
+    seriesTitle: string;
+    metaLabels: {
+      modality: string;
+      bodyPart: string;
+      ageBucket: string;
+      sex: string;
+      manufacturer: string;
+      model: string;
+      studyDate: string;
+      totalBytes: string;
+      instances: string;
+      seriesCount: string;
+      ingested: string;
+    };
+    viewerStubTitle: string;
+    viewerStubBody: string;
+    viewerStubCta: string;
+    notFoundTitle: string;
+    notFoundBody: string;
+  };
+  orders: {
+    listTitle: string;
+    cartTitle: string;
+    summaryStudies: string;
+    summaryHospitals: string;
+    summaryTotalSize: string;
+    summaryEstimatedCost: string;
+    pricingMasked: string;
+    duaCheckbox: string;
+    duaLink: string;
+    submitCta: string;
+    submitting: string;
+    saveDraftCta: string;
+    backToSearch: string;
+    duaRequiredHint: string;
+    cohortEmptyTitle: string;
+    cohortEmptyBody: string;
+    distributionTitle: string;
+    modalityBreakdownTitle: string;
+  };
+  account: {
+    pageTitle: string;
+    profileTitle: string;
+    apiKeysTitle: string;
+    issueNewKey: string;
+    revealOnce: string;
+    billingTitle: string;
+    billingBody: string;
+    contactBilling: string;
+    apiKeyMasked: string;
+    profileFields: {
+      buyerId: string;
+      email: string;
+      tier: string;
+      createdAt: string;
+      quotaRemaining: string;
+    };
+    revealStubBody: string;
+    revealStubCta: string;
+    mobileFallbackTitle: string;
+    mobileFallbackBody: string;
+  };
 };
 
 const ko: Dict = {
@@ -507,6 +704,106 @@ const ko: Dict = {
       "RadiVault 의 컴플라이언스 자세. 아래 각 섹션은 법적·운영적 컨트롤에 매핑됩니다.",
     comingSoon:
       "v0.1 임시 페이지 — 전체 컨트롤 문서는 SOC 2 Type II 감사 윈도우에 맞춰 공개됩니다.",
+  },
+  buyerNav: {
+    wordmark: "RadiVault Marketplace",
+    search: "검색",
+    orders: "주문",
+    docs: "문서",
+    account: "계정",
+    signOut: "로그아웃",
+  },
+  search: {
+    pageTitle: "검색",
+    facetTitle: {
+      modality: "모달리티",
+      bodyPart: "신체 부위",
+      ageBucket: "연령",
+      sex: "성별",
+      manufacturer: "제조사",
+      year: "촬영 연도",
+      minHospitals: "최소 N 개 병원에 분포",
+    },
+    clearFilters: "필터 모두 해제",
+    showing: "{total} 개 중 {n} 개 표시",
+    loadMore: "더 불러오기",
+    emptyTitle: "조건에 맞는 study 가 없습니다",
+    emptyBody:
+      "날짜 범위를 넓히거나 최소 병원 수 조건을 해제해 보세요.",
+    cohortTitle: "코호트",
+    cohortReviewCta: "주문 검토",
+    recentSearches: "최근 검색",
+  },
+  study: {
+    backToResults: "결과로 돌아가기",
+    addToCohort: "코호트에 추가",
+    alreadyInCohort: "이미 코호트에 있음",
+    metaTitle: "Study 메타데이터",
+    seriesTitle: "Series",
+    metaLabels: {
+      modality: "모달리티",
+      bodyPart: "신체 부위",
+      ageBucket: "연령",
+      sex: "성별",
+      manufacturer: "제조사",
+      model: "모델",
+      studyDate: "촬영 일자",
+      totalBytes: "총 용량",
+      instances: "인스턴스 수",
+      seriesCount: "시리즈 수",
+      ingested: "수집 시각",
+    },
+    viewerStubTitle: "DICOM 뷰어 — v0.1 미포함",
+    viewerStubBody: "픽셀 데이터는 주문 처리 후 제공됩니다.",
+    viewerStubCta: "뷰어 통합 데모 요청",
+    notFoundTitle: "Study 를 찾을 수 없습니다",
+    notFoundBody:
+      "해당 study 는 현재 계정에서 보이지 않습니다. 삭제되었거나 코호트가 변경되었을 수 있습니다.",
+  },
+  orders: {
+    listTitle: "주문",
+    cartTitle: "코호트",
+    summaryStudies: "Study 수",
+    summaryHospitals: "병원 수",
+    summaryTotalSize: "총 용량",
+    summaryEstimatedCost: "예상 비용",
+    pricingMasked: "가격 문의",
+    duaCheckbox:
+      "데이터 사용 계약 (v0.1.0) 에 동의합니다. 데이터는 승인된 범위 내에서만 사용합니다.",
+    duaLink: "DUA 보기",
+    submitCta: "주문 제출",
+    submitting: "제출 중…",
+    saveDraftCta: "임시 저장",
+    backToSearch: "검색으로 돌아가기",
+    duaRequiredHint: "계속하려면 데이터 사용 계약에 동의해 주세요.",
+    cohortEmptyTitle: "선택된 study 가 없습니다",
+    cohortEmptyBody: "주문 전에 검색에서 코호트를 구성해 주세요.",
+    distributionTitle: "병원 분포",
+    modalityBreakdownTitle: "모달리티 분포",
+  },
+  account: {
+    pageTitle: "계정",
+    profileTitle: "프로필",
+    apiKeysTitle: "API 키",
+    issueNewKey: "새 키 발급",
+    revealOnce: "한 번만 표시",
+    billingTitle: "결제",
+    billingBody: "v0.1 에서는 오프라인으로 처리됩니다.",
+    contactBilling: "결제 문의",
+    apiKeyMasked: "rv_live_***...****cf4ec164",
+    profileFields: {
+      buyerId: "Buyer ID",
+      email: "이메일",
+      tier: "등급",
+      createdAt: "가입일",
+      quotaRemaining: "잔여 쿼터",
+    },
+    revealStubBody:
+      "API 키 노출 기능은 v0.1.1 에서 제공됩니다. 키 회전은 지원팀에 문의하세요.",
+    revealStubCta: "지원 문의",
+    mobileFallbackTitle: "데스크톱 환경 권장",
+    mobileFallbackBody:
+      "RadiVault Marketplace 는 1280 px 이상 화면에 최적화되어 있습니다. 전체 기능을 위해 데스크톱 브라우저를 사용해 주세요.",
   },
 };
 
