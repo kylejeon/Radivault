@@ -61,15 +61,21 @@ export const env = {
   },
   // ---- buyer-auth (dev-spec-buyer-auth FR-AUTH-12) -------------------------
   get buyerAuthSkipEmailVerify() {
-    const raw = optional("BUYER_AUTH_SKIP_EMAIL_VERIFY", "true");
-    // HIGH-1 fix (qa-report-buyer-auth): production fail-closed.
-    // Dev/demo default "true" preserved; production builds must opt out
-    // explicitly with BUYER_AUTH_SKIP_EMAIL_VERIFY=false (AC-DEMO-4).
-    if (process.env.NODE_ENV === "production" && raw !== "false") {
-      throw new Error(
-        "BUYER_AUTH_SKIP_EMAIL_VERIFY must be explicitly set to 'false' in production builds (AC-DEMO-4)",
-      );
-    }
+    // HIGH-1 (qa-report-buyer-auth) intent — production must be fail-closed
+    // when the operator forgets to set the flag. We achieve that by making
+    // the default depend on NODE_ENV:
+    //   - dev/test  → default "true"  (demo/CI ergonomics, OTP skipped)
+    //   - production → default "false" (skip disabled unless ENV explicit)
+    //
+    // BLOCKER #2 (qa-report-d13-demo-rehearsal) re-fix: the previous guard
+    // threw on prerender for /signup + /ko/signup whenever NODE_ENV was
+    // production AND raw !== "false", which meant `pnpm build` always
+    // failed. AC-DEMO-4 only requires that ENV-omission stay fail-closed
+    // in prod; explicit "true" is a legitimate operator override (e.g.
+    // building a demo artifact for the CEO deck) and must not throw.
+    const isProduction = process.env.NODE_ENV === "production";
+    const fallback = isProduction ? "false" : "true";
+    const raw = optional("BUYER_AUTH_SKIP_EMAIL_VERIFY", fallback);
     return raw === "true";
   },
   get buyerAuthPwdResetDisabled() {
