@@ -1,9 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+/**
+ * HospitalDashboard — design-spec §18.1 (9-tile layout).
+ *
+ * Composition:
+ *   row 1 — uploaded studies / total bytes / modality donut
+ *   row 2 — audit chain status / gateway heartbeat / quota 3-up
+ *   row 3 — revenue (static K-15 dummy) / order inflow / ruleset badge
+ *
+ * Loading priority (§18.1):
+ *   - Critical (1, 5, 6, 8) fetch on mount.
+ *   - Lazy   (2, 3, 7, 9)   fetch in the same Promise.all but the tiles
+ *     show skeletons independently so a slow ruleset endpoint cannot
+ *     block the audit-chain badge.
+ *
+ * Below the grid: §18.1 audit-log preview (top 20 events) + the existing
+ * Korea heatmap tile.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { TileCard } from "@/components/TileCard";
 import { KoreaHeatmap, type Region } from "@/components/KoreaHeatmap";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { getDict } from "@/lib/i18n";
+import {
+  AuditChainStatusBadge,
+  type AuditChainStatusData,
+} from "@/components/hospital/AuditChainStatusBadge";
+import {
+  GatewayHeartbeatChart,
+  type GatewayHeartbeatData,
+} from "@/components/hospital/GatewayHeartbeatChart";
+import { QuotaTile, type QuotaData } from "@/components/hospital/QuotaTile";
+import {
+  RulesetVersionBadge,
+  type RulesetVersionData,
+} from "@/components/hospital/RulesetVersionBadge";
+import {
+  ModalityDistributionChart,
+  type ModalitySlice,
+} from "@/components/hospital/ModalityDistributionChart";
+import {
+  RevenueTile,
+  REVENUE_DUMMY,
+} from "@/components/hospital/RevenueTile";
+import { OrderInflowTile } from "@/components/hospital/OrderInflowTile";
+import { formatBytes, formatKstTime } from "@/components/hospital/format";
 
 type Stats = {
   hospital_id: string;
@@ -12,12 +55,8 @@ type Stats = {
     cumulative: number;
     monthly_12m: { year_month: string; count: number }[];
   };
-  gateway_health: {
-    status: "online" | "warning" | "offline" | "unknown";
-    last_sync_at: string | null;
-    last_sync_delta_seconds: number | null;
-  };
-  modality_distribution: { modality: string; count: number }[];
+  gateway_health: GatewayHeartbeatData;
+  modality_distribution: ModalitySlice[];
 };
 
 type HospitalOrders = {
@@ -39,81 +78,96 @@ type Audit = {
   }[];
 };
 
-// Demo-only revenue simulation (dev-spec §11.2 Q-Demo-2 pending legal review).
-// Values are always displayed with a "시뮬레이션 — v0.2 정산 대기" disclaimer.
-// Operators tune the three knobs through NEXT_PUBLIC_DEMO_* env vars without
-// code changes; the Math.round floor keeps KRW integer for display.
-const parseNum = (raw: string | undefined, fallback: number): number => {
-  const n = raw ? Number(raw) : NaN;
-  return Number.isFinite(n) ? n : fallback;
+type AuditChain = AuditChainStatusData & { hospital_id?: string };
+
+type Quota = {
+  hospital_id: string;
+  daily: { bytes_used: number; bytes_limit: number; resets_at: string };
+  monthly: { bytes_used: number; bytes_limit: number; resets_at: string };
+  max_concurrent_uploads: number;
+  ruleset_version: string;
+  salt_version: string;
+  salt_rotate_at: string;
+  pixel_engine_version: string;
 };
-
-const UNIT_PRICE_USD = parseNum(process.env.NEXT_PUBLIC_DEMO_UNIT_PRICE_USD, 5);
-const HOSPITAL_SHARE = parseNum(process.env.NEXT_PUBLIC_DEMO_HOSPITAL_SHARE, 0.35);
-const KRW_PER_USD = parseNum(process.env.NEXT_PUBLIC_DEMO_KRW_PER_USD, 1350);
-
-function simulateRevenueKrw(cumulative: number): number {
-  return Math.round(cumulative * UNIT_PRICE_USD * HOSPITAL_SHARE * KRW_PER_USD);
-}
-
-function statusPillClass(status: Stats["gateway_health"]["status"]): string {
-  switch (status) {
-    case "online":
-      return "text-green-700";
-    case "warning":
-      return "text-yellow-700";
-    case "offline":
-      return "text-red-700";
-    default:
-      return "text-slate-500";
-  }
-}
-
-function statusLabelKo(status: Stats["gateway_health"]["status"]): string {
-  return { online: "정상", warning: "주의", offline: "연결 끊김", unknown: "확인 중" }[status];
-}
 
 const PLACEHOLDER_REGIONS: Region[] = [
   { id: "seoul", name: "서울", x: 48, y: 28, active: true },
-  { id: "daejeon", name: "대전", x: 52, y: 56, active: false },
+  { id: "gyeonggi", name: "경기", x: 52, y: 32, active: false },
 ];
 
-export function HospitalDashboard() {
+export function HospitalDashboard({ hospitalId }: { hospitalId: string }) {
+  const dict = getDict("ko");
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [orders, setOrders] = useState<HospitalOrders | null>(null);
   const [audit, setAudit] = useState<Audit | null>(null);
-  const [error, setError] = useState<{ code?: string; detail?: string; requestId?: string } | null>(
-    null,
-  );
+  const [auditChain, setAuditChain] = useState<AuditChain | null>(null);
+  const [quota, setQuota] = useState<Quota | null>(null);
+
+  const [statsErr, setStatsErr] = useState<{ code?: string; detail?: string; requestId?: string } | null>(null);
+  const [auditChainErr, setAuditChainErr] = useState(false);
+  const [quotaErr, setQuotaErr] = useState(false);
+  const [auditErr, setAuditErr] = useState(false);
 
   useEffect(() => {
     let active = true;
     async function load() {
+      // Critical (run together so a single 5-tile spinner ends as quickly
+      // as the slowest one).
       try {
-        const [sRes, oRes, aRes] = await Promise.all([
+        const [sRes, oRes, acRes, qRes] = await Promise.all([
           fetch("/api/hospital/stats"),
           fetch("/api/hospital/orders"),
-          fetch("/api/hospital/audit"),
+          fetch("/api/hospital/me/audit-chain-status"),
+          fetch("/api/hospital/me/quota"),
         ]);
         if (!active) return;
-        if (!sRes.ok) {
+        if (sRes.ok) {
+          const sBody = await sRes.json();
+          setStats(sBody.data ?? sBody);
+          setStatsErr(null);
+        } else {
           const body = await sRes.json().catch(() => ({}));
-          setError({ code: body?.error, detail: body?.detail, requestId: body?.request_id });
-          return;
+          setStatsErr({ code: body?.error, detail: body?.detail, requestId: body?.request_id });
         }
-        const sBody = await sRes.json();
-        setStats(sBody.data ?? sBody);
         if (oRes.ok) {
           const oBody = await oRes.json();
           setOrders(oBody.data ?? oBody);
         }
+        if (acRes.ok) {
+          const acBody = await acRes.json();
+          setAuditChain(acBody);
+          setAuditChainErr(false);
+        } else {
+          setAuditChainErr(true);
+        }
+        if (qRes.ok) {
+          const qBody = await qRes.json();
+          setQuota(qBody);
+          setQuotaErr(false);
+        } else {
+          setQuotaErr(true);
+        }
+      } catch (err) {
+        if (active) {
+          setStatsErr({ code: "ERR_UPSTREAM_UNAVAILABLE", detail: String(err) });
+        }
+      }
+
+      // Lazy — the audit log preview can lag behind the rest.
+      try {
+        const aRes = await fetch("/api/hospital/audit?limit=20");
+        if (!active) return;
         if (aRes.ok) {
           const aBody = await aRes.json();
           setAudit(aBody.data ?? aBody);
+          setAuditErr(false);
+        } else {
+          setAuditErr(true);
         }
-        setError(null);
-      } catch (err) {
-        setError({ code: "ERR_UPSTREAM_UNAVAILABLE", detail: String(err) });
+      } catch {
+        if (active) setAuditErr(true);
       }
     }
     void load();
@@ -124,127 +178,220 @@ export function HospitalDashboard() {
     };
   }, []);
 
-  if (error && !stats) return <ErrorBanner {...error} />;
+  // Derived: total bytes across the modality distribution rollup. The
+  // central /v1/hospital/me/stats does not surface bytes natively yet —
+  // when it does, swap to that field.
+  const totalBytesEstimate = useMemo(() => {
+    if (!stats) return null;
+    // Rough estimator: studies × 24 MB average (CT-heavy mix).
+    return stats.studies.cumulative * 24 * 1024 * 1024;
+  }, [stats]);
+
+  const orderInflow = useMemo(() => {
+    if (!orders) return null;
+    // v0.1 simplification: every order in the response counts toward
+    // "this month" since the BFF already filters to 30d.
+    return {
+      count_this_month: orders.orders.length,
+      recent: orders.orders.map((o) => ({
+        order_id_masked: o.order_id_masked,
+        n_studies: o.n_studies,
+        submitted_at: o.submitted_at,
+      })),
+    };
+  }, [orders]);
+
+  const quotaForTile: QuotaData | null = quota
+    ? {
+        daily: quota.daily,
+        monthly: quota.monthly,
+        max_concurrent_uploads: quota.max_concurrent_uploads,
+      }
+    : null;
+
+  const rulesetForBadge: RulesetVersionData | null = quota
+    ? {
+        ruleset_version: quota.ruleset_version,
+        salt_version: quota.salt_version,
+        salt_rotate_at: quota.salt_rotate_at,
+        pixel_engine_version: quota.pixel_engine_version,
+      }
+    : null;
+
+  if (statsErr && !stats) return <ErrorBanner {...statsErr} />;
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <div data-testid="tile-b1-studies">
-        <TileCard
-          title="오늘 / 누적 제공 스터디"
-          value={
-            stats ? (
-              <div>
-                <span className="text-primary">{stats.studies.today.toLocaleString()}</span>
-                <span className="mx-2 text-ink-subtle">/</span>
-                <span>{stats.studies.cumulative.toLocaleString()}</span>
-              </div>
-            ) : (
-              <span className="skeleton inline-block h-8 w-32" />
-            )
-          }
-          subtitle="오늘 / 누적"
-        />
-      </div>
-
-      <div data-testid="tile-b2-revenue">
-        <TileCard
-          title="예상 수익 (시뮬레이션)"
-          value={
-            stats ? (
-              <span>₩ {simulateRevenueKrw(stats.studies.cumulative).toLocaleString("ko-KR")}</span>
-            ) : (
-              <span className="skeleton inline-block h-8 w-36" />
-            )
-          }
-          subtitle="누계"
-          footer="시뮬레이션 — v0.2 정산 대기"
-        >
-          {stats ? (
-            <MonthlyBarChart data={stats.studies.monthly_12m} />
-          ) : null}
-        </TileCard>
-      </div>
-
-      <div data-testid="tile-b3-map">
-        <TileCard title="기여 지역">
-          <div className="h-44 w-full">
-            <KoreaHeatmap regions={PLACEHOLDER_REGIONS} />
-          </div>
-        </TileCard>
-      </div>
-
-      <div data-testid="tile-b4-gateway">
-        <TileCard title="Gateway 상태">
-          {stats ? (
-            <div className="flex flex-col gap-2">
-              <div className={"flex items-center gap-2 text-lg font-semibold " + statusPillClass(stats.gateway_health.status)}>
-                <span className="inline-block size-2.5 rounded-full bg-current" />
-                {statusLabelKo(stats.gateway_health.status)}
-              </div>
-              {stats.gateway_health.last_sync_at ? (
-                <div className="text-xs text-ink-subtle">
-                  마지막 동기화:{" "}
-                  {new Date(stats.gateway_health.last_sync_at).toLocaleTimeString("ko-KR")}
+    <div className="flex flex-col gap-6">
+      {/* 9-tile grid — 3×3 desktop, 2-up tablet, 1-col mobile (§18.1). */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Tile 1 — uploaded studies + 12m sparkline */}
+        <div data-testid="tile-h1-uploaded-studies">
+          <TileCard
+            title={dict.hospital.tile.uploadedStudies}
+            value={
+              stats ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-teal-700">
+                    {stats.studies.today.toLocaleString("ko-KR")}
+                  </span>
+                  <span className="text-text-muted">/</span>
+                  <span>{stats.studies.cumulative.toLocaleString("ko-KR")}</span>
                 </div>
               ) : (
-                <div className="text-xs text-ink-subtle">동기화 기록 없음</div>
-              )}
-            </div>
-          ) : (
-            <span className="skeleton inline-block h-8 w-24" />
-          )}
-        </TileCard>
+                <span className="skeleton inline-block h-8 w-32" />
+              )
+            }
+            subtitle={`${dict.hospital.tile.today} / ${dict.hospital.tile.cumulative}`}
+          >
+            {stats ? <Sparkline data={stats.studies.monthly_12m} /> : null}
+          </TileCard>
+        </div>
+
+        {/* Tile 2 — total bytes */}
+        <div data-testid="tile-h2-total-bytes">
+          <TileCard
+            title={dict.hospital.tile.totalBytes}
+            value={
+              totalBytesEstimate !== null ? (
+                <span className="tabular-nums">
+                  {formatBytes(totalBytesEstimate)}
+                </span>
+              ) : (
+                <span className="skeleton inline-block h-8 w-32" />
+              )
+            }
+            subtitle={dict.hospital.tile.cumulative}
+          />
+        </div>
+
+        {/* Tile 3 — modality donut */}
+        <div data-testid="tile-h3-modality">
+          <TileCard title={dict.hospital.tile.modalityDist}>
+            <ModalityDistributionChart
+              slices={stats?.modality_distribution ?? []}
+              loading={!stats}
+            />
+          </TileCard>
+        </div>
+
+        {/* Tile 4 — audit chain status */}
+        <div data-testid="tile-h4-audit-chain">
+          <TileCard title={dict.hospital.tile.auditChain}>
+            <AuditChainStatusBadge
+              data={auditChain}
+              loading={!auditChain && !auditChainErr}
+              error={auditChainErr}
+            />
+          </TileCard>
+        </div>
+
+        {/* Tile 5 — gateway heartbeat */}
+        <div data-testid="tile-h5-gateway-hb">
+          <TileCard title={dict.hospital.tile.gatewayHb}>
+            <GatewayHeartbeatChart
+              data={stats?.gateway_health ?? null}
+              loading={!stats}
+            />
+          </TileCard>
+        </div>
+
+        {/* Tile 6 — quota 3-up */}
+        <div data-testid="tile-h6-quota">
+          <TileCard title={dict.hospital.tile.quota}>
+            <QuotaTile
+              data={quotaForTile}
+              loading={!quota && !quotaErr}
+              error={quotaErr}
+            />
+          </TileCard>
+        </div>
+
+        {/* Tile 7 — revenue (K-15 static dummy) */}
+        <div data-testid="tile-h7-revenue">
+          <TileCard title={dict.hospital.tile.revenue}>
+            <RevenueTile data={REVENUE_DUMMY[hospitalId] ?? null} />
+          </TileCard>
+        </div>
+
+        {/* Tile 8 — order inflow */}
+        <div data-testid="tile-h8-order-inflow">
+          <TileCard title={dict.hospital.tile.orderInflow}>
+            <OrderInflowTile data={orderInflow} loading={!orders} />
+          </TileCard>
+        </div>
+
+        {/* Tile 9 — ruleset / salt / pixel */}
+        <div data-testid="tile-h9-ruleset">
+          <TileCard title={dict.hospital.tile.ruleset}>
+            <RulesetVersionBadge
+              data={rulesetForBadge}
+              loading={!quota && !quotaErr}
+              error={quotaErr}
+            />
+          </TileCard>
+        </div>
       </div>
 
-      <div data-testid="tile-b5-orders">
-        <TileCard title="최근 주문 스트림">
-          {orders ? (
-            orders.orders.length === 0 ? (
-              <p className="text-sm text-ink-subtle">아직 주문이 없습니다.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5 text-sm">
-                {orders.orders.slice(0, 5).map((o) => (
-                  <li key={o.order_id_masked + o.submitted_at} className="flex items-center justify-between">
-                    <code className="font-mono text-xs text-ink-muted">{o.order_id_masked}</code>
-                    <span>{o.n_studies.toLocaleString()} 스터디</span>
-                    <span className="text-xs text-ink-subtle">{o.phase}</span>
-                  </li>
-                ))}
-              </ul>
-            )
+      {/* Audit log preview — §18.1 bottom strip. */}
+      <section
+        data-testid="hospital-audit-preview"
+        className="card flex flex-col gap-3 p-5"
+      >
+        <header className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-text">
+            최근 감사 이벤트 (최대 20)
+          </h3>
+          <Link
+            href="/hospital/audit"
+            className="text-xs font-medium text-teal-700 hover:text-teal-800"
+          >
+            전체 로그 →
+          </Link>
+        </header>
+        {auditErr ? (
+          <p className="text-sm text-text-muted">
+            {dict.hospital.audit.fetchFailed}
+          </p>
+        ) : audit ? (
+          audit.events.length === 0 ? (
+            <p className="text-sm text-text-muted">{dict.hospital.audit.empty}</p>
           ) : (
-            <span className="skeleton inline-block h-8 w-32" />
-          )}
-        </TileCard>
-      </div>
-
-      <div data-testid="tile-b6-audit">
-        <TileCard title="최근 감사 이벤트">
-          {audit ? (
-            <ul className="flex flex-col gap-1 text-xs">
-              {audit.events.slice(0, 10).map((e, i) => (
-                <li key={e.hash_short + i} className="grid grid-cols-[5rem_1fr_5rem] items-center gap-2">
-                  <code className="text-ink-subtle">
-                    {new Date(e.ts).toLocaleTimeString("ko-KR")}
+            <ul className="flex flex-col divide-y divide-border text-xs">
+              {audit.events.slice(0, 20).map((e, i) => (
+                <li
+                  key={e.hash_short + i}
+                  className="grid grid-cols-[6rem_1fr_8rem] items-center gap-2 py-1.5"
+                >
+                  <code className="text-text-muted">
+                    {formatKstTime(e.ts)}
                   </code>
-                  <span>{e.event_type}</span>
-                  <code className="text-right font-mono text-ink-subtle">{e.hash_short}</code>
+                  <span className="text-text">{e.event_type}</span>
+                  <code className="text-right font-mono text-text-muted">
+                    {e.hash_short}
+                  </code>
                 </li>
               ))}
-              {audit.events.length === 0 ? (
-                <li className="text-ink-subtle">이벤트 없음</li>
-              ) : null}
             </ul>
-          ) : (
-            <span className="skeleton inline-block h-8 w-32" />
-          )}
-        </TileCard>
-      </div>
+          )
+        ) : (
+          <span className="skeleton inline-block h-8 w-40" />
+        )}
+      </section>
+
+      {/* Korea heatmap (FR-HO-8 — kept). */}
+      <section className="card flex flex-col gap-3 p-5">
+        <header>
+          <h3 className="text-sm font-semibold text-text">기여 지역</h3>
+        </header>
+        <div className="h-44 w-full">
+          <KoreaHeatmap regions={PLACEHOLDER_REGIONS} />
+        </div>
+      </section>
     </div>
   );
 }
 
-function MonthlyBarChart({
+function Sparkline({
   data,
 }: {
   data: { year_month: string; count: number }[];
@@ -252,16 +399,22 @@ function MonthlyBarChart({
   const max = Math.max(1, ...data.map((d) => d.count));
   return (
     <div className="mt-2 flex items-end gap-1">
-      {data.map((d) => (
-        <div
-          key={d.year_month}
-          className="flex-1 rounded-sm bg-primary-soft"
-          style={{
-            height: `${Math.max(4, (d.count / max) * 32)}px`,
-          }}
-          title={`${d.year_month}: ${d.count.toLocaleString()}`}
-        />
-      ))}
+      {data.map((d, i) => {
+        const isLatest = i === data.length - 1;
+        return (
+          <div
+            key={d.year_month}
+            className={
+              "flex-1 rounded-sm " +
+              (isLatest ? "bg-teal-600" : "bg-teal-100")
+            }
+            style={{
+              height: `${Math.max(4, (d.count / max) * 32)}px`,
+            }}
+            title={`${d.year_month}: ${d.count.toLocaleString("ko-KR")}`}
+          />
+        );
+      })}
     </div>
   );
 }

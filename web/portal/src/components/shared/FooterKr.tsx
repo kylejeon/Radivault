@@ -1,5 +1,6 @@
 /**
- * FooterKr — design-spec-portal-redesign §5.8 ({#footer-kr-v1}).
+ * FooterKr — design-spec-portal-redesign §5.8 ({#footer-kr-v1}) +
+ * §19.1 hospital variant.
  *
  * Korean B2B legal block (FR-HP-9). Required fields:
  *   - 대표자 / 사업자등록번호 / 통신판매업 신고 / 주소 / 고객센터 / 이메일
@@ -10,6 +11,13 @@
  * unset they fall back to `[TBD]`. The build-guard
  * `scripts/check_tbd_in_build.sh` (FR-HP-9) refuses production builds
  * that ship `[TBD]` strings.
+ *
+ * `variant`:
+ *   - `"homepage"` (default — backwards-compatible) — uses the original
+ *     `dict.footer.columns` ladder.
+ *   - `"hospital"` — uses the §19.1 4-column ladder
+ *     (`dict.hospital.footer.columns`) and adds the strengthened legal
+ *     block (대표이사 / 사업자등록 / 통신판매 / PIPA / ISMS-P).
  */
 
 import Link from "next/link";
@@ -18,6 +26,7 @@ import { ComplianceBadge } from "./ComplianceBadge";
 import { LangToggle } from "./LangToggle";
 
 const KO_COLUMNS = ["product", "solutions", "company", "legal"] as const;
+const HOSPITAL_COLUMNS = ["product", "tech", "company", "legal"] as const;
 
 const TBD = "[TBD]";
 
@@ -28,7 +37,14 @@ function legalEnv(key: string): string {
   return value && value.length > 0 ? value : TBD;
 }
 
-export function FooterKr() {
+export type FooterKrVariant = "homepage" | "hospital";
+
+export function FooterKr({ variant = "homepage" }: { variant?: FooterKrVariant } = {}) {
+  if (variant === "hospital") return <FooterKrHospital />;
+  return <FooterKrHomepage />;
+}
+
+function FooterKrHomepage() {
   const dict = getDict("ko");
   const legal = {
     representative: legalEnv("REPRESENTATIVE") || "Kyle Jeon",
@@ -111,6 +127,113 @@ export function FooterKr() {
           <ComplianceBadge variant="pipa" locale="ko" />
           <ComplianceBadge variant="iso27001" locale="ko" />
           <ComplianceBadge variant="hipaa" locale="ko" />
+          <ComplianceBadge variant="soc2" locale="ko" />
+        </div>
+
+        <div className="mt-8 flex flex-col items-start justify-between gap-4 border-t border-border pt-6 tablet:flex-row tablet:items-center">
+          <span className="text-xs text-text-muted">{dict.footer.rights}</span>
+          <LangToggle locale="ko" />
+        </div>
+      </nav>
+    </footer>
+  );
+}
+
+/**
+ * §19.1 hospital variant — 4-column ladder with the strengthened Korean
+ * B2B legal block. Reuses the same `legalEnv()` helper so the
+ * production build-guard (`scripts/check_tbd_in_build.sh`) catches the
+ * `[TBD]` strings here too.
+ */
+function FooterKrHospital() {
+  const dict = getDict("ko");
+  const cols = dict.hospital.footer.columns;
+  const legal = {
+    representative: legalEnv("REPRESENTATIVE") || "Kyle Jeon",
+    bizNumber: legalEnv("BIZ_NUMBER"),
+    mailOrderNumber: legalEnv("MAIL_ORDER_NUMBER"),
+    address: legalEnv("ADDRESS"),
+    customerCenter: legalEnv("CUSTOMER_CENTER"),
+    email: legalEnv("EMAIL") || "sales@radivault.io",
+    privacyOfficer: "Kyle Jeon (privacy@radivault.io)",
+  };
+
+  return (
+    <footer
+      data-testid="footer-kr-hospital"
+      className="border-t border-border bg-bg-muted lang-ko"
+    >
+      <nav
+        aria-label={dict.nav.footerNav}
+        className="mx-auto max-w-content px-6 py-12"
+      >
+        <div className="mb-8 flex items-center gap-2">
+          <span
+            aria-hidden
+            className="inline-flex size-7 items-center justify-center rounded-md bg-teal-600 text-white"
+          >
+            ◆
+          </span>
+          <span className="text-lg font-semibold text-text-strong">
+            {dict.hospital.nav.wordmark}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-8 tablet:grid-cols-4">
+          {HOSPITAL_COLUMNS.map((key) => {
+            const col = cols[key];
+            return (
+              <div key={key}>
+                <h4 className="text-sm font-semibold text-text">{col.title}</h4>
+                <ul className="mt-3 space-y-2">
+                  {col.links.map((link) => (
+                    <li key={link}>
+                      <Link
+                        href="/hospital"
+                        className="text-sm text-text-muted hover:text-teal-700"
+                      >
+                        {link}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Strengthened Korean B2B legal block — §19.1.
+            Each field renders even when the value is `[TBD]` so the
+            production build-guard fires (FR-HP-9). */}
+        <section
+          className="mt-10 border-t border-border pt-6 text-xs leading-relaxed text-text-muted"
+          data-testid="footer-kr-hospital-legal"
+        >
+          <div className="font-semibold text-text">
+            {dict.hospital.footer.legalBlockTitle}
+          </div>
+          <div className="mt-2 grid gap-x-6 gap-y-1 tablet:grid-cols-2">
+            <span>대표이사: {legal.representative}</span>
+            <span>사업자등록번호: {legal.bizNumber}</span>
+            <span>통신판매업신고: {legal.mailOrderNumber}</span>
+            <span>주소: {legal.address}</span>
+            <span>고객센터: {legal.customerCenter}</span>
+            <span>이메일: {legal.email}</span>
+            <span>개인정보보호책임자: {legal.privacyOfficer}</span>
+            <span>{dict.hospital.footer.hours}</span>
+          </div>
+          <div className="mt-4">
+            <Link
+              href="/ko/legal/privacy"
+              className="text-sm font-medium text-teal-700 hover:text-teal-800"
+            >
+              개인정보처리방침
+            </Link>
+          </div>
+        </section>
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          <ComplianceBadge variant="pipa" locale="ko" />
+          <ComplianceBadge variant="iso27001" locale="ko" />
           <ComplianceBadge variant="soc2" locale="ko" />
         </div>
 
