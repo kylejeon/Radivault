@@ -2,75 +2,101 @@ import { expect, test } from "@playwright/test";
 import {
   blockRealUpstream,
   DEFAULT_HOSPITAL_AUDIT,
+  DEFAULT_HOSPITAL_AUDIT_CHAIN,
   DEFAULT_HOSPITAL_ORDERS,
+  DEFAULT_HOSPITAL_QUOTA,
   DEFAULT_HOSPITAL_STATS,
   mockHospitalAudit,
+  mockHospitalAuditChainStatus,
   mockHospitalOrders,
+  mockHospitalQuota,
   mockHospitalStats,
 } from "./fixtures/mocks";
 import { injectHospitalSession } from "./fixtures/session";
 
 /**
- * Scenario 3 — Hospital dashboard 6-tile load.
+ * Scenario 3 — Hospital console dashboard load (9-tile, design-spec §18.1).
  *
- * Dev-spec §3.B lists the route as ``/hospital/{gateway_id}`` but the v0.1
- * implementation keeps hospital_id in the cookie and renders everything
- * from ``/hospital`` (see web/portal/src/app/hospital/page.tsx). The test
- * forges a hospital session with HOSP-001 and asserts all six tiles load
- * from their mocked endpoints.
+ * Forges a hospital session with HOSP-001 and asserts:
+ *  - all 9 tiles render from their mocked endpoints (FR-HO-3.1..3.9)
+ *  - the audit-log preview surfaces the top-N events (FR-HO-7)
+ *  - degraded gateway flips the heartbeat tile to amber (FR-HO-3.5)
+ *  - every /api/hospital/* call resolves through the mock (no 599)
  */
 
-test.describe("Hospital dashboard", () => {
+test.describe("Hospital console — 9-tile dashboard", () => {
   test.beforeEach(async ({ page, context }) => {
     await blockRealUpstream(page);
     await mockHospitalStats(page, DEFAULT_HOSPITAL_STATS);
     await mockHospitalOrders(page, DEFAULT_HOSPITAL_ORDERS);
     await mockHospitalAudit(page, DEFAULT_HOSPITAL_AUDIT);
+    await mockHospitalAuditChainStatus(page, DEFAULT_HOSPITAL_AUDIT_CHAIN);
+    await mockHospitalQuota(page, DEFAULT_HOSPITAL_QUOTA);
     await injectHospitalSession(context, "HOSP-001");
   });
 
-  test("all six tiles render from mocked stats/orders/audit", async ({ page }) => {
+  test("all 9 tiles render", async ({ page }) => {
     await page.goto("/hospital");
 
-    // Header should confirm we're authenticated as HOSP-001.
-    await expect(page.getByText("RadiVault 병원 대시보드")).toBeVisible();
-    await expect(page.getByText("HOSP-001")).toBeVisible();
+    // Wordmark + hospital_id pill in header. Wordmark also appears in
+    // the strengthened KR footer (§19.1) so we anchor on the header.
+    await expect(
+      page.getByRole("banner").getByText("RadiVault 병원 콘솔"),
+    ).toBeVisible();
+    await expect(page.getByText("HOSP-001").first()).toBeVisible();
 
-    // B-1 Studies — today / cumulative numbers.
-    const b1 = page.getByTestId("tile-b1-studies");
-    await expect(b1).toContainText("42"); // today
-    await expect(b1).toContainText("12,478"); // cumulative (ko-KR locale separator)
+    // Tile 1 — uploaded studies + sparkline.
+    const t1 = page.getByTestId("tile-h1-uploaded-studies");
+    await expect(t1).toContainText("42");      // today
+    await expect(t1).toContainText("12,478");  // cumulative
 
-    // B-2 Revenue — headline, disclaimer, and a derived KRW amount.
-    const b2 = page.getByTestId("tile-b2-revenue");
-    await expect(b2).toContainText("예상 수익 (시뮬레이션)");
-    await expect(b2).toContainText("시뮬레이션 — v0.2 정산 대기");
-    await expect(b2).toContainText(/₩\s*[\d,]+/);
+    // Tile 2 — total bytes.
+    await expect(page.getByTestId("tile-h2-total-bytes")).toContainText(/B|KB|MB|GB|TB/);
 
-    // B-3 Map — KoreaHeatmap renders as an SVG with aria-label.
-    const b3 = page.getByTestId("tile-b3-map");
-    await expect(b3.getByRole("img", { name: "기여 지역 지도" })).toBeVisible();
+    // Tile 3 — modality donut. SVG present + total study count rendered.
+    const t3 = page.getByTestId("tile-h3-modality");
+    await expect(t3.locator("svg")).toBeVisible();
+    // CT (5,102) + MR (3,014) + CR (2,511) = 10,627
+    await expect(t3).toContainText("10,627");
 
-    // B-4 Gateway — "online" status renders the 정상 label.
-    const b4 = page.getByTestId("tile-b4-gateway");
-    await expect(b4).toContainText("정상");
-    await expect(b4).toContainText("마지막 동기화");
+    // Tile 4 — audit chain status (ok variant + 16-char hash).
+    const t4 = page.getByTestId("tile-h4-audit-chain");
+    await expect(t4.getByTestId("audit-chain-status-badge")).toHaveAttribute(
+      "data-variant",
+      "ok",
+    );
+    await expect(t4).toContainText("a3f8d9c1b2e4f5a6");
 
-    // B-5 Orders — order id and phase for each stream row.
-    const b5 = page.getByTestId("tile-b5-orders");
-    await expect(b5).toContainText("ord_5a3f");
-    await expect(b5).toContainText("12 스터디");
+    // Tile 5 — gateway heartbeat with online tone.
+    const t5 = page.getByTestId("tile-h5-gateway-hb");
+    await expect(t5.getByTestId("gateway-heartbeat-chart")).toHaveAttribute(
+      "data-variant",
+      "online",
+    );
 
-    // B-6 Audit — 4 event rows, each with an 8-char hash short.
-    const b6 = page.getByTestId("tile-b6-audit");
-    await expect(b6).toContainText("ingest.accepted");
-    await expect(b6).toContainText("3f4a9b12");
-    await expect(b6.locator("ul li")).toHaveCount(DEFAULT_HOSPITAL_AUDIT.events.length);
+    // Tile 6 — quota 3-up. Both progressbars + max_concurrent_uploads number.
+    const t6 = page.getByTestId("tile-h6-quota");
+    await expect(t6.locator('[role="progressbar"]')).toHaveCount(2);
+    await expect(t6).toContainText("4"); // max_concurrent_uploads
+
+    // Tile 7 — revenue. K-13 form + K-15 disclaimer.
+    const t7 = page.getByTestId("tile-h7-revenue");
+    await expect(t7).toContainText("₩ 18,400,000");
+    await expect(t7).toContainText("시뮬레이션 — v0.2 정산 대기");
+
+    // Tile 8 — order inflow. 3 orders, all buyer **** masked.
+    const t8 = page.getByTestId("tile-h8-order-inflow");
+    await expect(t8).toContainText("3 건"); // 3 orders this month
+    await expect(t8.getByText("buyer ****")).toHaveCount(3);
+
+    // Tile 9 — ruleset / salt / pixel.
+    const t9 = page.getByTestId("tile-h9-ruleset");
+    await expect(t9).toContainText("v0.1.0"); // de-id ruleset
+    await expect(t9).toContainText("2026-01"); // salt version
+    await expect(t9).toContainText("v0.2.0"); // pixel engine
   });
 
-  test("B-4 reflects a degraded (warning) gateway status when mocked", async ({ page }) => {
-    // Re-register the stats mock with warning status. Our factory returns a
-    // localised Korean pill per dev-spec FR-B-13.
+  test("gateway heartbeat flips to warning when stats marks degraded", async ({ page }) => {
     await mockHospitalStats(page, {
       ...DEFAULT_HOSPITAL_STATS,
       gateway_health: {
@@ -80,11 +106,22 @@ test.describe("Hospital dashboard", () => {
       },
     });
     await page.goto("/hospital");
-    const b4 = page.getByTestId("tile-b4-gateway");
-    await expect(b4).toContainText("주의");
+    await expect(
+      page.getByTestId("gateway-heartbeat-chart"),
+    ).toHaveAttribute("data-variant", "warning");
   });
 
-  test("each /api/hospital/* call is intercepted (no live upstream)", async ({ page }) => {
+  test("audit log preview shows the top events with the 'full log' link", async ({ page }) => {
+    await page.goto("/hospital");
+    const preview = page.getByTestId("hospital-audit-preview");
+    await expect(preview).toContainText("ingest.accepted");
+    await expect(preview.getByRole("link", { name: /전체 로그/ })).toHaveAttribute(
+      "href",
+      "/hospital/audit",
+    );
+  });
+
+  test("every BFF call is intercepted (no 599 tripwire)", async ({ page }) => {
     const hits: string[] = [];
     page.on("response", (res) => {
       if (res.url().includes("/api/hospital/")) {
@@ -92,14 +129,54 @@ test.describe("Hospital dashboard", () => {
       }
     });
     await page.goto("/hospital");
-    await expect(page.getByTestId("tile-b1-studies")).toContainText("42");
-
-    // All three hospital BFF endpoints are hit and all resolve 200 from mocks.
+    await expect(page.getByTestId("tile-h1-uploaded-studies")).toContainText("42");
+    // Audit-log preview is the lazy second fetch — wait for it before
+    // snapshotting hits, otherwise the assertion can race the request.
+    await expect(
+      page.getByTestId("hospital-audit-preview"),
+    ).toContainText("ingest.accepted");
     const joined = hits.join("\n");
     expect(joined).toMatch(/200 .*\/api\/hospital\/stats/);
     expect(joined).toMatch(/200 .*\/api\/hospital\/orders/);
+    expect(joined).toMatch(/200 .*\/api\/hospital\/me\/audit-chain-status/);
+    expect(joined).toMatch(/200 .*\/api\/hospital\/me\/quota/);
     expect(joined).toMatch(/200 .*\/api\/hospital\/audit/);
-    // Critically: we never got a 599 (the blockRealUpstream tripwire).
     expect(joined).not.toMatch(/599/);
+  });
+});
+
+test.describe("Hospital console — /audit page (§18.2)", () => {
+  test.beforeEach(async ({ page, context }) => {
+    await blockRealUpstream(page);
+    await mockHospitalAudit(page, DEFAULT_HOSPITAL_AUDIT);
+    await injectHospitalSession(context, "HOSP-001");
+  });
+
+  test("renders the time-ordered list with KST timestamps", async ({ page }) => {
+    await page.goto("/hospital/audit");
+    await expect(page.getByText("감사 로그").first()).toBeVisible();
+    const list = page.getByTestId("audit-log-list");
+    await expect(list).toBeVisible();
+    await expect(list).toContainText("ingest.accepted");
+    await expect(list).toContainText("3f4a9b12");
+  });
+});
+
+test.describe("Hospital console — /quota page (§18.3)", () => {
+  test.beforeEach(async ({ page, context }) => {
+    await blockRealUpstream(page);
+    await mockHospitalQuota(page, DEFAULT_HOSPITAL_QUOTA);
+    await injectHospitalSession(context, "HOSP-001");
+  });
+
+  test("renders 4 sections + the v0.1 enforce disclaimer", async ({ page }) => {
+    await page.goto("/hospital/quota");
+    await expect(page.getByTestId("quota-daily")).toBeVisible();
+    await expect(page.getByTestId("quota-monthly")).toBeVisible();
+    await expect(page.getByTestId("quota-concurrent")).toContainText("4");
+    await expect(page.getByTestId("quota-ruleset")).toContainText("v0.1.0");
+    await expect(
+      page.getByText(/v0.1 한도 집행 없음 — 표시만/),
+    ).toBeVisible();
   });
 });

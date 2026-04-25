@@ -208,6 +208,34 @@ export async function mockHospitalAudit(
   });
 }
 
+/** Register a canned /api/hospital/me/audit-chain-status response (FR-INF-6). */
+export async function mockHospitalAuditChainStatus(
+  page: Page,
+  data: HospitalAuditChainStatusResponse = DEFAULT_HOSPITAL_AUDIT_CHAIN,
+): Promise<void> {
+  await page.route("**/api/hospital/me/audit-chain-status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(data),
+    });
+  });
+}
+
+/** Register a canned /api/hospital/me/quota response (FR-INF-7). */
+export async function mockHospitalQuota(
+  page: Page,
+  data: HospitalQuotaResponse = DEFAULT_HOSPITAL_QUOTA,
+): Promise<void> {
+  await page.route("**/api/hospital/me/quota", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(data),
+    });
+  });
+}
+
 /**
  * Safety net: refuse every other /api/* call. If a spec forgets to register
  * a mock for some endpoint, we want the test to fail loud, not silently fall
@@ -469,4 +497,54 @@ export const DEFAULT_HOSPITAL_AUDIT: HospitalAuditResponse = {
       detail_code: null,
     },
   ],
+};
+
+// -- §17 hospital console v0.3 fixtures --------------------------------------
+
+export type HospitalAuditChainStatusResponse = {
+  hospital_id: string;
+  last_anchor_at: string;
+  hash_prefix: string;
+  chain_continuous: boolean;
+  last_anchor_age_seconds: number;
+  anchor_count_24h?: number;
+};
+
+export const DEFAULT_HOSPITAL_AUDIT_CHAIN: HospitalAuditChainStatusResponse = {
+  hospital_id: "HOSP-001",
+  last_anchor_at: new Date(Date.now() - 4 * 60_000).toISOString(),
+  hash_prefix: "a3f8d9c1b2e4f5a6",
+  chain_continuous: true,
+  last_anchor_age_seconds: 240,
+  anchor_count_24h: 48,
+};
+
+export type HospitalQuotaResponse = {
+  hospital_id: string;
+  daily: { bytes_used: number; bytes_limit: number; resets_at: string };
+  monthly: { bytes_used: number; bytes_limit: number; resets_at: string };
+  max_concurrent_uploads: number;
+  ruleset_version: string;
+  salt_version: string;
+  salt_rotate_at: string;
+  pixel_engine_version: string;
+};
+
+export const DEFAULT_HOSPITAL_QUOTA: HospitalQuotaResponse = {
+  hospital_id: "HOSP-001",
+  daily: {
+    bytes_used: 123 * 1024 * 1024,
+    bytes_limit: 10 * 1024 * 1024 * 1024,
+    resets_at: new Date(Date.now() + 12 * 3600_000).toISOString(),
+  },
+  monthly: {
+    bytes_used: 987 * 1024 * 1024,
+    bytes_limit: 300 * 1024 * 1024 * 1024,
+    resets_at: new Date(Date.now() + 5 * 86400_000).toISOString(),
+  },
+  max_concurrent_uploads: 4,
+  ruleset_version: "v0.1.0",
+  salt_version: "2026-01",
+  salt_rotate_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
+  pixel_engine_version: "v0.2.0",
 };
