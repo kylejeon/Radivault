@@ -33,13 +33,21 @@ import { injectHospitalSession } from "./fixtures/session";
 const HOSP_001_STATS = {
   ...DEFAULT_HOSPITAL_STATS,
   hospital_id: "HOSP-001",
-  uploaded_studies: { today: 42, cumulative: 12_478 },
+  studies: {
+    ...DEFAULT_HOSPITAL_STATS.studies,
+    today: 42,
+    cumulative: 12_478,
+  },
 };
 
 const HOSP_002_STATS = {
   ...DEFAULT_HOSPITAL_STATS,
   hospital_id: "HOSP-002",
-  uploaded_studies: { today: 17, cumulative: 8_901 },
+  studies: {
+    ...DEFAULT_HOSPITAL_STATS.studies,
+    today: 17,
+    cumulative: 8_901,
+  },
 };
 
 const HOSP_001_AUDIT_CHAIN = {

@@ -75,8 +75,11 @@ test.describe("Homepage — KR (/ko)", () => {
     await expect(page.getByTestId("hero-headline")).toContainText(
       "한국 의료영상 데이터",
     );
+    // MEDIUM-5 fix in qa-report-portal-redesign — primaryCta is the
+    // buyer-side action ("데이터 요청"); the hospital-partner path lives
+    // on the secondary `forHospitals` link below.
     await expect(page.getByTestId("hero-cta-primary")).toContainText(
-      "병원 파트너 신청",
+      "데이터 요청",
     );
   });
 
