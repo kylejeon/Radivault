@@ -206,7 +206,16 @@ const en = {
     submit: "Send",
     mailtoFallback: "Or email us directly",
     successPlaceholder:
-      "v0.1 stub — submission relay arrives in FR-INF-4. Use the mailto link below.",
+      "Thanks — we received your message and will reply within one business day.",
+    consentLabel:
+      "I agree to the collection and use of my personal information " +
+      "(name, email, organization, message) for the purpose of responding to this enquiry. " +
+      "Retention period: 1 year.",
+    consentRequiredHint:
+      "Please agree to the personal information notice to continue.",
+    submitting: "Sending…",
+    submitError:
+      "Could not deliver your message. Please retry, or email sales@radivault.io directly.",
   },
   trustCenter: {
     pageTitle: "Trust Center",
@@ -302,7 +311,9 @@ const en = {
     billingTitle: "Billing",
     billingBody: "Invoicing handled offline in v0.1.",
     contactBilling: "Contact billing",
-    apiKeyMasked: "rv_live_***...****cf4ec164",
+    // MEDIUM-2 fix: account.apiKeyMasked removed — AccountClient receives
+    // the masked value as a server-rendered prop. Hardcoded placeholder
+    // in i18n was misleading.
     profileFields: {
       buyerId: "Buyer id",
       email: "Email",
@@ -540,6 +551,10 @@ export type Dict = {
     submit: string;
     mailtoFallback: string;
     successPlaceholder: string;
+    consentLabel: string;
+    consentRequiredHint: string;
+    submitting: string;
+    submitError: string;
   };
   trustCenter: { pageTitle: string; pageSubtitle: string; comingSoon: string };
   buyerNav: {
@@ -624,7 +639,6 @@ export type Dict = {
     billingTitle: string;
     billingBody: string;
     contactBilling: string;
-    apiKeyMasked: string;
     profileFields: {
       buyerId: string;
       email: string;
@@ -750,10 +764,14 @@ const ko: Dict = {
       "한국 의료영상 데이터, 글로벌 AI 를 위한 규정 준수 전달.",
     subhead:
       "RadiVault 는 한국 병원의 DICOM 메타데이터를 익명화하여 PIPA §28-8 기준으로 글로벌 AI 기업에 전달합니다. 원본 환자 데이터 노출 없이 검색·검증·수령까지.",
-    primaryCta: "병원 파트너 신청",
+    // MEDIUM-5 fix: primaryCta is the buyer-side action; secondary CTA
+    // (`forHospitals` link below) handles the hospital path.
+    primaryCta: "데이터 요청",
     secondaryCta: "기술 개요 보기",
     forInvestors: "투자자 문의",
-    forHospitals: "언론 문의",
+    // MEDIUM-1 fix: was "언론 문의" (mistranslated as "press inquiries"
+    // when EN is "For hospital partners").
+    forHospitals: "병원 파트너용",
     screenshotAlt:
       "두 병원 데이터를 가로지르는 패싯 패널, 결과 테이블, 코호트 사이드바를 보여주는 검색 화면",
     screenshotCaption: "실제 데모 화면 — TCIA 공개 데이터 기반",
@@ -848,26 +866,29 @@ const ko: Dict = {
     cta: "Trust Center 방문",
   },
   footer: {
+    // MEDIUM-6 fix: align KR keys with EN semantics. Previously
+    // `developers` → company-labelled ladder and `resources` → legal-labelled
+    // ladder, which made the lang toggle swap labels mid-render.
     columns: {
       product: {
-        title: "제품·솔루션",
-        links: ["병원 파트너십", "바이어 마켓플레이스", "가격 문의", "보안"],
+        title: "제품",
+        links: ["마켓플레이스", "가격 문의", "보안", "로드맵"],
       },
       solutions: {
-        title: "기술",
-        links: ["개발자 문서", "API 레퍼런스", "상태 페이지", "Trust Center"],
+        title: "솔루션",
+        links: ["AI 팀용", "병원용", "연구용", "엔터프라이즈"],
       },
       developers: {
-        title: "회사",
-        links: ["회사 소개", "언론", "채용", "문의"],
+        title: "기술",
+        links: ["개발자 문서", "API 레퍼런스", "GitHub", "상태 페이지"],
       },
       resources: {
-        title: "법적",
-        links: ["개인정보처리방침", "이용약관", "데이터처리 위탁 계약"],
+        title: "리소스",
+        links: ["블로그", "체인지로그", "Trust Center"],
       },
       company: {
         title: "회사",
-        links: ["회사 소개", "언론", "채용"],
+        links: ["회사 소개", "문의", "채용"],
       },
       legal: {
         title: "법적",
@@ -906,7 +927,15 @@ const ko: Dict = {
     submit: "보내기",
     mailtoFallback: "또는 이메일로 직접 연락",
     successPlaceholder:
-      "v0.1 임시 페이지 — 제출 릴레이는 FR-INF-4 에서 추가됩니다. 아래 메일 링크를 사용하세요.",
+      "감사합니다. 메시지를 받았습니다. 영업일 1 일 이내에 답변드립니다.",
+    // MEDIUM-7 PIPA L-7 — explicit consent + retention disclosure.
+    consentLabel:
+      "개인정보 수집·이용에 동의합니다. " +
+      "(수집 항목: 이름·이메일·소속·메시지 / 이용 목적: 본 문의 응대 / 보유 기간: 1년)",
+    consentRequiredHint: "계속하려면 개인정보 수집·이용에 동의해 주세요.",
+    submitting: "전송 중…",
+    submitError:
+      "메시지 전송에 실패했습니다. 다시 시도하시거나 sales@radivault.io 로 직접 연락 주세요.",
   },
   trustCenter: {
     pageTitle: "Trust Center",
@@ -1000,7 +1029,6 @@ const ko: Dict = {
     billingTitle: "결제",
     billingBody: "v0.1 에서는 오프라인으로 처리됩니다.",
     contactBilling: "결제 문의",
-    apiKeyMasked: "rv_live_***...****cf4ec164",
     profileFields: {
       buyerId: "Buyer ID",
       email: "이메일",
