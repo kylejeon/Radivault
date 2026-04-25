@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "build:prod": "NODE_ENV=production next build && bash scripts/check_tbd_in_build.sh",
     "start": "next start -p 3000",
-    "lint": "next lint",
+    "lint": "next lint && bash scripts/check_compliance_voice.sh",
+    "lint:voice": "bash scripts/check_compliance_voice.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
