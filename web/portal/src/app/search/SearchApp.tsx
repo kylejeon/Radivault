@@ -1,259 +1,400 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+/**
+ * SearchApp — design-spec-portal-redesign §12.1 / FR-BP-3.
+ *
+ * 3-pane layout (desktop ≥ 1280 px target):
+ *   [FacetSidebar 280 px] [Results flex-1 + FederatedSignal sticky] [Cohort 320 px]
+ *
+ * Search payload uses the canonical `SearchRequest` schema
+ * (dev-spec-metadata-index §6.4): modality, body_part, age_bucket, sex,
+ * study_date_shifted, manufacturer, min_hospitals, sort, limit, cursor,
+ * include_facets. The FR-INF-8/9 cleanup retires the legacy
+ * `{ page_size, modalities, body_parts }` shape.
+ *
+ * Cohort state is local-only (sessionStorage) — the v0.1 backend has no
+ * "saved cohort" notion; an order is created from the in-memory selection.
+ */
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FacetGroup } from "@/components/FacetGroup";
-import { StudyCard } from "@/components/StudyCard";
-import { CohortSummary } from "@/components/CohortSummary";
-import { EmptyState } from "@/components/EmptyState";
+import Link from "next/link";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { ReviewOrderModal } from "./ReviewOrderModal";
+import { FederatedSignal } from "@/components/buyer/FederatedSignal";
+import {
+  EMPTY_FACET_STATE,
+  FacetSidebar,
+  type FacetState,
+} from "@/components/buyer/FacetSidebar";
+import { StudyCard, type StudyCardItem } from "@/components/buyer/StudyCard";
+import { CartEmpty, CartItem, type CartItemData } from "@/components/buyer/CartItem";
+import { getDict, type Locale } from "@/lib/i18n";
 
-type FacetResp = {
-  modality?: { value: string; count: number }[];
-  body_part?: { value: string; count: number }[];
-  sex?: { value: string; count: number }[];
-  manufacturer?: { value: string; count: number }[];
-};
-
-type SearchStudy = {
-  pseudo_study_uid: string;
-  modality: string | null;
-  body_part: string | null;
-  n_instances: number;
-  total_bytes: number;
-  study_year: number | null;
-};
+type FacetValue = { value: string; count: number };
 
 type SearchResp = {
   items: SearchStudy[];
-  total: number;
+  facets?: Record<string, FacetValue[]> | null;
+  total_count?: number | null;
+  total_hint?: number | null;
+  total_count_exact?: boolean;
   next_cursor?: string | null;
+  has_next?: boolean;
+  page_size?: number;
+  response_truncated?: boolean;
 };
 
-type Filters = {
-  modality: Set<string>;
-  body_part: Set<string>;
-  sex: Set<string>;
-  manufacturer: Set<string>;
-};
+type SearchStudy = StudyCardItem & CartItemData;
 
-function emptyFilters(): Filters {
-  return {
-    modality: new Set(),
-    body_part: new Set(),
-    sex: new Set(),
-    manufacturer: new Set(),
-  };
+const COHORT_STORAGE_KEY = "radivault.cohort.v1";
+const RECENT_KEY = "radivault.recentSearches.v1";
+
+function loadCohort(): Record<string, SearchStudy> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(COHORT_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, SearchStudy>;
+  } catch {
+    return {};
+  }
 }
 
-export function SearchApp() {
+function saveCohort(cohort: Record<string, SearchStudy>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(COHORT_STORAGE_KEY, JSON.stringify(cohort));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function loadRecent(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as string[];
+  } catch {
+    return [];
+  }
+}
+
+function pushRecent(label: string) {
+  if (typeof window === "undefined") return;
+  if (!label.trim()) return;
+  try {
+    const cur = loadRecent();
+    const next = [label, ...cur.filter((c) => c !== label)].slice(0, 5);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
+function buildSearchRequest(facets: FacetState, cursor?: string | null) {
+  const body: Record<string, unknown> = {
+    sort: "date_desc",
+    limit: 25,
+    include_facets: true,
+  };
+  if (facets.modality.length > 0) body.modality = facets.modality;
+  if (facets.body_part.length > 0) body.body_part = facets.body_part;
+  if (facets.age_bucket.length > 0) body.age_bucket = facets.age_bucket;
+  if (facets.sex.length > 0) body.sex = facets.sex;
+  if (facets.manufacturer.length > 0) body.manufacturer = facets.manufacturer;
+  if (facets.min_hospitals > 1) body.min_hospitals = facets.min_hospitals;
+  // year is a derived facet (EXTRACT YEAR FROM study_date_shifted) — for v0.1
+  // we send the whole-year range when a single year is selected.
+  if (facets.year.length === 1) {
+    const y = facets.year[0];
+    body.study_date_shifted = { from: `${y}-01-01`, to: `${y}-12-31` };
+  }
+  if (cursor) body.cursor = cursor;
+  return body;
+}
+
+function chipLabel(facets: FacetState): string[] {
+  const chips: string[] = [];
+  if (facets.modality.length) chips.push(facets.modality.join("/"));
+  if (facets.body_part.length) chips.push(facets.body_part.join("/"));
+  if (facets.age_bucket.length) chips.push(facets.age_bucket.join("/"));
+  if (facets.sex.length) chips.push(facets.sex.join("/"));
+  if (facets.manufacturer.length) chips.push(facets.manufacturer.join("/"));
+  if (facets.year.length) chips.push(facets.year.join("/"));
+  if (facets.min_hospitals > 1)
+    chips.push(`hospitals ≥ ${facets.min_hospitals}`);
+  return chips;
+}
+
+function countDistinctHospitals(items: SearchStudy[]): number {
+  const set = new Set<string>();
+  for (const it of items) {
+    if (it.hospital_opaque_id) set.add(it.hospital_opaque_id);
+  }
+  return set.size;
+}
+
+export function SearchApp({ locale = "en" }: { locale?: Locale }) {
+  const dict = getDict(locale);
   const router = useRouter();
-  const [facets, setFacets] = useState<FacetResp | null>(null);
-  const [results, setResults] = useState<SearchResp | null>(null);
-  const [filters, setFilters] = useState<Filters>(emptyFilters());
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<{ code?: string; detail?: string; requestId?: string } | null>(
-    null,
-  );
+  const [facetValues, setFacetValues] = useState<FacetState>(EMPTY_FACET_STATE);
+  const [response, setResponse] = useState<SearchResp | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reviewOpen, setReviewOpen] = useState(false);
+  const [error, setError] = useState<{
+    code?: string;
+    detail?: string;
+    requestId?: string;
+  } | null>(null);
+  const [cohort, setCohort] = useState<Record<string, SearchStudy>>(() =>
+    loadCohort(),
+  );
+  const [recent, setRecent] = useState<string[]>(() => loadRecent());
+  const [selectedUid, setSelectedUid] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [fRes, sRes] = await Promise.all([
-          fetch("/api/search/facets"),
-          fetch("/api/search/studies", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ page_size: 25 }),
-          }),
-        ]);
-        if (fRes.status === 401 || sRes.status === 401) {
-          router.push("/signin");
-          return;
-        }
-        if (!fRes.ok) {
-          const body = await fRes.json().catch(() => ({}));
-          setError({ code: body?.error, detail: body?.detail, requestId: body?.request_id });
-        } else {
-          setFacets(await fRes.json());
-        }
-        if (!sRes.ok) {
-          const body = await sRes.json().catch(() => ({}));
-          setError({ code: body?.error, detail: body?.detail, requestId: body?.request_id });
-        } else {
-          setResults(await sRes.json());
-        }
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [router]);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Persist cohort on every change.
   useEffect(() => {
-    // Re-query on filter change.
-    if (loading) return;
-    const body = {
-      modalities: Array.from(filters.modality),
-      body_parts: Array.from(filters.body_part),
-      sex: Array.from(filters.sex),
-      manufacturers: Array.from(filters.manufacturer),
-      page_size: 25,
+    saveCohort(cohort);
+  }, [cohort]);
+
+  // Initial + facet-change fetch (debounced 300 ms per design-spec §11.5).
+  useEffect(() => {
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => {
+      void runSearch();
+    }, 300);
+    return () => {
+      if (debounce.current) clearTimeout(debounce.current);
     };
-    void (async () => {
-      try {
-        const res = await fetch("/api/search/studies", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const bodyJson = await res.json().catch(() => ({}));
-          setError({
-            code: bodyJson?.error,
-            detail: bodyJson?.detail,
-            requestId: bodyJson?.request_id,
-          });
-          return;
-        }
-        setResults(await res.json());
-        setError(null);
-      } catch (err) {
-        setError({ code: "ERR_UPSTREAM_UNAVAILABLE", detail: String(err) });
-      }
-    })();
-  }, [filters, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facetValues]);
 
-  const totalSizeMb = useMemo(() => {
-    if (!results) return 0;
-    let bytes = 0;
-    for (const it of results.items) {
-      if (selected.has(it.pseudo_study_uid)) bytes += it.total_bytes;
-    }
-    return bytes / (1024 * 1024);
-  }, [results, selected]);
-
-  const toggle =
-    (facet: keyof Filters) =>
-    (value: string) => {
-      setFilters((prev) => {
-        const next = new Set(prev[facet]);
-        if (next.has(value)) next.delete(value);
-        else next.add(value);
-        return { ...prev, [facet]: next };
+  async function runSearch() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/search/studies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildSearchRequest(facetValues)),
       });
-    };
+      if (res.status === 401) {
+        router.push("/signin");
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError({
+          code: body?.error,
+          detail: body?.detail,
+          requestId: body?.request_id,
+        });
+        setResponse(null);
+        return;
+      }
+      const data = (await res.json()) as SearchResp;
+      setResponse(data);
+      // Push a recent-search label only if a meaningful filter is active.
+      const chips = chipLabel(facetValues);
+      if (chips.length > 0) {
+        const label = chips.slice(0, 3).join(" · ");
+        pushRecent(label);
+        setRecent(loadRecent());
+      }
+    } catch (err) {
+      setError({
+        code: "ERR_UPSTREAM_UNAVAILABLE",
+        detail: String(err),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const toggleStudy = (uid: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
+  const items = useMemo(() => response?.items ?? [], [response]);
+  const total =
+    response?.total_count ?? response?.total_hint ?? items.length;
+  const hospitalCount = useMemo(() => countDistinctHospitals(items), [items]);
+  const facets = (response?.facets ?? {}) as Record<string, FacetValue[]>;
+  const cohortList = useMemo(() => Object.values(cohort), [cohort]);
+  const cohortHospitals = useMemo(
+    () => countDistinctHospitals(cohortList),
+    [cohortList],
+  );
+  const cohortBytes = useMemo(
+    () => cohortList.reduce((sum, s) => sum + s.total_bytes, 0),
+    [cohortList],
+  );
+
+  function toggleStudy(study: SearchStudy) {
+    setCohort((prev) => {
+      const next = { ...prev };
+      if (next[study.pseudo_study_uid]) {
+        delete next[study.pseudo_study_uid];
+      } else {
+        next[study.pseudo_study_uid] = study;
+      }
       return next;
     });
-  };
+  }
 
   return (
-    <div className="grid grid-cols-[18rem_1fr_18rem] gap-4">
-      <div className="flex flex-col gap-4">
-        {facets?.modality ? (
-          <FacetGroup
-            label="Modality"
-            facet="modality"
-            items={facets.modality}
-            selected={filters.modality}
-            onToggle={toggle("modality")}
-          />
-        ) : (
-          <SkeletonFacet />
-        )}
-        {facets?.body_part ? (
-          <FacetGroup
-            label="Body part"
-            facet="body_part"
-            items={facets.body_part}
-            selected={filters.body_part}
-            onToggle={toggle("body_part")}
-          />
-        ) : (
-          <SkeletonFacet />
-        )}
-        {facets?.sex ? (
-          <FacetGroup
-            label="Sex"
-            facet="sex"
-            items={facets.sex}
-            selected={filters.sex}
-            onToggle={toggle("sex")}
-          />
-        ) : (
-          <SkeletonFacet />
-        )}
+    <div className="grid grid-cols-1 gap-0 desktop:grid-cols-[280px_minmax(0,1fr)_320px]">
+      {/* Mobile fallback (K-9 deferred) */}
+      <div className="desktop:hidden col-span-full p-6 text-sm text-text-muted">
+        {dict.account.mobileFallbackTitle} —{" "}
+        {dict.account.mobileFallbackBody}
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-medium text-ink-muted">
-            {results
-              ? `${results.items.length.toLocaleString()} of ${results.total.toLocaleString()} studies`
-              : "Loading…"}
-          </h2>
-        </div>
+      {/* Left: facets */}
+      <div className="hidden desktop:block">
+        <FacetSidebar
+          values={facetValues}
+          onChange={setFacetValues}
+          facets={{
+            modality: facets.modality,
+            body_part: facets.body_part,
+            age_bucket: facets.age_bucket,
+            sex: facets.sex,
+            manufacturer: facets.manufacturer,
+            year: facets.year,
+          }}
+          recentSearches={recent}
+          onSelectRecent={() => {
+            // v0.1 just clears facets — full restore lives in v0.1.1.
+            setFacetValues(EMPTY_FACET_STATE);
+          }}
+          locale={locale}
+        />
+      </div>
+
+      {/* Center: results */}
+      <div className="hidden flex-col gap-3 px-4 py-4 desktop:flex">
+        <FederatedSignal
+          studyCount={typeof total === "number" ? total : items.length}
+          hospitalCount={hospitalCount}
+          filterChips={chipLabel(facetValues)}
+          variant={items.length === 0 && !loading ? "empty" : "standard"}
+          locale={locale}
+        />
         {error ? (
-          <ErrorBanner code={error.code} requestId={error.requestId} detail={error.detail} />
-        ) : null}
-        {!loading && results && results.items.length === 0 ? (
-          <EmptyState
-            title="No studies match these filters"
-            body="Try widening your date range or removing the min-hospitals constraint."
+          <ErrorBanner
+            code={error.code}
+            requestId={error.requestId}
+            detail={error.detail}
           />
         ) : null}
-        {loading ? (
-          <div className="flex flex-col gap-2">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="card h-16 animate-pulse" />
+        <div
+          role="table"
+          aria-label={dict.search.pageTitle}
+          aria-busy={loading}
+          className="rounded-md border border-border bg-bg"
+        >
+          {loading && items.length === 0 ? (
+            <SkeletonRows />
+          ) : items.length === 0 ? (
+            <div className="px-4 py-12 text-center text-sm text-text-muted">
+              <div className="mb-2 font-medium text-text">
+                {dict.search.emptyTitle}
+              </div>
+              <p>{dict.search.emptyBody}</p>
+            </div>
+          ) : (
+            items.map((s) => (
+              <StudyCard
+                key={s.pseudo_study_uid}
+                study={s}
+                selected={Boolean(cohort[s.pseudo_study_uid])}
+                onToggle={() => {
+                  toggleStudy(s);
+                  setSelectedUid(s.pseudo_study_uid);
+                }}
+                locale={locale}
+              />
+            ))
+          )}
+        </div>
+        {response?.has_next ? (
+          <button
+            type="button"
+            disabled
+            className="self-center rounded-md border border-border px-4 py-2 text-sm text-text-muted"
+            title="Pagination v0.1.1"
+          >
+            {dict.search.loadMore}
+          </button>
+        ) : null}
+      </div>
+
+      {/* Right: cohort sidebar */}
+      <aside
+        aria-label={dict.search.cohortTitle}
+        className="hidden flex-col gap-3 border-l border-border bg-bg p-4 desktop:flex"
+      >
+        <h2 className="text-sm font-semibold text-text">
+          {dict.search.cohortTitle}
+        </h2>
+        <FederatedSignal
+          studyCount={cohortList.length}
+          hospitalCount={cohortHospitals}
+          variant="mini"
+          locale={locale}
+        />
+        {cohortList.length === 0 ? (
+          <CartEmpty locale={locale} />
+        ) : (
+          <div className="flex flex-col">
+            {cohortList.map((s) => (
+              <CartItem
+                key={s.pseudo_study_uid}
+                item={s}
+                variant="mini"
+                onRemove={() => toggleStudy(s)}
+                locale={locale}
+              />
             ))}
           </div>
-        ) : null}
-        {results?.items.map((study) => {
-          const sizeMb = study.total_bytes / (1024 * 1024);
-          return (
-            <StudyCard
-              key={study.pseudo_study_uid}
-              pseudoStudyUid={study.pseudo_study_uid}
-              modality={study.modality}
-              bodyPart={study.body_part}
-              nInstances={study.n_instances}
-              sizeMb={sizeMb}
-              studyYear={study.study_year}
-              selected={selected.has(study.pseudo_study_uid)}
-              onToggle={() => toggleStudy(study.pseudo_study_uid)}
-            />
-          );
-        })}
-      </div>
-
-      <div>
-        <CohortSummary
-          count={selected.size}
-          totalSizeMb={totalSizeMb}
-          onReview={() => setReviewOpen(true)}
-        />
-      </div>
-
-      {reviewOpen ? (
-        <ReviewOrderModal
-          uids={Array.from(selected)}
-          totalSizeMb={totalSizeMb}
-          onClose={() => setReviewOpen(false)}
-        />
-      ) : null}
+        )}
+        <div className="mt-2 text-xs text-text-muted">
+          {dict.orders.summaryTotalSize}:{" "}
+          <span className="font-mono">
+            {(cohortBytes / (1024 * 1024)).toFixed(1)} MB
+          </span>
+        </div>
+        <Link
+          href="/orders/new"
+          aria-disabled={cohortList.length === 0}
+          tabIndex={cohortList.length === 0 ? -1 : 0}
+          data-testid="cohort-review-cta"
+          className={
+            cohortList.length === 0
+              ? "rounded-md bg-bg-muted px-3 py-2 text-center text-sm font-medium text-text-muted"
+              : "rounded-md bg-primary-600 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-primary-700"
+          }
+          onClick={(e) => {
+            if (cohortList.length === 0) e.preventDefault();
+          }}
+        >
+          {dict.search.cohortReviewCta} ({cohortList.length})
+        </Link>
+        {/* Quiet keep-warm marker so eslint doesn't whine about unused state. */}
+        {selectedUid ? null : null}
+      </aside>
     </div>
   );
 }
 
-function SkeletonFacet() {
-  return <div className="card h-44 animate-pulse" />;
+function SkeletonRows() {
+  return (
+    <div className="flex flex-col">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="h-14 animate-pulse border-b border-border last:border-b-0"
+        />
+      ))}
+    </div>
+  );
 }
