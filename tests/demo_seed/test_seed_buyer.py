@@ -128,7 +128,9 @@ def test_main_writes_key_file_and_exits_zero(buyer_mod, monkeypatch, tmp_path, c
     monkeypatch.setattr(buyer_mod.shutil, "which", lambda _n: "/usr/bin/docker")
 
     out_path = tmp_path / ".buyer_key.local.txt"
-    rc = buyer_mod.main(["--out-path", str(out_path)])
+    # --skip-smoke avoids the FR-INF-3 round-trip probe (no live search
+    # service in unit tests).
+    rc = buyer_mod.main(["--out-path", str(out_path), "--skip-smoke"])
     assert rc == 0
     assert out_path.exists()
     assert out_path.read_text().strip() == payload["plaintext"]
@@ -139,6 +141,63 @@ def test_main_writes_key_file_and_exits_zero(buyer_mod, monkeypatch, tmp_path, c
     stdout = capsys.readouterr().out
     assert "rv_live_abc12345.secret-token" in stdout
     assert "demo buyer key issued" in stdout
+
+
+def test_smoke_search_treats_401_as_failure(buyer_mod, monkeypatch):
+    """FR-INF-3 contract: a freshly minted key getting 401 means the row
+    never landed (e.g. wrong DSN, replication lag) → must surface as fail."""
+    import urllib.error
+
+    def fake_urlopen(*a, **kw):
+        raise urllib.error.HTTPError(
+            url="x", code=401, msg="Unauthorized", hdrs=None, fp=None
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    ok, detail = buyer_mod.smoke_search("rv_live_x.y", "http://search.test")
+    assert not ok
+    assert "401" in detail
+
+
+def test_smoke_search_non_401_http_error_is_pass(buyer_mod, monkeypatch):
+    """422 / 500 etc. still prove the bearer was accepted — auth layer green."""
+    import urllib.error
+
+    def fake_urlopen(*a, **kw):
+        raise urllib.error.HTTPError(
+            url="x", code=422, msg="Unprocessable", hdrs=None, fp=None
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    ok, detail = buyer_mod.smoke_search("rv_live_x.y", "http://search.test")
+    assert ok
+    assert "422" in detail
+
+
+def test_smoke_search_2xx_is_pass(buyer_mod, monkeypatch):
+    class FakeResp:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **kw: FakeResp())
+    ok, detail = buyer_mod.smoke_search("rv_live_x.y", "http://search.test")
+    assert ok
+    assert "200" in detail
+
+
+def test_smoke_search_network_failure_is_fail(buyer_mod, monkeypatch):
+    def boom(*a, **kw):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    ok, detail = buyer_mod.smoke_search("rv_live_x.y", "http://search.test")
+    assert not ok
+    assert "smoke request failed" in detail
 
 
 def test_main_skip_when_key_file_exists(buyer_mod, monkeypatch, tmp_path):

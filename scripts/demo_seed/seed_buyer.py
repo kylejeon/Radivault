@@ -42,6 +42,7 @@ DEFAULT_EMAIL = "demo-buyer@example.com"
 DEFAULT_TIER = "paid"
 DEFAULT_CONTAINER = "radivault-search-1"
 DEFAULT_OUT_PATH = Path(__file__).parent / ".buyer_key.local.txt"
+DEFAULT_SEARCH_URL = "http://localhost:8001"
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +118,39 @@ def create_buyer(
         f"  stdout: {result.stdout.strip() or '(empty)'}\n"
     )
     raise SystemExit(4)
+
+
+def smoke_search(plaintext: str, search_url: str) -> tuple[bool, str]:
+    """One round-trip POST /v1/search/studies — returns (ok, detail).
+
+    dev-spec-portal-redesign FR-INF-3: confirm the freshly minted key
+    actually works end-to-end. We treat "anything other than 401" as
+    success — empty result sets are fine, the metadata_index may be
+    backfilling. The body shape mirrors verify.py V-7 (extra="forbid"
+    safe).
+    """
+    try:
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            url=search_url.rstrip("/") + "/v1/search/studies",
+            method="POST",
+            data=json.dumps({"limit": 1, "include_facets": False}).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {plaintext}",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return True, f"status={resp.status}"
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            return False, "401 Unauthorized — key not active in search service"
+        # 4xx/5xx other than 401 is still proof the key was accepted
+        return True, f"status={exc.code} (non-401 → key accepted)"
+    except Exception as exc:
+        return False, f"smoke request failed: {exc}"
 
 
 def issue_key(
@@ -202,6 +236,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="If --out-path already exists, skip key issuance (idempotent).",
     )
+    parser.add_argument(
+        "--search-url",
+        default=os.environ.get("SEARCH_URL", DEFAULT_SEARCH_URL),
+        help="Base URL for the search service smoke probe (FR-INF-3).",
+    )
+    parser.add_argument(
+        "--skip-smoke",
+        action="store_true",
+        help="Skip the post-issue POST /v1/search/studies probe.",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -252,6 +296,18 @@ def main(argv: list[str] | None = None) -> int:
     args.out_path.parent.mkdir(parents=True, exist_ok=True)
     args.out_path.write_text(payload["plaintext"] + "\n", encoding="utf-8")
     os.chmod(args.out_path, 0o600)
+
+    # FR-INF-3 smoke test — confirm the key is live in search service.
+    if not args.skip_smoke:
+        ok, detail = smoke_search(payload["plaintext"], args.search_url)
+        if not ok:
+            sys.stderr.write(
+                "[ERR_SEED_KEY_SMOKE_FAILED] freshly minted key fails search probe\n"
+                f"  detail: {detail}\n"
+                "  hint  : check radivault-search-1 logs and DSN config.\n"
+            )
+            return 2
+        log.info("smoke_ok detail=%s", detail)
 
     # Stdout banner (matches search-admin box format but shorter).
     sys.stdout.write(
