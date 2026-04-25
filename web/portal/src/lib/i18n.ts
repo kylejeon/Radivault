@@ -38,6 +38,7 @@ const en = {
     developers: "Developers",
     docs: "Docs",
     pricing: "Pricing",
+    signIn: "Sign in",
     skipToContent: "Skip to main content",
     primaryNav: "Primary navigation",
     footerNav: "Footer navigation",
@@ -358,6 +359,127 @@ const en = {
     mobileFallbackBody:
       "RadiVault Marketplace is optimised for ≥ 1280 px screens. Switch to a desktop browser for the full experience.",
   },
+  // Buyer-auth — design-spec-buyer-auth §5..§8.
+  auth: {
+    common: {
+      requiredLabel: "* required",
+      submitting: "Working…",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
+      passwordMeterMin: "Minimum 8 characters.",
+      passwordMeterOk: "OK. Longer is better.",
+      passwordMeterStrong: "Strong length.",
+      passwordMeterMax: "Maximum 64 characters.",
+      genericError: "Something went wrong. Please try again.",
+    },
+    signup: {
+      pageTitle: "Create your RadiVault account",
+      pageSubtitle:
+        "Search anonymized Korean medical imaging data with one API key. No sales call required.",
+      fields: {
+        email: "Work email",
+        emailHelper: "Use your work email; the API key is bound to this address.",
+        password: "Password",
+        passwordHelper: "8–64 characters. Long passphrases recommended.",
+        organization: "Organization",
+        organizationHelper: "Company or research group.",
+        intent: "I'm using RadiVault for",
+      },
+      intents: {
+        research: "Academic research",
+        "commercial-ai": "Commercial AI",
+        "clinical-trial": "Clinical trial",
+        other: "Other",
+      },
+      consent: {
+        tosPrivacy: "I agree to the",
+        tosLink: "Terms of Service",
+        privacyLink: "Privacy Policy",
+        marketing: "Send me product updates and marketing emails (optional).",
+      },
+      submitCta: "Create account",
+      altSignin: "Already have an account?",
+      altSigninLink: "Sign in",
+    },
+    signin: {
+      pageTitle: "Welcome back",
+      pageSubtitle: "Sign in to your RadiVault account.",
+      fields: {
+        email: "Email",
+        password: "Password",
+        rememberMe: "Keep me signed in",
+      },
+      forgotPassword: "Forgot password?",
+      submitCta: "Sign in",
+      altSignup: "New to RadiVault?",
+      altSignupLink: "Create account",
+      legacyToggle: "Sign in with API key (advanced)",
+      legacyHelper:
+        "Paste your rv_live_… key. This option will retire 2026-07.",
+      legacyKeyLabel: "API key",
+    },
+    otp: {
+      modalTitle: "Verify your email",
+      bodyTemplate: "We sent a 6-digit code to {email}. The code expires in {ttl}.",
+      legend: "Verification code",
+      resend: "Resend code",
+      resendCooldown: "Resend in {sec}s",
+      skipLink: "Use API key only — verify later",
+      errorInvalid: "Code is incorrect. {n} attempt(s) remaining.",
+      errorExpired: "Code expired. Request a new one.",
+      errorLocked: "Too many attempts. Request a new code.",
+    },
+    revealKey: {
+      title: "Save your API key",
+      warningBold: "This is the only time you'll see the full key.",
+      warningBody:
+        "RadiVault does not store the plaintext value. If you lose it, you'll need to regenerate.",
+      copy: "Copy",
+      copyToast: "API key copied to clipboard.",
+      helperBody: "Use this key in your `Authorization: Bearer …` header.",
+      apiDocs: "API documentation",
+      confirm: "I have saved my key in a secure location.",
+      done: "Done",
+    },
+    apiKeyCard: {
+      cardTitle: "Default API key",
+      tierLabel: "tier",
+      copyMasked: "Copy",
+      copyToast: "Masked key copied. Use Regenerate for a new full key.",
+      regenerate: "Regenerate",
+      revoke: "Revoke",
+      emptyTitle: "No active API key.",
+      emptyBody: "Programmatic access (curl, SDK) is currently disabled.",
+      generate: "Generate new key",
+    },
+    passwordReset: {
+      requestTitle: "Reset your password",
+      requestSubtitle: "Enter your email and we'll send a reset link.",
+      requestSubmit: "Send reset link",
+      requestDone: "Check your email for a reset link.",
+      confirmTitle: "Choose a new password",
+      confirmSubtitle: "Enter and confirm your new password.",
+      confirmSubmit: "Update password",
+      confirmDone: "Password updated. Sign in with your new password.",
+      newPasswordLabel: "New password",
+      confirmPasswordLabel: "Confirm new password",
+      mismatchError: "Passwords do not match.",
+      tokenInvalid: "This reset link is invalid or expired. Request a new one.",
+      backToSignin: "Back to sign in",
+      demoDisabled:
+        "Password reset is disabled in demo mode. Contact support@radivault.io.",
+    },
+    errors: {
+      authInvalid: "Email or password is incorrect.",
+      emailTaken: "An account already exists for this email. Sign in instead?",
+      emailRecentlyDeleted:
+        "This email was recently deleted. Please wait 30 days or contact sales.",
+      rateLimited: "Too many attempts. Try again shortly.",
+      accountLocked:
+        "Account locked for 15 minutes due to repeated failures.",
+      validation: "Please correct the highlighted field.",
+    },
+  },
   // Hospital console — design-spec-portal-redesign §17~§19 / FR-HO-*.
   hospital: {
     title: {
@@ -491,6 +613,7 @@ export type Dict = {
     developers: string;
     docs: string;
     pricing: string;
+    signIn: string;
     skipToContent: string;
     primaryNav: string;
     footerNav: string;
@@ -692,6 +815,116 @@ export type Dict = {
     mobileFallbackTitle: string;
     mobileFallbackBody: string;
   };
+  auth: {
+    common: {
+      requiredLabel: string;
+      submitting: string;
+      showPassword: string;
+      hidePassword: string;
+      passwordMeterMin: string;
+      passwordMeterOk: string;
+      passwordMeterStrong: string;
+      passwordMeterMax: string;
+      genericError: string;
+    };
+    signup: {
+      pageTitle: string;
+      pageSubtitle: string;
+      fields: {
+        email: string;
+        emailHelper: string;
+        password: string;
+        passwordHelper: string;
+        organization: string;
+        organizationHelper: string;
+        intent: string;
+      };
+      intents: {
+        research: string;
+        "commercial-ai": string;
+        "clinical-trial": string;
+        other: string;
+      };
+      consent: {
+        tosPrivacy: string;
+        tosLink: string;
+        privacyLink: string;
+        marketing: string;
+      };
+      submitCta: string;
+      altSignin: string;
+      altSigninLink: string;
+    };
+    signin: {
+      pageTitle: string;
+      pageSubtitle: string;
+      fields: { email: string; password: string; rememberMe: string };
+      forgotPassword: string;
+      submitCta: string;
+      altSignup: string;
+      altSignupLink: string;
+      legacyToggle: string;
+      legacyHelper: string;
+      legacyKeyLabel: string;
+    };
+    otp: {
+      modalTitle: string;
+      bodyTemplate: string;
+      legend: string;
+      resend: string;
+      resendCooldown: string;
+      skipLink: string;
+      errorInvalid: string;
+      errorExpired: string;
+      errorLocked: string;
+    };
+    revealKey: {
+      title: string;
+      warningBold: string;
+      warningBody: string;
+      copy: string;
+      copyToast: string;
+      helperBody: string;
+      apiDocs: string;
+      confirm: string;
+      done: string;
+    };
+    apiKeyCard: {
+      cardTitle: string;
+      tierLabel: string;
+      copyMasked: string;
+      copyToast: string;
+      regenerate: string;
+      revoke: string;
+      emptyTitle: string;
+      emptyBody: string;
+      generate: string;
+    };
+    passwordReset: {
+      requestTitle: string;
+      requestSubtitle: string;
+      requestSubmit: string;
+      requestDone: string;
+      confirmTitle: string;
+      confirmSubtitle: string;
+      confirmSubmit: string;
+      confirmDone: string;
+      newPasswordLabel: string;
+      confirmPasswordLabel: string;
+      mismatchError: string;
+      tokenInvalid: string;
+      backToSignin: string;
+      demoDisabled: string;
+    };
+    errors: {
+      authInvalid: string;
+      emailTaken: string;
+      emailRecentlyDeleted: string;
+      rateLimited: string;
+      accountLocked: string;
+      validation: string;
+    };
+  };
   hospital: {
     title: { dashboard: string; audit: string; quota: string };
     nav: {
@@ -793,6 +1026,7 @@ const ko: Dict = {
     developers: "기술",
     docs: "문서",
     pricing: "가격문의",
+    signIn: "로그인",
     skipToContent: "본문 바로가기",
     primaryNav: "기본 메뉴",
     footerNav: "푸터 메뉴",
@@ -1112,6 +1346,126 @@ const ko: Dict = {
     mobileFallbackTitle: "데스크톱 환경 권장",
     mobileFallbackBody:
       "RadiVault Marketplace 는 1280 px 이상 화면에 최적화되어 있습니다. 전체 기능을 위해 데스크톱 브라우저를 사용해 주세요.",
+  },
+  // Buyer-auth — design-spec-buyer-auth §11 i18n.
+  auth: {
+    common: {
+      requiredLabel: "* 필수",
+      submitting: "처리 중…",
+      showPassword: "비밀번호 보기",
+      hidePassword: "비밀번호 숨기기",
+      passwordMeterMin: "최소 8자 이상",
+      passwordMeterOk: "양호. 더 길수록 안전합니다.",
+      passwordMeterStrong: "충분한 길이입니다.",
+      passwordMeterMax: "최대 64자",
+      genericError: "오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+    },
+    signup: {
+      pageTitle: "RadiVault 계정 만들기",
+      pageSubtitle:
+        "한국 의료영상 데이터를 단일 API 키로 검색하세요. 영업 문의 없이 가입 가능합니다.",
+      fields: {
+        email: "업무용 이메일",
+        emailHelper: "API 키는 이 이메일에 연결됩니다.",
+        password: "비밀번호",
+        passwordHelper: "8–64자. 긴 패스프레이즈를 권장합니다.",
+        organization: "기관명",
+        organizationHelper: "회사 또는 연구 그룹.",
+        intent: "이용 목적",
+      },
+      intents: {
+        research: "학술 연구",
+        "commercial-ai": "상용 AI 개발",
+        "clinical-trial": "임상시험",
+        other: "기타",
+      },
+      consent: {
+        tosPrivacy: "다음에 동의합니다:",
+        tosLink: "이용약관",
+        privacyLink: "개인정보처리방침",
+        marketing: "제품 업데이트 및 마케팅 메일을 받겠습니다 (선택).",
+      },
+      submitCta: "계정 만들기",
+      altSignin: "이미 계정이 있으신가요?",
+      altSigninLink: "로그인",
+    },
+    signin: {
+      pageTitle: "다시 오신 것을 환영합니다",
+      pageSubtitle: "RadiVault 계정으로 로그인하세요.",
+      fields: {
+        email: "이메일",
+        password: "비밀번호",
+        rememberMe: "로그인 유지",
+      },
+      forgotPassword: "비밀번호를 잊으셨나요?",
+      submitCta: "로그인",
+      altSignup: "처음 오셨나요?",
+      altSignupLink: "계정 만들기",
+      legacyToggle: "API 키로 로그인 (고급)",
+      legacyHelper: "rv_live_… 키를 붙여넣으세요. 2026-07 종료 예정.",
+      legacyKeyLabel: "API 키",
+    },
+    otp: {
+      modalTitle: "이메일 인증",
+      bodyTemplate: "{email} 로 6자리 인증 코드를 보냈습니다. 코드는 {ttl} 후 만료됩니다.",
+      legend: "인증 코드",
+      resend: "코드 재전송",
+      resendCooldown: "{sec}초 후 재전송 가능",
+      skipLink: "API 키만 사용 — 나중에 인증",
+      errorInvalid: "인증 코드가 올바르지 않습니다. {n}회 남음.",
+      errorExpired: "인증 코드가 만료되었습니다. 새 코드를 요청해 주세요.",
+      errorLocked: "시도 횟수를 초과했습니다. 새 코드를 요청해 주세요.",
+    },
+    revealKey: {
+      title: "API 키를 저장하세요",
+      warningBold: "API 키 평문은 지금 한 번만 표시됩니다.",
+      warningBody:
+        "RadiVault 는 평문을 저장하지 않습니다. 분실 시 재발급이 필요합니다.",
+      copy: "복사",
+      copyToast: "API 키가 클립보드에 복사되었습니다.",
+      helperBody: "이 키를 `Authorization: Bearer …` 헤더에 사용하세요.",
+      apiDocs: "API 문서",
+      confirm: "안전한 위치에 키를 저장했습니다.",
+      done: "완료",
+    },
+    apiKeyCard: {
+      cardTitle: "기본 API 키",
+      tierLabel: "등급",
+      copyMasked: "복사",
+      copyToast: "마스킹된 키가 복사되었습니다. 새 키는 재발급으로 받으세요.",
+      regenerate: "재발급",
+      revoke: "폐기",
+      emptyTitle: "활성 API 키가 없습니다.",
+      emptyBody: "프로그래매틱 접근 (curl, SDK) 이 비활성 상태입니다.",
+      generate: "새 키 발급",
+    },
+    passwordReset: {
+      requestTitle: "비밀번호 재설정",
+      requestSubtitle: "이메일을 입력하시면 재설정 링크를 보내드립니다.",
+      requestSubmit: "재설정 링크 보내기",
+      requestDone: "이메일에서 재설정 링크를 확인해 주세요.",
+      confirmTitle: "새 비밀번호 설정",
+      confirmSubtitle: "새 비밀번호를 입력하고 확인해 주세요.",
+      confirmSubmit: "비밀번호 변경",
+      confirmDone: "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요.",
+      newPasswordLabel: "새 비밀번호",
+      confirmPasswordLabel: "새 비밀번호 확인",
+      mismatchError: "비밀번호가 일치하지 않습니다.",
+      tokenInvalid: "재설정 링크가 유효하지 않습니다. 새로 요청해 주세요.",
+      backToSignin: "로그인으로 돌아가기",
+      demoDisabled:
+        "데모 모드에서는 비밀번호 재설정이 비활성화되어 있습니다. support@radivault.io 로 문의하세요.",
+    },
+    errors: {
+      authInvalid: "이메일 또는 비밀번호가 일치하지 않습니다.",
+      emailTaken: "이미 가입된 계정입니다. 로그인하시겠어요?",
+      emailRecentlyDeleted:
+        "최근 삭제된 계정입니다. 30일 후 재가입 가능합니다.",
+      rateLimited: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+      accountLocked:
+        "반복된 실패로 계정이 15분간 잠겼습니다.",
+      validation: "표시된 항목을 확인해 주세요.",
+    },
   },
   hospital: {
     title: {

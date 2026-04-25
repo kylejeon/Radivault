@@ -1,46 +1,78 @@
+import { redirect } from "next/navigation";
+
 import { MarketplaceNav } from "@/components/buyer/MarketplaceNav";
 import { getBuyerSession } from "@/lib/session";
-import { redirect } from "next/navigation";
+import { getAuthStore } from "@/lib/auth/store";
+import { maskKid, maskApiKey } from "@/lib/auth/api-key";
 import { AccountClient } from "./AccountClient";
 
 /**
- * /account — design-spec-portal-redesign §12.4 / FR-BP-13.
+ * /account — design-spec-buyer-auth §6 wireframe.
  *
- * Profile + API keys + Billing stub. The session apiKey is forwarded into
- * the client island as a Stripe-style mask only — the raw value never leaves
- * the server (httpOnly iron-session cookie). K-11 reveal flow is a stub
- * (button is wired but the actual fetch is deferred to v0.1.1).
+ * Two session shapes are supported during the 90-day deprecation window:
+ *   1. v0.2 email/password session  (buyerPk + email + buyerId set)
+ *   2. v0.1 legacy API-key paste    (apiKey set; no buyerPk)
+ *
+ * Path #2 falls back to the previous read-from-cookie behaviour
+ * (mask the cookie's apiKey directly) so the legacy flow keeps working.
  */
 export default async function AccountPage() {
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
-  if (!session?.apiKey) redirect("/signin");
 
-  // Stripe-style mask: 8-char prefix + ... + last 8 chars (server-rendered).
-  const apiKey = session.apiKey;
-  const masked = maskApiKey(apiKey);
+  // Either auth path is acceptable.
+  if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
+
+  let initialKey = {
+    kid: null as string | null,
+    masked: null as string | null,
+    createdAt: null as string | null,
+    lastUsedAt: null as string | null,
+  };
+  let buyerId = session.buyerId ?? "buy_demo001";
+  const tier = session.tier ?? "preview";
+  const signedInAt = session.signedInAt ?? Date.now();
+  const email = session.email ?? null;
+  const locale = (session.locale ?? "en") as "en" | "ko";
+
+  if (session.buyerPk) {
+    // v0.2 path — query store
+    const store = getAuthStore();
+    const key = await store.findActiveApiKey(session.buyerPk);
+    if (key) {
+      initialKey = {
+        kid: key.kid,
+        masked: maskKid(key.kid),
+        createdAt: new Date(key.createdAt).toISOString(),
+        lastUsedAt: key.lastUsedAt ? new Date(key.lastUsedAt).toISOString() : null,
+      };
+    }
+    const buyer = await store.findBuyer(session.buyerPk);
+    if (buyer) buyerId = buyer.buyerId;
+  } else if (session.apiKey) {
+    // legacy path — derive mask from the cookie's plaintext
+    initialKey = {
+      kid: session.apiKey.slice(0, 16),
+      masked: maskApiKey(session.apiKey),
+      createdAt: new Date(signedInAt).toISOString(),
+      lastUsedAt: null,
+    };
+  }
 
   return (
     <div className="surface-buyer min-h-screen bg-bg">
       <MarketplaceNav active="/account" />
       <main className="mx-auto max-w-content px-6 py-6">
         <AccountClient
-          apiKeyMasked={masked}
-          buyerId={session.buyerId ?? "buy_demo001"}
-          tier={session.tier ?? "preview"}
-          signedInAt={session.signedInAt ?? Date.now()}
-          locale="en"
+          buyerId={buyerId}
+          email={email}
+          tier={tier}
+          signedInAt={signedInAt}
+          initialKey={initialKey}
+          locale={locale}
         />
       </main>
     </div>
   );
-}
-
-function maskApiKey(key: string): string {
-  if (!key) return "rv_live_***...****";
-  // Match the design-spec example: `rv_live_***...****cf4ec164`
-  const prefix = key.slice(0, 8); // "rv_live_"
-  const tail = key.slice(-8);
-  return `${prefix}***...****${tail}`;
 }
