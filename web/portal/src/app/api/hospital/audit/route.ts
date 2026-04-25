@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { bases, upstreamFetch } from "@/lib/upstream";
-import { env } from "@/lib/env";
+import { bearerForHospital } from "@/lib/upstream-bearer";
 import { getHospitalSession } from "@/lib/session";
 
 export async function GET(req: Request) {
@@ -11,12 +11,12 @@ export async function GET(req: Request) {
       { status: 401 },
     );
   }
-  const bearer = env.hospitalUpstreamBearer;
+  const bearer = bearerForHospital(session.hospitalId);
   if (!bearer) {
     return NextResponse.json(
       {
         error: "ERR_UPSTREAM_UNAVAILABLE",
-        detail: "HOSPITAL_UPSTREAM_BEARER not configured",
+        detail: `No upstream bearer configured for ${session.hospitalId}`,
       },
       { status: 503 },
     );

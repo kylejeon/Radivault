@@ -24,7 +24,7 @@
 
 import { NextResponse } from "next/server";
 import { bases, upstreamFetch } from "@/lib/upstream";
-import { env } from "@/lib/env";
+import { bearerForHospital } from "@/lib/upstream-bearer";
 import { getHospitalSession } from "@/lib/session";
 
 type UpstreamSegment = {
@@ -102,7 +102,7 @@ export async function GET() {
       { status: 401 },
     );
   }
-  const bearer = env.hospitalUpstreamBearer;
+  const bearer = bearerForHospital(session.hospitalId);
   if (!bearer) {
     const body = stub(session.hospitalId);
     return NextResponse.json(body, { headers: { "X-Stubbed": "true" } });
