@@ -161,6 +161,56 @@ class Study(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
 
+    # dev-spec-buyer-browse-preview FR-DATA-1: PHI verification gate +
+    # preview cache pointers + sample download SOPInstanceUID.
+    #
+    # ``preview_status`` enum:
+    #   - 'pending' (default — no preview rendered yet, the safe default
+    #     so existing rows are silently excluded from preview surfaces)
+    #   - 'verified' — manual or Presidio OCR pass; thumbnail/frames/
+    #     sample-download endpoints will return 200 for this row
+    #   - 'phi_detected' — operator alert; all preview surfaces return 403
+    #   - 'not_applicable' — modality not previewable (e.g. SR/SEG)
+    preview_status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending", server_default="pending"
+    )
+    preview_thumbnail_key: Mapped[str | None] = mapped_column(String)
+    preview_slice_count: Mapped[int | None] = mapped_column(Integer)
+    sample_instance_uid: Mapped[str | None] = mapped_column(String)
+
+
+class SampleDownloadAudit(Base):
+    """Per-buyer sample DICOM download audit (dev-spec-buyer-browse-preview FR-DATA-1).
+
+    Distinct from order-fulfillment ``download_event``: sample-downloads do
+    NOT create an order row, transfer_job, or order_outbox entry — they are
+    a separate self-serve trial path. The presigned URL is stored only as a
+    SHA-256 hash so a DB leak cannot resurrect the capability.
+    """
+
+    __tablename__ = "sample_download_audit"
+    __table_args__ = (
+        Index("idx_sample_dl_audit_buyer_time", "buyer_pk", "requested_at"),
+        Index("idx_sample_dl_audit_study", "study_uid", "requested_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    # Logical FK only — search.buyer lives in a different module/schema in
+    # production; we don't enforce a cross-DB constraint.
+    buyer_pk: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    study_uid: Mapped[str] = mapped_column(String, nullable=False)
+    instance_uid: Mapped[str] = mapped_column(String, nullable=False)
+    presigned_url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    client_ip: Mapped[str | None] = mapped_column(String)
+    user_agent: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="issued", server_default="issued"
+    )
+
 
 class Series(Base):
     __tablename__ = "series"
