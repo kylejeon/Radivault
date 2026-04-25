@@ -27,14 +27,22 @@ export default async function DashboardPage() {
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
-  if (!session?.apiKey) redirect("/signin");
+  // Accept either v0.2 email/password (buyerPk) or legacy paste-mode
+  // (apiKey). BLOCKER #1 fix from qa-report-d13-demo-rehearsal —
+  // signin endpoint sets buyerPk + delete apiKey, so apiKey-only check
+  // caused infinite /signin ↔ /dashboard redirect loop.
+  if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
 
   const dict = getDict("en");
   const tiles = dict.dashboard.tiles;
 
   // Best-effort active orders count. The dashboard renders even if the
-  // upstream is down — we just show the empty state.
-  const activeOrdersCount = await fetchActiveOrdersCount(session.apiKey);
+  // upstream is down — we just show the empty state. v0.2 sessions have
+  // no apiKey on the cookie (search uses INTERNAL_SEARCH_KEY); fall back
+  // to 0 in that case (stub returns 0 either way for v0.1).
+  const activeOrdersCount = session.apiKey
+    ? await fetchActiveOrdersCount(session.apiKey)
+    : 0;
 
   return (
     <div className="surface-buyer min-h-screen bg-bg">

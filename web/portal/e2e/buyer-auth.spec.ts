@@ -48,6 +48,9 @@ test.describe("buyer-auth (FR-AUTH-1, FR-AUTH-4, FR-AUTH-8)", () => {
 
     await page.getByLabel(/Work email/).fill(email);
     await page.getByLabel(/^Password/).fill("correct-horse-staple-9");
+    // Confirm-password field added in 03196cd; without it the submit
+    // stays disabled. Sync e2e with the current SignupForm UX.
+    await page.getByLabel(/Confirm password/).fill("correct-horse-staple-9");
     await page.getByLabel(/Organization/).fill("E2E Test Co");
     // Accept ToS+Privacy
     await page

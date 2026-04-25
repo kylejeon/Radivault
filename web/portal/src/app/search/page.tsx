@@ -14,7 +14,11 @@ export default async function SearchPage() {
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
-  if (!session?.apiKey) redirect("/signin");
+  // Accept either v0.2 email/password (buyerPk) or legacy paste-mode
+  // (apiKey). BLOCKER #1 fix from qa-report-d13-demo-rehearsal —
+  // signin endpoint sets buyerPk + delete apiKey, so apiKey-only check
+  // caused infinite /signin ↔ /search redirect loop.
+  if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
   return (
     <div className="surface-buyer min-h-screen bg-bg">
       <MarketplaceNav active="/search" />

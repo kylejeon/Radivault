@@ -66,6 +66,30 @@ async function sealBuyerSession(): Promise<string> {
   );
 }
 
+/**
+ * v0.2 email/password session shape. Mirrors the cookie produced by
+ * `/api/auth/signin` (route.ts L.126-136): buyerPk + buyerId + email +
+ * sessionVersion are set, and the legacy `apiKey` field is intentionally
+ * absent. Used by auth-redirect-no-loop.spec.ts to verify the route
+ * guards accept the v0.2 branch of the OR-condition without burning the
+ * 1/min/IP signup rate limit.
+ */
+async function sealBuyerSessionV2(): Promise<string> {
+  return sealData(
+    {
+      buyerPk: 90001,
+      buyerId: "buy_e2e_noloop",
+      email: "e2e-noloop@example.com",
+      emailVerified: true,
+      sessionVersion: 1,
+      locale: "en" as const,
+      tier: "preview",
+      signedInAt: Date.now(),
+    },
+    { password: readSessionPassword() },
+  );
+}
+
 async function sealHospitalSession(hospitalId: string): Promise<string> {
   return sealData(
     {
@@ -85,6 +109,29 @@ async function sealHospitalSession(hospitalId: string): Promise<string> {
  */
 export async function injectBuyerSession(context: BrowserContext): Promise<void> {
   const value = await sealBuyerSession();
+  await context.addCookies([
+    {
+      name: "rv_session",
+      value,
+      domain: "localhost",
+      path: "/",
+      httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
+/**
+ * Inject a v0.2 (email/password) `rv_session` cookie. Use this instead
+ * of `injectBuyerSession` when a test specifically needs the buyerPk
+ * branch of route guards (auth-redirect-no-loop spec). Avoids the
+ * 1/min/IP signup rate limit.
+ */
+export async function injectBuyerSessionV2(
+  context: BrowserContext,
+): Promise<void> {
+  const value = await sealBuyerSessionV2();
   await context.addCookies([
     {
       name: "rv_session",
