@@ -11,14 +11,16 @@ import {
 import { injectBuyerSession } from "./fixtures/session";
 
 /**
- * Scenario 1 — Buyer search flow.
+ * Scenario 1 — Buyer search flow (design-spec-portal-redesign §12.1).
  *
- * Sign-in -> /search -> facet filter (modality=CT, body_part=CHEST) ->
- * result rows reflect the mocked payload. Every BFF call is intercepted
- * so the test runs without a live central-ingest or search service.
+ * The v0.2 portal is a 3-pane layout: 280 px FacetSidebar (with the
+ * min_hospitals slider as the lead facet, FR-BP-7), middle results
+ * column with sticky FederatedSignal (FR-BP-6), and 320 px cohort
+ * sidebar.  We assert the layout, the SearchRequest schema fields
+ * (FR-INF-8/9), and the federated signal copy.
  */
 
-test.describe("Buyer search flow", () => {
+test.describe("Buyer search flow (3-pane v0.2)", () => {
   test.beforeEach(async ({ page, context }) => {
     await blockRealUpstream(page);
     await mockBuyerSignIn(page);
@@ -27,62 +29,107 @@ test.describe("Buyer search flow", () => {
     await injectBuyerSession(context);
   });
 
-  test("signed-in user reaches /search and sees the unfiltered results", async ({ page }) => {
+  test("renders 3-pane shell with facet sidebar + federated signal + cohort", async ({
+    page,
+  }) => {
     await page.goto("/search");
 
-    // Wait for the top-nav to render — proves the server-side session gate passed.
-    await expect(page.getByRole("link", { name: "Search" })).toBeVisible();
+    // Shell — three landmarks.
+    await expect(page.getByTestId("facet-sidebar")).toBeVisible();
+    await expect(page.getByTestId("federated-signal")).toBeVisible();
+    // Cohort sidebar uses the standard aria-label from i18n ("Cohort"/"코호트").
+    await expect(page.getByRole("complementary", { name: "Cohort" })).toBeVisible();
 
-    // The result-count header is the canonical "data has loaded" signal.
-    const summary = page.getByText(/of \d+ studies/i);
-    await expect(summary).toBeVisible();
+    // Federated signal copy — northstar metric.
+    const signal = page.getByTestId("federated-signal");
+    await expect(signal).toContainText(/across/);
+    await expect(signal).toContainText(/hospital/);
 
-    // DEFAULT_STUDIES has 5 rows; each StudyCard renders a "Select study …" checkbox.
-    const checkboxes = page.getByRole("checkbox", { name: /Select study/i });
-    await expect(checkboxes).toHaveCount(DEFAULT_STUDIES.length);
+    // 9-column DataTable rows.
+    const rows = page.getByTestId("study-card");
+    await expect(rows).toHaveCount(DEFAULT_STUDIES.length);
 
-    // At least one CT badge (DEFAULT_STUDIES has 3 CTs).
-    await expect(page.getByLabel("Modality CT").first()).toBeVisible();
+    // min_hospitals slider is the FIRST facet section.
+    await expect(
+      page.getByTestId("facet-section-facet-min-hospitals"),
+    ).toBeVisible();
+    await expect(page.getByTestId("min-hospitals-value")).toHaveText("1+");
   });
 
-  test("selecting modality=CT + body_part=CHEST narrows the table", async ({ page }) => {
+  test("selecting a study row populates the cohort sidebar", async ({ page }) => {
     await page.goto("/search");
-    await expect(page.getByText(/of \d+ studies/i)).toBeVisible();
+    await expect(page.getByTestId("federated-signal")).toBeVisible();
 
-    // Facet checkboxes live inside the Modality / Body part <fieldset>s.
-    // Scoping by legend keeps us clear of the "Select study …" row checkboxes.
-    // The accessible name is "{value} {count}" (label text + count badge), so
-    // we anchor on the "CT 156" shape with a regex.
-    const modalityGroup = page.getByRole("group", { name: "Modality" });
-    const bodyPartGroup = page.getByRole("group", { name: "Body part" });
-    await modalityGroup.getByRole("checkbox", { name: /^CT\s/ }).check();
-    await bodyPartGroup.getByRole("checkbox", { name: /^CHEST\s/ }).check();
+    // Select the first 2 study rows via their checkbox.
+    const cbs = page.getByRole("checkbox", { name: /Select study/i });
+    await expect(cbs).toHaveCount(DEFAULT_STUDIES.length);
+    await cbs.nth(0).check();
+    await cbs.nth(1).check();
 
-    // The mocked factory returns only rows matching both filters (3 items).
-    const filteredCheckboxes = page.getByRole("checkbox", { name: /Select study/i });
-    await expect(filteredCheckboxes).toHaveCount(3);
+    // Cohort mini-list shows two cart-item-mini.
+    await expect(page.getByTestId("cart-item-mini")).toHaveCount(2);
 
-    // The result-count header should reflect the filtered total (3).
-    await expect(page.getByText(/3 of 3 studies/)).toBeVisible();
-
-    // Spot check: the MR/BRAIN rows must be gone.
-    await expect(page.getByLabel("Modality MR")).toHaveCount(0);
+    // Review CTA points at /orders/new with the count appended.
+    const cta = page.getByTestId("cohort-review-cta");
+    await expect(cta).toBeVisible();
+    await expect(cta).toContainText("(2)");
+    await expect(cta).toHaveAttribute("href", "/orders/new");
   });
 
-  test("zero-result filters show the EmptyState copy", async ({ page }) => {
-    // Override the studies mock to always return zero results on any filter.
+  test("zero-result query swaps the FederatedSignal to its empty variant", async ({
+    page,
+  }) => {
     await page.route("**/api/search/studies", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ items: [], total: 0, next_cursor: null }),
+        body: JSON.stringify({
+          items: [],
+          facets: {},
+          total_count: 0,
+          total_count_exact: true,
+          next_cursor: null,
+          has_next: false,
+          page_size: 25,
+          response_truncated: false,
+        }),
       });
     });
     await page.goto("/search");
-    await page
-      .getByRole("group", { name: "Modality" })
-      .getByRole("checkbox", { name: /^CT\s/ })
-      .check();
-    await expect(page.getByText(/No studies match these filters/i)).toBeVisible();
+    await expect(page.getByTestId("federated-signal-empty")).toBeVisible();
+    await expect(page.getByTestId("federated-signal-empty")).toContainText(
+      /No results across/,
+    );
+  });
+
+  test("search payload uses canonical SearchRequest field names (FR-INF-8/9)", async ({
+    page,
+  }) => {
+    let lastBody: Record<string, unknown> | null = null;
+    await page.route("**/api/search/studies", async (route) => {
+      lastBody = JSON.parse(route.request().postData() ?? "{}") as Record<
+        string,
+        unknown
+      >;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(filterStudies(lastBody, DEFAULT_STUDIES)),
+      });
+    });
+    await page.goto("/search");
+    await expect(page.getByTestId("federated-signal")).toBeVisible();
+    // Wait for the debounced initial fetch to land.
+    await page.waitForTimeout(500);
+
+    expect(lastBody).not.toBeNull();
+    // Canonical fields per dev-spec-metadata-index §6.4.
+    expect(lastBody).toHaveProperty("limit");
+    expect(lastBody).toHaveProperty("include_facets");
+    expect(lastBody).toHaveProperty("sort");
+    // Banned legacy fields.
+    expect(lastBody).not.toHaveProperty("page_size");
+    expect(lastBody).not.toHaveProperty("modalities");
+    expect(lastBody).not.toHaveProperty("body_parts");
   });
 });

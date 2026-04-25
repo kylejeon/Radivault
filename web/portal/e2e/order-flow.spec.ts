@@ -12,16 +12,19 @@ import {
 import { injectBuyerSession } from "./fixtures/session";
 
 /**
- * Scenario 2 — Order placement flow.
+ * Scenario 2 — Order placement flow (design-spec-portal-redesign §12.3).
  *
- * /search → check 3 studies → Review order → accept DUA → Confirm →
- * POST /api/orders is mocked to 202 accepted → redirect to /orders/{id} →
- * PhaseStepper shows "Accepted" highlighted.
+ * v0.2 promotes the legacy `<ReviewOrderModal>` to a full `/orders/new`
+ * route (FR-BP-9). The flow is now:
+ *
+ *   /search → check 3 studies → click "Review order (3)" link →
+ *   /orders/new shows cart + summary → tick DUA → "Place order" →
+ *   POST /api/orders → redirect to /orders/{id} → 5-phase stepper visible.
  */
 
 const ORDER_ID = "ord_e2edemo01";
 
-test.describe("Order placement flow", () => {
+test.describe("Order placement flow (v0.2 /orders/new)", () => {
   test.beforeEach(async ({ page, context }) => {
     await blockRealUpstream(page);
     await mockSearchFacets(page, DEFAULT_FACETS);
@@ -33,50 +36,42 @@ test.describe("Order placement flow", () => {
 
   test("happy path — 3 studies, DUA accepted, order accepted", async ({ page }) => {
     await page.goto("/search");
-    await expect(page.getByText(/of \d+ studies/i)).toBeVisible();
+    await expect(page.getByTestId("federated-signal")).toBeVisible();
 
-    // Select the first three study rows.
-    const selectBoxes = page.getByRole("checkbox", { name: /Select study/i });
-    await expect(selectBoxes).toHaveCount(DEFAULT_STUDIES.length);
-    for (let i = 0; i < 3; i += 1) {
-      await selectBoxes.nth(i).check();
-    }
+    // Select first 3 study rows from the new DataTable.
+    const cbs = page.getByRole("checkbox", { name: /Select study/i });
+    await expect(cbs).toHaveCount(DEFAULT_STUDIES.length);
+    for (let i = 0; i < 3; i += 1) await cbs.nth(i).check();
 
-    // Cohort sidebar should show 3.
-    await expect(page.getByRole("button", { name: /Review order \(3\)/ })).toBeEnabled();
+    // Cohort review CTA shows the count and routes to /orders/new.
+    const cta = page.getByTestId("cohort-review-cta");
+    await expect(cta).toContainText("(3)");
+    await cta.click();
+    await page.waitForURL(/\/orders\/new$/);
 
-    // Open the review modal.
-    await page.getByRole("button", { name: /Review order \(3\)/ }).click();
-    const dialog = page.getByRole("dialog", { name: "Review order" });
-    await expect(dialog).toBeVisible();
+    // /orders/new shows the cart with 3 full rows + DUA checkbox + place-order CTA.
+    await expect(page.getByTestId("cart-item-full")).toHaveCount(3);
+    const dua = page.getByTestId("dua-checkbox");
+    const submit = page.getByTestId("place-order");
+    await expect(submit).toBeDisabled();
 
-    // Confirm is disabled until DUA is ticked.
-    const confirm = dialog.getByRole("button", { name: "Confirm order" });
-    await expect(confirm).toBeDisabled();
+    await dua.check();
+    await expect(submit).toBeEnabled();
 
-    // Tick the DUA checkbox (single unlabelled checkbox inside the dialog).
-    await dialog.getByRole("checkbox").check();
-    await expect(confirm).toBeEnabled();
-
-    // Submit. The mocked /api/orders returns 202 with buyer_phase=accepted.
-    await confirm.click();
-
-    // Receipt view appears with the order id, then the client auto-navigates
-    // to /orders/{id} after ~2.5s. We wait for the URL change.
-    await expect(dialog.getByText(ORDER_ID)).toBeVisible();
+    await submit.click();
     await page.waitForURL(`**/orders/${ORDER_ID}`, { timeout: 10_000 });
 
-    // Phase stepper shows "Accepted" as the active step.
+    // Order tracker renders the legacy 5-phase stepper.
     await expect(page.getByRole("list", { name: "Order phase" })).toBeVisible();
     await expect(page.getByText("Accepted")).toBeVisible();
-    await expect(page.getByText("Fetching from hospital")).toBeVisible();
-
-    // The top card displays the order id (mono-spaced heading).
-    await expect(page.getByRole("heading", { name: ORDER_ID })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: ORDER_ID }),
+    ).toBeVisible();
   });
 
-  test("422 validation error keeps the modal open with an error banner", async ({ page }) => {
-    // Override the create-order mock to return a 422.
+  test("422 validation error keeps the buyer on /orders/new with a banner", async ({
+    page,
+  }) => {
     await page.route("**/api/orders", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
@@ -94,20 +89,28 @@ test.describe("Order placement flow", () => {
     });
 
     await page.goto("/search");
-    await expect(page.getByText(/of \d+ studies/i)).toBeVisible();
-
-    // Select 1 study to get past the cohort-empty guard.
+    await expect(page.getByTestId("federated-signal")).toBeVisible();
     await page.getByRole("checkbox", { name: /Select study/i }).first().check();
-    await page.getByRole("button", { name: /Review order \(1\)/ }).click();
+    await page.getByTestId("cohort-review-cta").click();
+    await page.waitForURL(/\/orders\/new$/);
 
-    const dialog = page.getByRole("dialog", { name: "Review order" });
-    await dialog.getByRole("checkbox").check();
-    await dialog.getByRole("button", { name: "Confirm order" }).click();
+    await page.getByTestId("dua-checkbox").check();
+    await page.getByTestId("place-order").click();
 
-    // Dialog stays open; alert role banner surfaces the error detail.
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("alert")).toContainText(/At least one study/i);
-    // We must NOT have navigated away.
-    await expect(page).toHaveURL(/\/search/);
+    // We must NOT have navigated away from /orders/new.
+    await expect(page).toHaveURL(/\/orders\/new$/);
+    // The ErrorBanner shows the upstream `detail` field verbatim. Scope by
+    // the alert that lives inside <main> so we don't collide with the Next
+    // route announcer (`#__next-route-announcer__`, also role="alert").
+    const banner = page.locator("main").getByRole("alert");
+    await expect(banner).toContainText(/At least one study/i);
+  });
+
+  test("empty cohort renders the back-to-search empty state", async ({ page }) => {
+    await page.goto("/orders/new");
+    await expect(page.getByText(/No studies selected/)).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Back to search/i }),
+    ).toBeVisible();
   });
 });

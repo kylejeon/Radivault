@@ -23,9 +23,13 @@ export type SearchStudy = {
   pseudo_study_uid: string;
   modality: string | null;
   body_part: string | null;
+  age_bucket: string | null;
+  sex: string | null;
   n_instances: number;
   total_bytes: number;
   study_year: number | null;
+  study_date_shifted: string | null;
+  hospital_opaque_id: string | null;
 };
 
 export type SearchResponse = {
@@ -255,41 +259,61 @@ export const DEFAULT_STUDIES: SearchStudy[] = [
     pseudo_study_uid: "2.25.100000000000000000000000000001",
     modality: "CT",
     body_part: "CHEST",
+    age_bucket: "50-60",
+    sex: "M",
     n_instances: 412,
     total_bytes: 312 * 1024 * 1024,
     study_year: 2024,
+    study_date_shifted: "2024-08-14",
+    hospital_opaque_id: "a1b2c3d4e5f6a7b8",
   },
   {
     pseudo_study_uid: "2.25.100000000000000000000000000002",
     modality: "CT",
     body_part: "CHEST",
+    age_bucket: "60-70",
+    sex: "F",
     n_instances: 388,
     total_bytes: 295 * 1024 * 1024,
     study_year: 2024,
+    study_date_shifted: "2024-05-02",
+    hospital_opaque_id: "a1b2c3d4e5f6a7b8",
   },
   {
     pseudo_study_uid: "2.25.100000000000000000000000000003",
     modality: "CT",
     body_part: "CHEST",
+    age_bucket: "70-80",
+    sex: "M",
     n_instances: 522,
     total_bytes: 401 * 1024 * 1024,
     study_year: 2023,
+    study_date_shifted: "2023-11-10",
+    hospital_opaque_id: "b9c8d7e6f5a4b3c2",
   },
   {
     pseudo_study_uid: "2.25.100000000000000000000000000004",
     modality: "MR",
     body_part: "BRAIN",
+    age_bucket: "40-50",
+    sex: "M",
     n_instances: 162,
     total_bytes: 48 * 1024 * 1024,
     study_year: 2025,
+    study_date_shifted: "2025-01-22",
+    hospital_opaque_id: "b9c8d7e6f5a4b3c2",
   },
   {
     pseudo_study_uid: "2.25.100000000000000000000000000005",
     modality: "MR",
     body_part: "BRAIN",
+    age_bucket: "50-60",
+    sex: "F",
     n_instances: 178,
     total_bytes: 54 * 1024 * 1024,
     study_year: 2024,
+    study_date_shifted: "2024-09-05",
+    hospital_opaque_id: "a1b2c3d4e5f6a7b8",
   },
 ];
 
@@ -303,11 +327,24 @@ export function filterStudies(
   body: Record<string, unknown>,
   pool: SearchStudy[] = DEFAULT_STUDIES,
 ): SearchResponse {
-  const modalities = Array.isArray(body.modalities) ? (body.modalities as string[]) : [];
-  const bodyParts = Array.isArray(body.body_parts) ? (body.body_parts as string[]) : [];
+  // v0.2 SearchRequest schema (FR-INF-8/9): `modality` / `body_part` / etc.
+  // We also accept the legacy `modalities` / `body_parts` for back-compat
+  // with any older test that hasn't been migrated yet.
+  const modalities = Array.isArray(body.modality)
+    ? (body.modality as string[])
+    : Array.isArray(body.modalities)
+      ? (body.modalities as string[])
+      : [];
+  const bodyParts = Array.isArray(body.body_part)
+    ? (body.body_part as string[])
+    : Array.isArray(body.body_parts)
+      ? (body.body_parts as string[])
+      : [];
   const filtered = pool.filter((s) => {
-    if (modalities.length && (!s.modality || !modalities.includes(s.modality))) return false;
-    if (bodyParts.length && (!s.body_part || !bodyParts.includes(s.body_part))) return false;
+    if (modalities.length && (!s.modality || !modalities.includes(s.modality)))
+      return false;
+    if (bodyParts.length && (!s.body_part || !bodyParts.includes(s.body_part)))
+      return false;
     return true;
   });
   return { items: filtered, total: filtered.length, next_cursor: null };
