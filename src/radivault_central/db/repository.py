@@ -75,8 +75,20 @@ def insert_study_full(
     model_name: str | None,
     pseudo_patient_key: str | None,
     series_entries: list[dict],
+    study_date_shifted: object | None = None,
+    patient_sex: str | None = None,
+    patient_age_bucket: int | None = None,
+    preview_status: str | None = None,
+    preview_thumbnail_key: str | None = None,
+    raw_dicom_tags: dict | None = None,
 ) -> Study:
-    """Create Study + Series + Instance rows inside the caller's transaction."""
+    """Create or upsert Study + Series + Instance rows inside the caller's transaction.
+
+    metadata-thumbnail-ingest FR-INGEST-1 — also persists the v2 study root
+    fields (study_date_shifted, manufacturer/model, body_part) and propagates
+    sex/age_bucket onto the patient_pseudo row so the search facets aggregator
+    can group on them.
+    """
     patient_pk: int | None = None
     if pseudo_patient_key:
         pp = session.scalar(
@@ -89,9 +101,17 @@ def insert_study_full(
             pp = PatientPseudo(
                 hospital_pk=hospital.hospital_pk,
                 pseudo_patient_key=pseudo_patient_key,
+                sex=patient_sex,
+                age_bucket=patient_age_bucket,
             )
             session.add(pp)
             session.flush()
+        else:
+            # idempotent re-ingest — refresh sex/age_bucket on existing row.
+            if patient_sex is not None and pp.sex is None:
+                pp.sex = patient_sex
+            if patient_age_bucket is not None and pp.age_bucket is None:
+                pp.age_bucket = patient_age_bucket
         patient_pk = pp.patient_pseudo_pk
 
     study = Study(
@@ -105,10 +125,16 @@ def insert_study_full(
         body_part=body_part,
         manufacturer=manufacturer,
         model_name=model_name,
+        study_date_shifted=study_date_shifted,
         central_job_id=central_job_id,
         gateway_id=gateway_id,
         ingested_at=datetime.now(tz=UTC),
+        raw_dicom_tags=raw_dicom_tags,
     )
+    if preview_status is not None:
+        study.preview_status = preview_status
+    if preview_thumbnail_key is not None:
+        study.preview_thumbnail_key = preview_thumbnail_key
     session.add(study)
     session.flush()
 
@@ -136,6 +162,112 @@ def insert_study_full(
                 )
             )
     return study
+
+
+def upsert_study_v2(
+    session: Session,
+    *,
+    hospital: Hospital,
+    pseudo_study_uid: str,
+    gateway_id: str,
+    central_job_id: str,
+    n_instances: int,
+    n_series: int,
+    total_bytes: int,
+    modality: str | None,
+    body_part: str | None,
+    manufacturer: str | None,
+    model_name: str | None,
+    study_date_shifted: object | None,
+    patient_sex: str | None,
+    patient_age_bucket: int | None,
+    pseudo_patient_key: str | None,
+    preview_status: str | None,
+    preview_thumbnail_key: str | None,
+    raw_dicom_tags: dict | None,
+) -> Study:
+    """Idempotent UPDATE-or-INSERT for re-ingest / backfill paths.
+
+    Used by ``radivault-gateway reingest`` (FR-BACKFILL-1) so re-running on the
+    same pseudo_study_uid simply refreshes the v2 fields without violating the
+    ``study.pseudo_study_uid`` UNIQUE constraint. Series / Instance rows are
+    NOT touched (the original ingest already wrote them) — backfill only
+    targets the v2 metadata + thumbnail key.
+    """
+    existing = session.scalar(
+        select(Study).where(Study.pseudo_study_uid == pseudo_study_uid)
+    )
+    if existing is None:
+        return insert_study_full(
+            session,
+            hospital=hospital,
+            pseudo_study_uid=pseudo_study_uid,
+            gateway_id=gateway_id,
+            central_job_id=central_job_id,
+            n_instances=n_instances,
+            n_series=n_series,
+            total_bytes=total_bytes,
+            modality=modality,
+            body_part=body_part,
+            manufacturer=manufacturer,
+            model_name=model_name,
+            pseudo_patient_key=pseudo_patient_key,
+            series_entries=[],
+            study_date_shifted=study_date_shifted,
+            patient_sex=patient_sex,
+            patient_age_bucket=patient_age_bucket,
+            preview_status=preview_status,
+            preview_thumbnail_key=preview_thumbnail_key,
+            raw_dicom_tags=raw_dicom_tags,
+        )
+
+    if body_part is not None:
+        existing.body_part = body_part
+    if manufacturer is not None:
+        existing.manufacturer = manufacturer
+    if model_name is not None:
+        existing.model_name = model_name
+    if study_date_shifted is not None:
+        existing.study_date_shifted = study_date_shifted
+    if modality is not None and existing.modality is None:
+        existing.modality = modality
+    if raw_dicom_tags is not None:
+        existing.raw_dicom_tags = raw_dicom_tags
+    if preview_thumbnail_key is not None:
+        existing.preview_thumbnail_key = preview_thumbnail_key
+    if preview_status is not None and existing.preview_status not in (
+        "verified",
+        "phi_detected",
+    ):
+        # FR-INGEST-1 idempotency: never downgrade a manually-verified row.
+        existing.preview_status = preview_status
+
+    if existing.patient_pseudo_pk is None and pseudo_patient_key:
+        pp = session.scalar(
+            select(PatientPseudo).where(
+                PatientPseudo.hospital_pk == hospital.hospital_pk,
+                PatientPseudo.pseudo_patient_key == pseudo_patient_key,
+            )
+        )
+        if pp is None:
+            pp = PatientPseudo(
+                hospital_pk=hospital.hospital_pk,
+                pseudo_patient_key=pseudo_patient_key,
+                sex=patient_sex,
+                age_bucket=patient_age_bucket,
+            )
+            session.add(pp)
+            session.flush()
+        existing.patient_pseudo_pk = pp.patient_pseudo_pk
+    elif existing.patient_pseudo_pk is not None:
+        pp = session.get(PatientPseudo, existing.patient_pseudo_pk)
+        if pp is not None:
+            if patient_sex is not None and pp.sex is None:
+                pp.sex = patient_sex
+            if patient_age_bucket is not None and pp.age_bucket is None:
+                pp.age_bucket = patient_age_bucket
+    session.flush()
+    return existing
 
 
 def insert_study_metadata_only(

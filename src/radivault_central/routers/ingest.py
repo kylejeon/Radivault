@@ -1,12 +1,23 @@
-"""``POST /v1/ingest/studies`` router (dev-spec §4.1, §8.1)."""
+"""``POST /v1/ingest/studies`` router (dev-spec §4.1, §8.1).
+
+metadata-thumbnail-ingest FR-INGEST-1 — v2 manifest persistence:
+- study row is populated with body_part / manufacturer / model_name /
+  study_date_shifted (from manifest v2 root fields).
+- patient_pseudo row is populated with sex / age_bucket so the search
+  facets aggregator can group on them.
+- thumbnail (base64 in manifest.thumbnail.data_b64) is written to MinIO
+  as ``radivault-preview/thumbnails/{pseudo_study_uid}.jpg`` and the
+  preview_status is bumped to ``auto_verified`` when phi_scrub_status="passed".
+"""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Request
 from ulid import ULID
@@ -54,6 +65,38 @@ def _peek_gateway_id(raw_manifest: bytes | None) -> str | None:
     if isinstance(val, str) and val:
         return val[:64]
     return None
+
+
+def _age_bucket_to_int(label: str | None) -> int | None:
+    """metadata-thumbnail-ingest FR-INGEST-1: convert "30-34" / "90+" to int.
+
+    The patient_pseudo.age_bucket column is SmallInteger storing the lower
+    bound of the bucket (30 for "30-34", 90 for "90+"). The search facets
+    aggregator stringifies it back via str(value).
+    """
+    if not label:
+        return None
+    label = label.strip()
+    if label.endswith("+"):
+        try:
+            return int(label[:-1])
+        except ValueError:
+            return None
+    if "-" in label:
+        try:
+            return int(label.split("-", 1)[0])
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_iso_date(val: str | None):
+    if not val:
+        return None
+    try:
+        return date.fromisoformat(val)
+    except (TypeError, ValueError):
+        return None
 
 
 def _peek_pseudo_study_uid(raw_manifest: bytes | None) -> str | None:
@@ -202,27 +245,163 @@ async def post_ingest(request: Request) -> dict:
         INGEST_REQUESTS.labels(hospital_id=hospital_id, status="rejected").inc()
         raise StorageWriteError(detail=str(exc)) from exc
 
+    # metadata-thumbnail-ingest FR-INGEST-1: read v2 manifest fields (all
+    # Optional — v1 manifests pass the same shape with all None values).
+    v2_body_part = getattr(manifest, "body_part_examined", None)
+    v2_manufacturer = getattr(manifest, "manufacturer", None)
+    v2_model = getattr(manifest, "manufacturer_model_name", None)
+    v2_sex = getattr(manifest, "patient_sex", None)
+    v2_age_bucket_label = getattr(manifest, "patient_age_bucket", None)
+    v2_age_bucket = _age_bucket_to_int(v2_age_bucket_label)
+    v2_study_date = _parse_iso_date(getattr(manifest, "study_date_shifted", None))
+    v2_thumbnail = getattr(manifest, "thumbnail", None)
+    v2_series = list(getattr(manifest, "series", []) or [])
+    # Stable per-study patient pseudo key: hash(pseudo_study_uid). We don't
+    # have a real cross-study pseudo_patient_id over the wire (v0.1.5 work),
+    # so per-study keys are good enough to populate the patient_pseudo row
+    # so facets can group on sex/age. Studies of the same patient will create
+    # distinct rows for now — that's OK for facet count cardinality.
+    v2_patient_key = (
+        hashlib.sha256(manifest.pseudo_study_uid.encode("utf-8")).hexdigest()[:32]
+        if (v2_sex is not None or v2_age_bucket is not None)
+        else None
+    )
+
+    # Optional thumbnail upload (FR-INGEST-2). MinIO PUT failures must NOT
+    # fail the whole ingest — just log and skip the thumbnail (graceful
+    # degradation NFR-AVAIL-1).
+    preview_status: str | None = None
+    preview_thumbnail_key: str | None = None
+    if v2_thumbnail is not None:
+        scrub = getattr(v2_thumbnail, "phi_scrub_status", "skipped_unknown")
+        if scrub == "passed":
+            try:
+                jpeg_bytes = base64.b64decode(getattr(v2_thumbnail, "data_b64", "") or "")
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "thumbnail_b64_decode_fail",
+                    extra={"event": "ingest.thumbnail.error", "error": str(exc)[:200]},
+                )
+                jpeg_bytes = b""
+            if jpeg_bytes:
+                thumb_key = f"thumbnails/{manifest.pseudo_study_uid}.jpg"
+                try:
+                    thumbnail_store = getattr(
+                        request.app.state, "preview_object_store", None
+                    )
+                    target_store = thumbnail_store or store
+                    target_store.put_object(
+                        thumb_key, jpeg_bytes, content_type="image/jpeg"
+                    )
+                    preview_thumbnail_key = thumb_key
+                    preview_status = "auto_verified"
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "thumbnail_put_fail",
+                        extra={
+                            "event": "ingest.thumbnail.error",
+                            "error": str(exc)[:200],
+                        },
+                    )
+        elif scrub == "skipped_burned_in":
+            preview_status = "not_applicable"
+
     # DB commit.
     with session_factory() as session:
         hospital = get_hospital_by_pk(session, hospital_pk)
         assert hospital is not None
-        series_entry = {
-            "pseudo_series_uid": manifest.pseudo_study_uid + ".1",
-            "modality": manifest.primary_modality(),
-            "body_part": None,
-            "series_number": 1,
-            "instances": [
+        # Build series entries — prefer v2 manifest series array when present,
+        # otherwise fall back to the v1 single-series synthesis.
+        series_entries: list[dict] = []
+        if v2_series:
+            # Distribute uploaded files across v2 series by index.
+            file_iter = iter(range(len(manifest.files)))
+            for s_idx, s in enumerate(v2_series):
+                pseudo_series_uid = (
+                    getattr(s, "pseudo_series_uid", None)
+                    or f"{manifest.pseudo_study_uid}.{s_idx + 1}"
+                )
+                modality = getattr(s, "modality", None) or manifest.primary_modality()
+                body_part = getattr(s, "body_part", None) or v2_body_part
+                n_for_series = int(getattr(s, "n_instances", 0) or 0)
+                instances = []
+                for _ in range(n_for_series):
+                    try:
+                        i = next(file_iter)
+                    except StopIteration:
+                        break
+                    instances.append(
+                        {
+                            "pseudo_sop_uid": (
+                                manifest.pseudo_study_uid + f".{s_idx + 1}.{len(instances) + 1}"
+                            ),
+                            "sop_class_uid": None,
+                            "instance_number": len(instances) + 1,
+                            "object_key": uploaded_keys[i],
+                            "bytes": manifest.files[i].bytes,
+                            "sha256": bytes.fromhex(manifest.files[i].sha256),
+                        }
+                    )
+                series_entries.append(
+                    {
+                        "pseudo_series_uid": pseudo_series_uid,
+                        "modality": modality,
+                        "body_part": body_part,
+                        "series_number": s_idx + 1,
+                        "instances": instances,
+                    }
+                )
+            # Any leftover files (manifest series counts misaligned) → trailing series.
+            leftover = list(file_iter)
+            if leftover:
+                series_entries.append(
+                    {
+                        "pseudo_series_uid": (
+                            manifest.pseudo_study_uid + f".{len(series_entries) + 1}"
+                        ),
+                        "modality": manifest.primary_modality(),
+                        "body_part": v2_body_part,
+                        "series_number": len(series_entries) + 1,
+                        "instances": [
+                            {
+                                "pseudo_sop_uid": (
+                                    manifest.pseudo_study_uid
+                                    + f".{len(series_entries) + 1}.{n + 1}"
+                                ),
+                                "sop_class_uid": None,
+                                "instance_number": n + 1,
+                                "object_key": uploaded_keys[i],
+                                "bytes": manifest.files[i].bytes,
+                                "sha256": bytes.fromhex(manifest.files[i].sha256),
+                            }
+                            for n, i in enumerate(leftover)
+                        ],
+                    }
+                )
+        else:
+            series_entries = [
                 {
-                    "pseudo_sop_uid": manifest.pseudo_study_uid + f".1.{i + 1}",
-                    "sop_class_uid": None,
-                    "instance_number": i + 1,
-                    "object_key": uploaded_keys[i],
-                    "bytes": manifest.files[i].bytes,
-                    "sha256": bytes.fromhex(manifest.files[i].sha256),
+                    "pseudo_series_uid": manifest.pseudo_study_uid + ".1",
+                    "modality": manifest.primary_modality(),
+                    "body_part": v2_body_part,
+                    "series_number": 1,
+                    "instances": [
+                        {
+                            "pseudo_sop_uid": manifest.pseudo_study_uid + f".1.{i + 1}",
+                            "sop_class_uid": None,
+                            "instance_number": i + 1,
+                            "object_key": uploaded_keys[i],
+                            "bytes": manifest.files[i].bytes,
+                            "sha256": bytes.fromhex(manifest.files[i].sha256),
+                        }
+                        for i in range(len(manifest.files))
+                    ],
                 }
-                for i in range(len(manifest.files))
-            ],
-        }
+            ]
+
+        n_series = (
+            int(getattr(manifest, "n_series", None) or len(series_entries) or 1)
+        )
         insert_study_full(
             session,
             hospital=hospital,
@@ -230,14 +409,28 @@ async def post_ingest(request: Request) -> dict:
             gateway_id=manifest.gateway_id,
             central_job_id=central_job_id,
             n_instances=manifest.n_instances,
-            n_series=1,
+            n_series=n_series,
             total_bytes=manifest.total_bytes,
             modality=manifest.primary_modality(),
-            body_part=None,
-            manufacturer=None,
-            model_name=None,
-            pseudo_patient_key=None,
-            series_entries=[series_entry],
+            body_part=v2_body_part,
+            manufacturer=v2_manufacturer,
+            model_name=v2_model,
+            pseudo_patient_key=v2_patient_key,
+            series_entries=series_entries,
+            study_date_shifted=v2_study_date,
+            patient_sex=v2_sex,
+            patient_age_bucket=v2_age_bucket,
+            preview_status=preview_status,
+            preview_thumbnail_key=preview_thumbnail_key,
+            raw_dicom_tags={
+                "manifest_version": manifest.manifest_version,
+                "deid_codes": list(manifest.deid.method_code_sequence),
+                "thumbnail_phi_scrub_status": (
+                    getattr(v2_thumbnail, "phi_scrub_status", None)
+                    if v2_thumbnail is not None
+                    else None
+                ),
+            },
         )
         duration_ms = int((time.time() - started) * 1000)
         record_ingest_event(
