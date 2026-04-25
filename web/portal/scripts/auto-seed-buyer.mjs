@@ -185,6 +185,30 @@ async function runOrchestrator(extraArgs) {
     log("skipped (BUYER_AUTH_DEMO_SEED=false).");
   }
 
+  // D-13 BLOCKER fix — INTERNAL_SEARCH_KEY check. v0.2 (email/password)
+  // sessions have no apiKey on the cookie, so every BFF call to search /
+  // fulfillment falls through to the system key. If the operator forgot
+  // to seed it, /search renders 401 and the demo dies silently.
+  if (!process.env.INTERNAL_SEARCH_KEY) {
+    warn(
+      "INTERNAL_SEARCH_KEY is not set in .env.local — v0.2 (email/password) " +
+        "BFF calls will fail with 401 ERR_AUTH_EXPIRED detail=no_internal_key.",
+    );
+    warn("To enable v0.2 session BFF, run:");
+    warn(
+      "  docker exec radivault-search-1 search-admin buyer create " +
+        "--buyer-id buy_portal_internal --company 'RadiVault Portal Internal' " +
+        "--contact-email portal-internal@radivault.local --tier paid --json",
+    );
+    warn(
+      "  docker exec radivault-search-1 search-admin key issue " +
+        "--buyer-id buy_portal_internal --tier paid --expires-days 365 --json",
+    );
+    warn(
+      "Then append the rv_live_* plaintext to web/portal/.env.local as INTERNAL_SEARCH_KEY=… and restart `pnpm dev`.",
+    );
+  }
+
   const nextBin = join(__dirname, "..", "node_modules", ".bin", "next");
   const child = spawn(nextBin, ["dev", "-p", String(PORT), ...extraArgs], {
     stdio: "inherit",

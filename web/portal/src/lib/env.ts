@@ -56,6 +56,27 @@ export const env = {
   get hospitalUpstreamBearer() {
     return optional("HOSPITAL_UPSTREAM_BEARER");
   },
+  // ---- INTERNAL_SEARCH_KEY (D-13 BLOCKER fix; dev-spec-buyer-auth Q15) -----
+  // Portal SSR holds a long-lived rv_live_* search key issued for the
+  // system buyer "buy_portal_internal". It's used by every BFF route that
+  // proxies to the search/fulfillment services on behalf of a v0.2
+  // (email/password) session — those sessions intentionally have no
+  // ``apiKey`` on the cookie (the plaintext is shown ONCE in the signup
+  // reveal modal and never re-stored client-side).
+  //
+  // Failure semantics (intentional):
+  //   - returns "" when ENV is missing → bearerForBuyer() flips to
+  //     {ok:false, reason:"no_internal_key"} so the BFF returns a clean
+  //     401 ERR_AUTH_EXPIRED with a specific detail.
+  //   - we deliberately do NOT throw at module-import time: a misconfigured
+  //     deploy must still produce a working /signin page so the operator
+  //     can read the error in the response body.
+  //   - in production, the operator MUST set this — see
+  //     web/portal/scripts/auto-seed-buyer.mjs which prints a WARN at
+  //     dev-server boot when the var is missing.
+  get internalSearchKey() {
+    return optional("INTERNAL_SEARCH_KEY", "");
+  },
   get nodeEnv() {
     return optional("NODE_ENV", "development");
   },
