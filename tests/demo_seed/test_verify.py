@@ -121,13 +121,44 @@ def _build_http_handler(routes: dict):
 
 def test_v2_pass(verify_mod):
     Session = _mk_in_memory_session()
+    # New SearchResponse shape exposes the hit count via total_count
+    # (preferred) or meta.total_hint. Legacy `total` fallback also kept.
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200, json={"total_count": 412, "meta": {"total_hint": 412}, "items": []}
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes), min_studies=300)
+    r = verify_mod.check_v2_search_total(ctx)
+    assert r.ok
+    assert "412" in r.detail
+
+
+def test_v2_pass_with_meta_total_hint_only(verify_mod):
+    """`total_count` may be absent on truncated responses — meta.total_hint
+    must still be honoured."""
+    Session = _mk_in_memory_session()
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200, json={"meta": {"total_hint": 350}, "items": []}
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes), min_studies=300)
+    r = verify_mod.check_v2_search_total(ctx)
+    assert r.ok
+    assert "350" in r.detail
+
+
+def test_v2_legacy_total_field_still_supported(verify_mod):
+    """Drift safety net — old contract used a plain `total` field; the
+    fallback chain keeps existing fixtures in callers green."""
+    Session = _mk_in_memory_session()
     routes = {
         ("POST", "/v1/search/studies"): httpx.Response(200, json={"total": 412, "items": []}),
     }
     ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes), min_studies=300)
     r = verify_mod.check_v2_search_total(ctx)
     assert r.ok
-    assert "412" in r.detail
 
 
 def test_v2_fail_on_http_error(verify_mod):
@@ -142,9 +173,21 @@ def test_v2_fail_on_http_error(verify_mod):
 
 def test_v3_modality_facet_pass(verify_mod):
     Session = _mk_in_memory_session()
+    # FR-INF-3 reroutes V-3 onto POST /v1/search/studies?include_facets=true.
+    # Facets live under `facets.modality` (list[FacetValue]) per schema.py.
     routes = {
-        ("GET", "/v1/search/facets"): httpx.Response(
-            200, json={"modality": [{"value": "CT", "count": 100}, {"value": "MR", "count": 50}, {"value": "MG", "count": 20}]}
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200,
+            json={
+                "items": [],
+                "facets": {
+                    "modality": [
+                        {"value": "CT", "count": 100},
+                        {"value": "MR", "count": 50},
+                        {"value": "MG", "count": 20},
+                    ]
+                },
+            },
         ),
     }
     ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes), min_modalities=3)
@@ -155,11 +198,27 @@ def test_v3_modality_facet_pass(verify_mod):
 def test_v3_modality_facet_fail(verify_mod):
     Session = _mk_in_memory_session()
     routes = {
-        ("GET", "/v1/search/facets"): httpx.Response(200, json={"modality": [{"value": "CT", "count": 1}]}),
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200,
+            json={"items": [], "facets": {"modality": [{"value": "CT", "count": 1}]}},
+        ),
     }
     ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes), min_modalities=3)
     r = verify_mod.check_v3_modality_facet(ctx)
     assert not r.ok
+
+
+def test_v3_handles_empty_facets_block(verify_mod):
+    """Defensive: if `facets` is missing entirely (e.g. include_facets=false
+    upstream), V-3 must report 0 rather than crash."""
+    Session = _mk_in_memory_session()
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(200, json={"items": []}),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes), min_modalities=3)
+    r = verify_mod.check_v3_modality_facet(ctx)
+    assert not r.ok
+    assert "0" in r.detail
 
 
 def test_v7_buyer_search_pass(verify_mod):
@@ -300,6 +359,71 @@ def test_v6_phi_leak_detected(verify_mod):
     r = verify_mod.check_v6_phi_sampling(_ctx(verify_mod, Session))
     assert not r.ok
     assert "PatientName" in r.detail or "PHI suspects" in r.detail
+
+
+# ---------------------------------------------------------------------------
+# V-9 — federated min_hospitals filter (FR-INF-4)
+# ---------------------------------------------------------------------------
+
+
+def test_v9_min_hospitals_pass_with_items(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200,
+            json={
+                "items": [{"pseudo_study_uid": "2.25.x", "modality": "CT"}],
+                "total_count": 12,
+            },
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v9_min_hospitals_filter(ctx)
+    assert r.ok
+    assert "items=1" in r.detail
+
+
+def test_v9_min_hospitals_pass_with_total_only(verify_mod):
+    """Items may be empty when limit=1 but total_count>0 still proves the
+    federated SQL path runs."""
+    Session = _mk_in_memory_session()
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200, json={"items": [], "total_count": 7}
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v9_min_hospitals_filter(ctx)
+    assert r.ok
+
+
+def test_v9_min_hospitals_fail_when_zero(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(
+            200, json={"items": [], "total_count": 0}
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v9_min_hospitals_filter(ctx)
+    assert not r.ok
+
+
+def test_v9_min_hospitals_fail_without_key(verify_mod):
+    Session = _mk_in_memory_session()
+    ctx = _ctx(verify_mod, Session, buyer_api_key=None)
+    r = verify_mod.check_v9_min_hospitals_filter(ctx)
+    assert not r.ok
+
+
+def test_v9_min_hospitals_fail_on_non_200(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {
+        ("POST", "/v1/search/studies"): httpx.Response(403, json={"error": "forbidden"}),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v9_min_hospitals_filter(ctx)
+    assert not r.ok
 
 
 # ---------------------------------------------------------------------------

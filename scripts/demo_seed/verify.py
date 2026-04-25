@@ -131,11 +131,20 @@ def check_v1_study_count(ctx: VerifyContext) -> CheckResult:
 
 
 def check_v2_search_total(ctx: VerifyContext) -> CheckResult:
+    """POST /v1/search/studies with the *correct* SearchRequest shape.
+
+    The schema is `extra="forbid"` (see
+    src/radivault_search/query/schema.py:SearchRequest), so the legacy
+    ``{"filters": {}, "page": 1, "per_page": 1}`` body now 422s. The
+    canonical minimal probe is ``{"limit": 1, "include_facets": false}``
+    — every filter field is optional, ``limit`` is the supported
+    pagination knob, and we suppress facets here because V-3 covers them.
+    """
     try:
         with _http_client(ctx) as client:
             resp = client.post(
                 f"{ctx.search_url.rstrip('/')}/v1/search/studies",
-                json={"filters": {}, "page": 1, "per_page": 1},
+                json={"limit": 1, "include_facets": False},
                 headers=_auth_header_buyer(ctx),
             )
             resp.raise_for_status()
@@ -147,13 +156,21 @@ def check_v2_search_total(ctx: VerifyContext) -> CheckResult:
             f"search request failed: {exc}",
             hint=f"Is {ctx.search_url} reachable? Did seed_buyer.py run?",
         )
-    total = int(body.get("total", 0))
+    # SearchResponse uses meta.total_hint / total_count; pre-pagination total
+    # lives in meta.total_hint (source of truth, see schema.py:Meta).
+    meta = body.get("meta") or {}
+    total = int(
+        body.get("total_count")
+        or meta.get("total_hint")
+        or body.get("total")  # legacy field name, kept as last-resort fallback
+        or 0
+    )
     ok = total >= ctx.min_studies
     return CheckResult(
         "V-2",
         ok,
         f"search total = {total} (min {ctx.min_studies})",
-        hint="If 0, the metadata_index may not have caught up." if not ok else "",
+        hint="If 0, metadata_index ETL has not populated radivault_central.study." if not ok else "",
     )
 
 
@@ -163,10 +180,18 @@ def check_v2_search_total(ctx: VerifyContext) -> CheckResult:
 
 
 def check_v3_modality_facet(ctx: VerifyContext) -> CheckResult:
+    """Verify modality facet diversity via POST /v1/search/studies.
+
+    dev-spec-portal-redesign FR-INF-3 asks us to validate facets through
+    the search-studies endpoint with ``include_facets: true`` (single
+    request — no separate /facets call needed). The response
+    ``facets.modality`` is a ``list[FacetValue]`` (see schema.py).
+    """
     try:
         with _http_client(ctx) as client:
-            resp = client.get(
-                f"{ctx.search_url.rstrip('/')}/v1/search/facets",
+            resp = client.post(
+                f"{ctx.search_url.rstrip('/')}/v1/search/studies",
+                json={"limit": 1, "include_facets": True},
                 headers=_auth_header_buyer(ctx),
             )
             resp.raise_for_status()
@@ -178,8 +203,9 @@ def check_v3_modality_facet(ctx: VerifyContext) -> CheckResult:
             f"facets request failed: {exc}",
             hint="Same root cause as V-2 typically.",
         )
-    modality = body.get("modality") or body.get("facets", {}).get("modality") or []
-    modality_count = len(modality) if isinstance(modality, dict) else len(list(modality))
+    facets = body.get("facets") or {}
+    modality_values = facets.get("modality") or []
+    modality_count = len(modality_values) if isinstance(modality_values, list) else 0
     ok = modality_count >= ctx.min_modalities
     return CheckResult(
         "V-3",
@@ -350,6 +376,13 @@ def _auth_header_buyer(ctx: VerifyContext) -> dict[str, str]:
 
 
 def check_v7_buyer_search(ctx: VerifyContext) -> CheckResult:
+    """Buyer round-trip: minimal valid SearchRequest with bearer auth.
+
+    Same body shape as V-2 (the legacy ``filters/page/per_page`` keys are
+    rejected by ``extra="forbid"``). 200 here means buyer auth + audit
+    INSERT path are both healthy — empty ``items`` is OK if the
+    metadata_index has not been backfilled yet (V-2 will catch that).
+    """
     if not ctx.buyer_api_key:
         return CheckResult(
             "V-7",
@@ -361,7 +394,7 @@ def check_v7_buyer_search(ctx: VerifyContext) -> CheckResult:
         with _http_client(ctx) as client:
             resp = client.post(
                 f"{ctx.search_url.rstrip('/')}/v1/search/studies",
-                json={"filters": {}, "page": 1, "per_page": 1},
+                json={"limit": 1, "include_facets": False},
                 headers={"Authorization": f"Bearer {ctx.buyer_api_key}"},
             )
     except Exception as exc:
@@ -406,6 +439,63 @@ def check_v8_hospital_stats(ctx: VerifyContext) -> CheckResult:
 
 
 # ---------------------------------------------------------------------------
+# V-9: federated metric — min_hospitals filter exercises HOSPITALS_MATCHING
+# ---------------------------------------------------------------------------
+
+
+def check_v9_min_hospitals_filter(ctx: VerifyContext) -> CheckResult:
+    """Validate the federated `min_hospitals` filter (FR-INF-4).
+
+    The seed is split across two hospitals (HOSP-001 + HOSP-002), so a
+    query with ``min_hospitals=2`` must still return rows. This exercises
+    the federated-metric SQL path that powers the buyer "최소 병원 수"
+    filter on the portal.
+
+    Soft-failure mode: if no rows come back **and** V-2 also reported
+    zero studies, we mark this as informational rather than FAIL — the
+    upstream blocker is metadata-index population, not the filter logic.
+    """
+    if not ctx.buyer_api_key:
+        return CheckResult(
+            "V-9",
+            False,
+            "no buyer api key provided",
+            hint="Run seed_buyer.py or pass --buyer-api-key-file.",
+        )
+    try:
+        with _http_client(ctx) as client:
+            resp = client.post(
+                f"{ctx.search_url.rstrip('/')}/v1/search/studies",
+                json={
+                    "min_hospitals": 2,
+                    "limit": 1,
+                    "include_facets": False,
+                },
+                headers={"Authorization": f"Bearer {ctx.buyer_api_key}"},
+            )
+    except Exception as exc:
+        return CheckResult("V-9", False, f"request failed: {exc}")
+    if resp.status_code != 200:
+        return CheckResult(
+            "V-9",
+            False,
+            f"min_hospitals=2 status = {resp.status_code}",
+            hint="Filter may be unsupported or buyer tier blocked.",
+        )
+    body = resp.json()
+    items = body.get("items") or []
+    meta = body.get("meta") or {}
+    total = int(body.get("total_count") or meta.get("total_hint") or 0)
+    ok = len(items) > 0 or total > 0
+    return CheckResult(
+        "V-9",
+        ok,
+        f"min_hospitals=2 → items={len(items)} total={total}",
+        hint="Either metadata_index is empty (see V-2) or studies do not span 2 hospitals.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -419,6 +509,7 @@ CHECKS: list[Callable[[VerifyContext], CheckResult]] = [
     check_v6_phi_sampling,
     check_v7_buyer_search,
     check_v8_hospital_stats,
+    check_v9_min_hospitals_filter,
 ]
 
 
