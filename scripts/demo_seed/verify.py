@@ -1,6 +1,12 @@
-"""Seed-pipeline verification checklist V-1..V-8 (dev-spec §8.5 / FR-S-11).
+"""Seed-pipeline verification checklist V-1..V-12.
 
-Runs 8 independent checks and emits a human-readable PASS/FAIL report.
+V-1..V-8 originate in dev-spec §8.5 / FR-S-11 (tcia-seed feature).
+V-9 (federated) was added with the portal-redesign FR-INF-3 work.
+V-11 / V-12 are the portal-redesign FR-INF-6 / FR-INF-7 hospital
+audit-chain-status + quota checks (HIGH-3 fix from
+qa-report-portal-redesign). V-10 in dev-spec is reserved.
+
+Runs the registered checks and emits a human-readable PASS/FAIL report.
 
 * All PASS → writes ``demo_seed_ready.lock`` next to this script and exits 0.
 * Any FAIL → prints a hint per failed check and exits 1.
@@ -12,8 +18,9 @@ Having them return structured results makes unit-testing trivial — we only
 need to mock the two external surfaces the checkers touch:
 
 * central DB   — SQLAlchemy session (V-1 / V-4 / V-6)
-* search API   — HTTP request  (V-2 / V-3 / V-7)
-* subprocess   — ``ingest-admin`` / ``curl`` (V-5 / V-8)
+* search API   — HTTP request  (V-2 / V-3 / V-7 / V-9)
+* central API  — HTTP request  (V-8 / V-11 / V-12)
+* subprocess   — ``ingest-admin`` / ``curl`` (V-5)
 """
 
 from __future__ import annotations
@@ -496,6 +503,168 @@ def check_v9_min_hospitals_filter(ctx: VerifyContext) -> CheckResult:
 
 
 # ---------------------------------------------------------------------------
+# V-11: hospital audit-chain status — central FR-INF-6
+# ---------------------------------------------------------------------------
+
+
+_AUDIT_CHAIN_REQUIRED_FIELDS = {
+    "last_anchor_at",
+    "hash_prefix",
+    "chain_continuous",
+}
+
+
+def check_v11_audit_chain_status(ctx: VerifyContext) -> CheckResult:
+    """V-11 (dev-spec-portal-redesign §10.2): GET audit-chain-status returns
+    200 + the 3 portal-required fields.
+
+    Strategy: hit central directly with the hospital bearer (same surface
+    portal BFF proxies). Central's portal-shape uses
+    ``last_anchor_hash_prefix``; the BFF rewrites it to ``hash_prefix``,
+    so we accept either name. If central has not shipped the route yet
+    (404 / connection refused) we record a graceful FAIL with a hint
+    pointing at the missing FR-INF-6 work.
+    """
+    if not ctx.hospital_bearer:
+        return CheckResult(
+            "V-11",
+            False,
+            "no hospital bearer provided",
+            hint="Set HOSPITAL_UPSTREAM_BEARER or pass --hospital-bearer.",
+        )
+    try:
+        with _http_client(ctx) as client:
+            resp = client.get(
+                f"{ctx.central_url.rstrip('/')}/v1/hospital/me/audit-chain-status",
+                headers={"Authorization": f"Bearer {ctx.hospital_bearer}"},
+            )
+    except Exception as exc:
+        return CheckResult(
+            "V-11",
+            False,
+            f"request failed: {exc}",
+            hint="Central upstream unreachable; check FR-INF-6 implementation.",
+        )
+    if resp.status_code == 404:
+        return CheckResult(
+            "V-11",
+            False,
+            "audit-chain-status endpoint not implemented (404)",
+            hint="central FR-INF-6 — implement /v1/hospital/me/audit-chain-status.",
+        )
+    if resp.status_code != 200:
+        return CheckResult(
+            "V-11",
+            False,
+            f"status={resp.status_code}",
+            hint="Bearer or hospital scope wrong.",
+        )
+    try:
+        body = resp.json()
+    except Exception as exc:
+        return CheckResult("V-11", False, f"non-JSON body: {exc}")
+    keys = set(body.keys())
+    # Accept either the upstream field name or the BFF-rewritten one.
+    if "last_anchor_hash_prefix" in keys and "hash_prefix" not in keys:
+        keys.add("hash_prefix")
+    missing = _AUDIT_CHAIN_REQUIRED_FIELDS - keys
+    if missing:
+        return CheckResult(
+            "V-11",
+            False,
+            f"missing required fields: {sorted(missing)}",
+            hint="Schema drift vs dev-spec FR-INF-6.",
+        )
+    chain_ok = bool(body.get("chain_continuous"))
+    return CheckResult(
+        "V-11",
+        True,
+        f"audit-chain-status OK (chain_continuous={chain_ok})",
+    )
+
+
+# ---------------------------------------------------------------------------
+# V-12: hospital quota — central FR-INF-7
+# ---------------------------------------------------------------------------
+
+
+def check_v12_quota(ctx: VerifyContext) -> CheckResult:
+    """V-12 (dev-spec-portal-redesign §10.2): GET /v1/hospital/me/quota
+    returns 200 with the 5 portal-required fields.
+
+    The central upstream shape nests bytes under ``daily.bytes_used`` etc;
+    the BFF flattens. Accept either nesting so this checker tolerates
+    BFF-direct or central-direct calls.
+    """
+    if not ctx.hospital_bearer:
+        return CheckResult(
+            "V-12",
+            False,
+            "no hospital bearer provided",
+            hint="Set HOSPITAL_UPSTREAM_BEARER or pass --hospital-bearer.",
+        )
+    try:
+        with _http_client(ctx) as client:
+            resp = client.get(
+                f"{ctx.central_url.rstrip('/')}/v1/hospital/me/quota",
+                headers={"Authorization": f"Bearer {ctx.hospital_bearer}"},
+            )
+    except Exception as exc:
+        return CheckResult(
+            "V-12",
+            False,
+            f"request failed: {exc}",
+            hint="Central upstream unreachable; check FR-INF-7 implementation.",
+        )
+    if resp.status_code == 404:
+        return CheckResult(
+            "V-12",
+            False,
+            "quota endpoint not implemented (404)",
+            hint="central FR-INF-7 — implement /v1/hospital/me/quota.",
+        )
+    if resp.status_code != 200:
+        return CheckResult(
+            "V-12",
+            False,
+            f"status={resp.status_code}",
+            hint="Bearer or hospital scope wrong.",
+        )
+    try:
+        body = resp.json()
+    except Exception as exc:
+        return CheckResult("V-12", False, f"non-JSON body: {exc}")
+
+    daily = body.get("daily") if isinstance(body.get("daily"), dict) else {}
+    monthly = body.get("monthly") if isinstance(body.get("monthly"), dict) else {}
+
+    def _has(name: str) -> bool:
+        return name in body or name in daily or name in monthly
+
+    required = [
+        ("daily_bytes_used", _has("bytes_used") or "daily_bytes_used" in body),
+        ("daily_bytes_limit", _has("bytes_limit") or "daily_bytes_limit" in body),
+        ("monthly_bytes_used", _has("bytes_used") or "monthly_bytes_used" in body),
+        ("monthly_bytes_limit", _has("bytes_limit") or "monthly_bytes_limit" in body),
+        ("max_concurrent_uploads", "max_concurrent_uploads" in body),
+    ]
+    missing = [name for name, ok in required if not ok]
+    if missing:
+        return CheckResult(
+            "V-12",
+            False,
+            f"missing required fields: {missing}",
+            hint="Schema drift vs dev-spec FR-INF-7.",
+        )
+    max_conc = body.get("max_concurrent_uploads")
+    return CheckResult(
+        "V-12",
+        True,
+        f"quota OK (max_concurrent_uploads={max_conc})",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -510,6 +679,8 @@ CHECKS: list[Callable[[VerifyContext], CheckResult]] = [
     check_v7_buyer_search,
     check_v8_hospital_stats,
     check_v9_min_hospitals_filter,
+    check_v11_audit_chain_status,
+    check_v12_quota,
 ]
 
 
@@ -563,7 +734,9 @@ def _read_optional_file(path: Path | None) -> str | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Demo-seed verification (V-1..V-8)")
+    parser = argparse.ArgumentParser(
+        description="Demo-seed verification (V-1..V-12, dev-spec FR-INF-3/6/7)",
+    )
     parser.add_argument(
         "--central-dsn",
         default=os.environ.get(

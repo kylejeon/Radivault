@@ -427,6 +427,168 @@ def test_v9_min_hospitals_fail_on_non_200(verify_mod):
 
 
 # ---------------------------------------------------------------------------
+# V-11 — hospital audit-chain status (FR-INF-6, HIGH-3 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_v11_audit_chain_status_pass(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {
+        ("GET", "/v1/hospital/me/audit-chain-status"): httpx.Response(
+            200,
+            json={
+                "hospital_id": "HOSP-001",
+                "last_anchor_at": "2026-04-25T10:00:00Z",
+                "hash_prefix": "a3f8d9c1b2e4f5a6",
+                "chain_continuous": True,
+            },
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v11_audit_chain_status(ctx)
+    assert r.ok
+    assert "chain_continuous=True" in r.detail
+
+
+def test_v11_accepts_upstream_field_name(verify_mod):
+    """Central uses ``last_anchor_hash_prefix``; the BFF rewrites to
+    ``hash_prefix``. V-11 must accept either."""
+    Session = _mk_in_memory_session()
+    routes = {
+        ("GET", "/v1/hospital/me/audit-chain-status"): httpx.Response(
+            200,
+            json={
+                "hospital_id": "HOSP-001",
+                "last_anchor_at": "2026-04-25T10:00:00Z",
+                "last_anchor_hash_prefix": "a3f8d9c1b2e4f5a6",
+                "chain_continuous": True,
+            },
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v11_audit_chain_status(ctx)
+    assert r.ok
+
+
+def test_v11_fail_on_404_endpoint_missing(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {("GET", "/v1/hospital/me/audit-chain-status"): httpx.Response(404)}
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v11_audit_chain_status(ctx)
+    assert not r.ok
+    assert "not implemented" in r.detail
+
+
+def test_v11_fail_on_missing_required_fields(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {
+        ("GET", "/v1/hospital/me/audit-chain-status"): httpx.Response(
+            200, json={"hospital_id": "HOSP-001"}
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v11_audit_chain_status(ctx)
+    assert not r.ok
+    assert "missing required fields" in r.detail
+
+
+def test_v11_fail_without_bearer(verify_mod):
+    Session = _mk_in_memory_session()
+    ctx = _ctx(verify_mod, Session, hospital_bearer=None)
+    r = verify_mod.check_v11_audit_chain_status(ctx)
+    assert not r.ok
+    assert "no hospital bearer" in r.detail
+
+
+# ---------------------------------------------------------------------------
+# V-12 — hospital quota (FR-INF-7, HIGH-3 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_v12_quota_pass_central_shape(verify_mod):
+    """Central nests bytes under daily/monthly. V-12 unwraps both."""
+    Session = _mk_in_memory_session()
+    routes = {
+        ("GET", "/v1/hospital/me/quota"): httpx.Response(
+            200,
+            json={
+                "hospital_id": "HOSP-001",
+                "daily": {
+                    "bytes_used": 100,
+                    "bytes_limit": 10_000,
+                    "resets_at": "2026-04-26T15:00:00Z",
+                },
+                "monthly": {
+                    "bytes_used": 1_000,
+                    "bytes_limit": 300_000,
+                    "resets_at": "2026-05-01T15:00:00Z",
+                },
+                "max_concurrent_uploads": 4,
+            },
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v12_quota(ctx)
+    assert r.ok
+    assert "max_concurrent_uploads=4" in r.detail
+
+
+def test_v12_quota_pass_flat_shape(verify_mod):
+    """BFF flattens to top-level *_bytes_used keys; both shapes must pass."""
+    Session = _mk_in_memory_session()
+    routes = {
+        ("GET", "/v1/hospital/me/quota"): httpx.Response(
+            200,
+            json={
+                "hospital_id": "HOSP-001",
+                "daily_bytes_used": 100,
+                "daily_bytes_limit": 10_000,
+                "monthly_bytes_used": 1_000,
+                "monthly_bytes_limit": 300_000,
+                "max_concurrent_uploads": 4,
+            },
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v12_quota(ctx)
+    assert r.ok
+
+
+def test_v12_fail_on_404(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {("GET", "/v1/hospital/me/quota"): httpx.Response(404)}
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v12_quota(ctx)
+    assert not r.ok
+    assert "not implemented" in r.detail
+
+
+def test_v12_fail_on_missing_max_concurrent(verify_mod):
+    Session = _mk_in_memory_session()
+    routes = {
+        ("GET", "/v1/hospital/me/quota"): httpx.Response(
+            200,
+            json={
+                "hospital_id": "HOSP-001",
+                "daily": {"bytes_used": 1, "bytes_limit": 10},
+                "monthly": {"bytes_used": 1, "bytes_limit": 10},
+            },
+        ),
+    }
+    ctx = _ctx(verify_mod, Session, http_handler=_build_http_handler(routes))
+    r = verify_mod.check_v12_quota(ctx)
+    assert not r.ok
+    assert "max_concurrent_uploads" in r.detail
+
+
+def test_v12_fail_without_bearer(verify_mod):
+    Session = _mk_in_memory_session()
+    ctx = _ctx(verify_mod, Session, hospital_bearer=None)
+    r = verify_mod.check_v12_quota(ctx)
+    assert not r.ok
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
