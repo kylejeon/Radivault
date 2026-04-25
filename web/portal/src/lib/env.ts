@@ -61,7 +61,16 @@ export const env = {
   },
   // ---- buyer-auth (dev-spec-buyer-auth FR-AUTH-12) -------------------------
   get buyerAuthSkipEmailVerify() {
-    return optional("BUYER_AUTH_SKIP_EMAIL_VERIFY", "true") === "true";
+    const raw = optional("BUYER_AUTH_SKIP_EMAIL_VERIFY", "true");
+    // HIGH-1 fix (qa-report-buyer-auth): production fail-closed.
+    // Dev/demo default "true" preserved; production builds must opt out
+    // explicitly with BUYER_AUTH_SKIP_EMAIL_VERIFY=false (AC-DEMO-4).
+    if (process.env.NODE_ENV === "production" && raw !== "false") {
+      throw new Error(
+        "BUYER_AUTH_SKIP_EMAIL_VERIFY must be explicitly set to 'false' in production builds (AC-DEMO-4)",
+      );
+    }
+    return raw === "true";
   },
   get buyerAuthPwdResetDisabled() {
     return optional("BUYER_AUTH_PWD_RESET_DISABLED", "false") === "true";
