@@ -40,6 +40,7 @@ htmlcov/
 
 # Demo seed pipeline — local-only artifacts (scripts/demo_seed/)
 scripts/demo_seed/.buyer_key.local.txt
+scripts/demo_seed/.demo_buyer_auth.local.txt
 scripts/demo_seed/demo_seed_ready.lock
 scripts/demo_seed/logs/
 demo_data/
