@@ -13,6 +13,7 @@
  *   hospital, examdate, modality, bodypart, kcd, age, mfg, model, size.
  */
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { HospitalBadge } from "./HospitalBadge";
 import { ModalityDot } from "./ModalityDot";
@@ -69,6 +70,12 @@ export type ResultTableProps = {
   selected?: Set<string>;
   onToggleRow?: (uid: string) => void;
   locale?: "ko" | "en";
+  /**
+   * Subset of <ColumnToggle>'s 12 toggleable column keys to render. Always-on
+   * `hospital` is forced on regardless. `undefined` (legacy) → render all.
+   * QA HIGH-2 / BL-1 wiring.
+   */
+  visibleColumns?: string[];
 };
 
 function L(locale: "ko" | "en", ko: string, en: string): string {
@@ -87,6 +94,40 @@ function uidTail(u: string): string {
   return `…${u.slice(-4)}`;
 }
 
+// CSS grid track definitions in mockup order (must match `globals.css`
+// `.rv-result-table__row` template). Two leading fixed tracks (stripe +
+// checkbox) are always rendered; data tracks are toggled per visibleColumns.
+const TRACK_BY_COL: Record<string, string> = {
+  hospital: "96px",
+  examdate: "90px",
+  modality: "72px",
+  bodypart: "96px",
+  kcd: "minmax(140px, 1fr)",
+  sex: "32px",
+  age: "40px",
+  mfg: "96px",
+  model: "110px",
+  series: "72px",
+  size: "64px",
+  uid: "56px",
+  // trailing action column — width 64px
+};
+
+const ALL_COL_ORDER: string[] = [
+  "hospital",
+  "examdate",
+  "modality",
+  "bodypart",
+  "kcd",
+  "sex",
+  "age",
+  "mfg",
+  "model",
+  "series",
+  "size",
+  "uid",
+];
+
 export function ResultTable({
   items,
   sortKey,
@@ -95,7 +136,30 @@ export function ResultTable({
   selected,
   onToggleRow,
   locale = "en",
+  visibleColumns,
 }: ResultTableProps) {
+  // `hospital` always rendered (matches ColumnToggle "always" hint).
+  const isCol = (key: string): boolean => {
+    if (!visibleColumns) return true;
+    if (key === "hospital") return true;
+    return visibleColumns.includes(key);
+  };
+
+  // Build dynamic grid template that drops tracks for hidden columns so the
+  // table doesn't leave gap whitespace. Stripe + checkbox + (visible data
+  // columns) + trailing action.
+  const gridTemplate = useMemo(() => {
+    const tracks = ["var(--rv-col-stripe-w)", "32px"]; // stripe + check
+    for (const key of ALL_COL_ORDER) {
+      if (isCol(key)) tracks.push(TRACK_BY_COL[key]);
+    }
+    tracks.push("64px"); // action
+    return tracks.join(" ");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleColumns]);
+  const rowStyle: React.CSSProperties = visibleColumns
+    ? { gridTemplateColumns: gridTemplate }
+    : {};
   function header(key: SortKey, ko: string, en: string) {
     const isActive = sortKey === key;
     const nextDir: SortDir = isActive && sortDir === "desc" ? "asc" : "desc";
@@ -151,21 +215,25 @@ export function ResultTable({
       data-testid="v3-result-table"
       className="rv-result-table"
     >
-      <div className="rv-result-table__row rv-result-table__row--head" role="row">
+      <div
+        className="rv-result-table__row rv-result-table__row--head"
+        role="row"
+        style={rowStyle}
+      >
         <div className="rv-col-stripe" />
         <div className="rv-col rv-col-check" />
-        {header("hospital", "병원", "Hospital")}
-        {header("examdate", "촬영일", "Exam Date")}
-        {header("modality", "모달리티", "Modality")}
-        {header("bodypart", "부위", "BodyPart")}
-        {header("kcd", "KCD", "KCD")}
-        {staticHead("성별", "Sex")}
-        {header("age", "나이", "Age")}
-        {header("mfg", "제조사", "Manufacturer")}
-        {header("model", "모델", "Model")}
-        {staticHead("Sr·Inst", "Sr · Inst")}
-        {header("size", "용량", "Size")}
-        {staticHead("UID", "UID")}
+        {isCol("hospital") && header("hospital", "병원", "Hospital")}
+        {isCol("examdate") && header("examdate", "촬영일", "Exam Date")}
+        {isCol("modality") && header("modality", "모달리티", "Modality")}
+        {isCol("bodypart") && header("bodypart", "부위", "BodyPart")}
+        {isCol("kcd") && header("kcd", "KCD", "KCD")}
+        {isCol("sex") && staticHead("성별", "Sex")}
+        {isCol("age") && header("age", "나이", "Age")}
+        {isCol("mfg") && header("mfg", "제조사", "Manufacturer")}
+        {isCol("model") && header("model", "모델", "Model")}
+        {isCol("series") && staticHead("Sr·Inst", "Sr · Inst")}
+        {isCol("size") && header("size", "용량", "Size")}
+        {isCol("uid") && staticHead("UID", "UID")}
         <div className="rv-col" />
       </div>
 
@@ -179,6 +247,7 @@ export function ResultTable({
             data-testid="v3-row"
             data-uid={it.pseudo_study_uid}
             className="rv-result-table__row"
+            style={rowStyle}
           >
             <HospitalBadge regionPseudo={region} variant="dot" />
             <div className="rv-col rv-col-check">
@@ -189,51 +258,75 @@ export function ResultTable({
                 aria-label={`select study ${it.pseudo_study_uid.slice(-6)}`}
               />
             </div>
-            <div className="rv-col">
-              <HospitalBadge regionPseudo={region} />
-            </div>
-            <div className="rv-col rv-col-mono">
-              {it.study_date_shifted ?? "—"}
-            </div>
-            <div className="rv-col" style={{ display: "flex", alignItems: "center" }}>
-              <ModalityDot modality={it.modality} />
-            </div>
-            <div className="rv-col" style={{ textTransform: "uppercase", fontWeight: 500, fontSize: 12 }}>
-              {it.body_part ?? "—"}
-            </div>
-            <div className="rv-col rv-col-kcd">
-              {it.kcd_code ? (
-                <>
-                  <span className="rv-kcd-chip">{it.kcd_code}</span>
-                  <span className="rv-kcd-label">
-                    {locale === "ko" ? it.kcd_label_ko ?? "" : it.kcd_label_en ?? ""}
-                  </span>
-                </>
-              ) : (
-                <span style={{ color: "var(--rv-stone-400)" }}>—</span>
-              )}
-            </div>
-            <div className="rv-col" style={{ textAlign: "center", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5, fontWeight: 700, color: "var(--rv-navy-900)" }}>
-              {it.sex ?? "—"}
-            </div>
-            <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5, fontWeight: 600 }}>
-              {it.patient_age ?? "—"}
-            </div>
-            <div className="rv-col" style={{ textTransform: "uppercase", fontSize: 11, fontWeight: 600 }}>
-              {it.manufacturer ?? "—"}
-            </div>
-            <div className="rv-col" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>
-              {it.model_name ?? "—"}
-            </div>
-            <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5 }}>
-              <strong>{it.n_series}</strong>·{it.n_instances}
-            </div>
-            <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5 }}>
-              {fmtBytes(it.total_bytes)}
-            </div>
-            <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--rv-stone-500)" }}>
-              {uidTail(it.pseudo_study_uid)}
-            </div>
+            {isCol("hospital") && (
+              <div className="rv-col">
+                <HospitalBadge regionPseudo={region} />
+              </div>
+            )}
+            {isCol("examdate") && (
+              <div className="rv-col rv-col-mono">
+                {it.study_date_shifted ?? "—"}
+              </div>
+            )}
+            {isCol("modality") && (
+              <div className="rv-col" style={{ display: "flex", alignItems: "center" }}>
+                <ModalityDot modality={it.modality} />
+              </div>
+            )}
+            {isCol("bodypart") && (
+              <div className="rv-col" style={{ textTransform: "uppercase", fontWeight: 500, fontSize: 12 }}>
+                {it.body_part ?? "—"}
+              </div>
+            )}
+            {isCol("kcd") && (
+              <div className="rv-col rv-col-kcd">
+                {it.kcd_code ? (
+                  <>
+                    <span className="rv-kcd-chip">{it.kcd_code}</span>
+                    <span className="rv-kcd-label">
+                      {locale === "ko" ? it.kcd_label_ko ?? "" : it.kcd_label_en ?? ""}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ color: "var(--rv-stone-400)" }}>—</span>
+                )}
+              </div>
+            )}
+            {isCol("sex") && (
+              <div className="rv-col" style={{ textAlign: "center", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5, fontWeight: 700, color: "var(--rv-navy-900)" }}>
+                {it.sex ?? "—"}
+              </div>
+            )}
+            {isCol("age") && (
+              <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5, fontWeight: 600 }}>
+                {it.patient_age ?? "—"}
+              </div>
+            )}
+            {isCol("mfg") && (
+              <div className="rv-col" style={{ textTransform: "uppercase", fontSize: 11, fontWeight: 600 }}>
+                {it.manufacturer ?? "—"}
+              </div>
+            )}
+            {isCol("model") && (
+              <div className="rv-col" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>
+                {it.model_name ?? "—"}
+              </div>
+            )}
+            {isCol("series") && (
+              <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5 }}>
+                <strong>{it.n_series}</strong>·{it.n_instances}
+              </div>
+            )}
+            {isCol("size") && (
+              <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5 }}>
+                {fmtBytes(it.total_bytes)}
+              </div>
+            )}
+            {isCol("uid") && (
+              <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--rv-stone-500)" }}>
+                {uidTail(it.pseudo_study_uid)}
+              </div>
+            )}
             <div className="rv-col" style={{ display: "flex", justifyContent: "flex-end" }}>
               <Link
                 href={`/studies/${encodeURIComponent(it.pseudo_study_uid)}`}

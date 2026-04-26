@@ -22,6 +22,11 @@ import { useRouter } from "next/navigation";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { FederatedSignal } from "@/components/buyer/FederatedSignal";
 import {
+  ColumnToggle,
+  V3_COLUMN_DEFS,
+  V3_DEFAULT_VISIBLE,
+} from "@/components/buyer/v3/ColumnToggle";
+import {
   EMPTY_V3_FACET_STATE,
   FacetSidebarV3,
   type FacetItem,
@@ -34,7 +39,16 @@ import {
   type SortDir,
   type SortKey,
 } from "@/components/buyer/v3/ResultTable";
-import { PIPATrustNote, TrustBar } from "@/components/buyer/v3/TrustBar";
+import {
+  KCDHeuristicNote,
+  PIPATrustNote,
+  TrustBar,
+} from "@/components/buyer/v3/TrustBar";
+import {
+  LocaleProvider,
+  LocaleToggle,
+  useLocale,
+} from "@/components/shared/LocaleToggle";
 import type { Locale } from "@/lib/i18n";
 
 type SearchResp = {
@@ -151,7 +165,19 @@ function buildSearchRequest(
 }
 
 export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
-  const lc: "ko" | "en" = locale === "ko" ? "ko" : "en";
+  // The outer wrapper installs <LocaleProvider> so every v3 child can call
+  // useLocale() and react to runtime EN ↔ KR swap (QA HIGH-3 / BL-2). The
+  // SSR-supplied `locale` prop seeds the initial value; localStorage / cookie
+  // hydration happens inside the provider on mount.
+  return (
+    <LocaleProvider initial={locale === "ko" ? "ko" : "en"}>
+      <SearchAppV3Inner />
+    </LocaleProvider>
+  );
+}
+
+function SearchAppV3Inner() {
+  const { locale: lc } = useLocale();
   const router = useRouter();
   const [facets, setFacets] = useState<V3FacetState>(EMPTY_V3_FACET_STATE);
   const [sortKey, setSortKey] = useState<SortKey>("examdate");
@@ -160,6 +186,9 @@ export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
   const [response, setResponse] = useState<SearchResp | null>(null);
   const [loading, setLoading] = useState(true);
   const [kcdQuery, setKcdQuery] = useState("");
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(
+    V3_DEFAULT_VISIBLE,
+  );
   const [error, setError] = useState<{
     code?: string;
     detail?: string;
@@ -270,6 +299,9 @@ export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
       >
         <span style={{ fontWeight: 700, color: "#fff" }}>RadiVault</span>
         <TrustBar locale={lc} />
+        <div style={{ marginLeft: "auto" }}>
+          <LocaleToggle variant="dark" />
+        </div>
       </div>
 
       {/* Sub-bar: KCD autocomplete + page size + sort summary */}
@@ -362,10 +394,26 @@ export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
                   : `studies · all PIPA-verified · ${distinctHospitals} hospitals · ${queryMs} ms`}
               </small>
             </div>
-            <div style={{ fontSize: 12, color: "var(--rv-stone-500)" }}>
-              {lc === "ko"
-                ? `정렬: ${sortKey} ${sortDir === "desc" ? "↓" : "↑"}`
-                : `Sort: ${sortKey} ${sortDir === "desc" ? "↓" : "↑"}`}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 12,
+                color: "var(--rv-stone-500)",
+              }}
+            >
+              <span>
+                {lc === "ko"
+                  ? `정렬: ${sortKey} ${sortDir === "desc" ? "↓" : "↑"}`
+                  : `Sort: ${sortKey} ${sortDir === "desc" ? "↓" : "↑"}`}
+              </span>
+              <ColumnToggle
+                columns={V3_COLUMN_DEFS}
+                visibleKeys={visibleColumns}
+                onChange={setVisibleColumns}
+                locale={lc}
+              />
             </div>
           </div>
 
@@ -447,10 +495,22 @@ export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
               selected={selected}
               onToggleRow={toggleRow}
               locale={lc}
+              visibleColumns={visibleColumns}
             />
           )}
 
-          <PIPATrustNote locale={lc} />
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              marginTop: 14,
+            }}
+            data-testid="v3-footer-notes"
+          >
+            <PIPATrustNote locale={lc} />
+            <KCDHeuristicNote locale={lc} />
+          </div>
         </section>
       </div>
     </div>
