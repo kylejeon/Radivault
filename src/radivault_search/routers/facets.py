@@ -45,6 +45,9 @@ async def get_facets(request: Request) -> JSONResponse:
         model_name=facets.get("model_name", []),
         year=facets.get("year", []),
         contrast_used=facets.get("contrast_used", []),
+        # v3 (FR-V3-API-3) — new facets surfaced through GET /v1/search/facets.
+        hospital_region=facets.get("hospital_region", []),
+        kcd_code=facets.get("kcd_code", []),
         computed_at=datetime.now(tz=UTC),
     )
     payload = resp.model_dump(mode="json")

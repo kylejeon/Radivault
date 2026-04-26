@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Study Detail (v2 mockup)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/[email protected]/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+  <header class="nav">
+    <div class="nav__brand">
+      <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+      <a href="./index.html" style="color:inherit; text-decoration:none;">RadiVault</a>
+      <span class="federated-pill">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="3"/><circle cx="2" cy="2" r="1.5"/><circle cx="14" cy="2" r="1.5"/><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1"/><line x1="14" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1"/></svg>
+        <span class="en">Federated · 2 hospitals</span>
+        <span class="ko">연합 · 2 병원</span>
+      </span>
+    </div>
+    <div class="nav__center">
+      <a href="./search.html" class="nav__link"><span class="en">Search</span><span class="ko">검색</span></a>
+      <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+      <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+      <a href="#" class="nav__link"><span class="en">Docs</span><span class="ko">문서</span></a>
+    </div>
+    <div class="nav__right">
+      <a href="#" class="nav__link"><span class="en">Audit ↗</span><span class="ko">감사 ↗</span></a>
+      <div class="locale-toggle">
+        <button class="is-active" data-set-locale="en">EN</button>
+        <button data-set-locale="ko">한국어</button>
+      </div>
+      <a href="./account.html" class="account-menu">
+        <span class="account-menu__avatar">AC</span>
+        acme-ai
+      </a>
+    </div>
+  </header>
+
+  <!-- Detail header -->
+  <div class="detail-header">
+    <div class="detail-header__breadcrumb">
+      <a href="./search.html"><span class="en">Search</span><span class="ko">검색</span></a>
+      &nbsp;·&nbsp;
+      <span class="en">CHEST · CT</span>
+      <span class="ko">흉부 · CT</span>
+    </div>
+    <div class="detail-header__title">
+      <span class="modality-chip" data-modality="CT">CT</span>
+      <span><span class="en">Chest CT (with contrast)</span><span class="ko">흉부 CT (조영 사용)</span></span>
+      <span class="detail-uid">1.2.840.HOSP001.20240315.001</span>
+      <span class="sample-watermark">Sample available</span>
+      <div class="detail-header__nav">
+        <a href="./search.html" class="btn btn--ghost btn--sm">← <span class="en">Prev</span><span class="ko">이전</span></a>
+        <a href="./search.html" class="btn btn--ghost btn--sm"><span class="en">Next</span><span class="ko">다음</span> →</a>
+      </div>
+    </div>
+    <div class="standards-chips">
+      <span class="standard-chip">DICOM PS3.18</span>
+      <span class="standard-chip">Sup 203 thumbnail</span>
+      <span class="standard-chip">PIPA §28-8</span>
+      <span class="standard-chip">HIPAA Safe Harbor</span>
+      <span class="standard-chip">K-MOHW 2024</span>
+    </div>
+  </div>
+
+  <main class="layout-2pane-detail">
+    <!-- Left: Viewer -->
+    <section>
+      <div class="viewer-area">
+        <div class="viewer-canvas">
+          <div class="viewer-overlay">
+            HOSP-001 / Bon Hospital<br/>
+            CT · SOMATOM Force<br/>
+            Slice 260 / 520<br/>
+            kVp 120 · 400 mAs
+          </div>
+          <div class="viewer-overlay-r">
+            W: 1500 · L: -600<br/>
+            Lung window<br/>
+            <span style="color:rgba(255,200,100,0.9);">Demo · No PHI</span>
+          </div>
+          <div class="viewer-canvas__sample" aria-label="Sample slice"></div>
+          <div class="viewer-deferred">
+            <span class="en">Full DICOM viewer (OHIF v3) coming v0.3 — preview thumbnail shown</span>
+            <span class="ko">전체 DICOM 뷰어 (OHIF v3) v0.3 예정 — 미리보기 썸네일 노출</span>
+          </div>
+        </div>
+        <div class="slice-slider">
+          <span class="slice-slider__label">Slice 260/520</span>
+          <input type="range" min="1" max="520" value="260" disabled aria-label="Slice navigation" />
+          <span class="slice-slider__label" style="text-align:right; min-width:auto;">
+            <span class="en">deferred</span><span class="ko">v0.3 예정</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="samd-footer" role="note">
+        <strong><span class="en">Dataset evaluation only.</span><span class="ko">데이터셋 평가 전용.</span></strong>
+        <span class="en">Not a medical device. Not for clinical diagnosis. SaMD-classified features (measurement, segmentation, AI inference) intentionally excluded under MFDS guideline (2026-03-20).</span>
+        <span class="ko">의료기기 아님. 임상 진단용 아님. SaMD 분류 가능 기능 (측정·분할·AI 추론) 식약처 가이드라인(2026-03-20) 에 따라 의도적으로 제외.</span>
+      </div>
+
+      <!-- Related studies (longitudinal hint, Segmed-style) -->
+      <div class="detail-card" style="margin-top:16px;">
+        <div class="detail-card__title">
+          <svg class="detail-card__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8 Q8 2 14 8 Q8 14 2 8"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+          <span class="en">Related studies (longitudinal)</span>
+          <span class="ko">연관 스터디 (longitudinal)</span>
+        </div>
+        <p style="font-size:12px; color:var(--color-text-muted); margin-bottom:8px;">
+          <span class="en">Anonymized patient pseudo-ID 0xABCD1234 has 3 studies on RadiVault.</span>
+          <span class="ko">익명화 환자 pseudo-ID 0xABCD1234 의 RadiVault 내 스터디 3 개.</span>
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div class="audit-log-row" style="background: var(--color-primary-50);">
+            <span class="audit-log-row__time">2024-03-15</span>
+            <span class="audit-log-row__type">CT · CHEST</span>
+            <span class="audit-log-row__detail"><span class="en">Currently viewing</span><span class="ko">현재 보는 중</span></span>
+          </div>
+          <div class="audit-log-row">
+            <span class="audit-log-row__time">2024-01-08</span>
+            <span class="audit-log-row__type">CT · CHEST</span>
+            <span class="audit-log-row__detail"><span class="en">Baseline (similar protocol)</span><span class="ko">기준선 (동일 프로토콜)</span></span>
+          </div>
+          <div class="audit-log-row">
+            <span class="audit-log-row__time">2023-09-22</span>
+            <span class="audit-log-row__type">CR · CHEST</span>
+            <span class="audit-log-row__detail"><span class="en">Initial screening</span><span class="ko">초기 스크리닝</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: sidebar -->
+    <aside class="detail-sidebar">
+      <!-- Audit chain link -->
+      <a href="#" class="audit-link" id="auditLink">
+        <span>
+          <span class="en">View audit chain</span>
+          <span class="ko">감사 체인 보기</span>
+        </span>
+        <span>↗</span>
+      </a>
+
+      <!-- Patient card -->
+      <div class="detail-card">
+        <div class="detail-card__title">
+          <svg class="detail-card__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14 Q2 9 8 9 Q14 9 14 14"/></svg>
+          <span class="en">Patient (anonymized)</span>
+          <span class="ko">환자 (익명화)</span>
+        </div>
+        <dl class="detail-list">
+          <dt><span class="en">Pseudo-ID</span><span class="ko">가명 ID</span></dt>
+          <dd style="font-family: ui-monospace, monospace; font-size:12px;">0xABCD1234</dd>
+          <dt><span class="en">Age bucket</span><span class="ko">연령</span></dt>
+          <dd>40–59</dd>
+          <dt><span class="en">Sex</span><span class="ko">성별</span></dt>
+          <dd>F</dd>
+          <dt><span class="en">Species</span><span class="ko">종</span></dt>
+          <dd>Human</dd>
+          <dt><span class="en">Consent</span><span class="ko">동의</span></dt>
+          <dd style="color: var(--color-success-fg); font-weight:600;">✓ <span class="en">PIPA §28-8 (4-track)</span><span class="ko">PIPA §28-8 (4 종 분리)</span></dd>
+        </dl>
+      </div>
+
+      <!-- Study card -->
+      <div class="detail-card">
+        <div class="detail-card__title">
+          <svg class="detail-card__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><line x1="2" y1="6" x2="14" y2="6"/></svg>
+          <span class="en">Study</span>
+          <span class="ko">스터디</span>
+        </div>
+        <dl class="detail-list">
+          <dt><span class="en">Modality</span><span class="ko">모달리티</span></dt>
+          <dd><span class="modality-chip" data-modality="CT">CT</span></dd>
+          <dt><span class="en">Body part</span><span class="ko">신체 부위</span></dt>
+          <dd>CHEST</dd>
+          <dt><span class="en">Description</span><span class="ko">설명</span></dt>
+          <dd>Chest CT (with contrast)</dd>
+          <dt><span class="en">Date (shifted)</span><span class="ko">날짜 (이동)</span></dt>
+          <dd>2024-03-15</dd>
+          <dt><span class="en">Hospital</span><span class="ko">병원</span></dt>
+          <dd>
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--color-hospital-stripe-001);display:inline-block;"></span>
+              HOSP-001 / <span class="ko">본병원</span><span class="en">Bon Hospital</span>
+            </span>
+          </dd>
+          <dt><span class="en">Contrast</span><span class="ko">조영제</span></dt>
+          <dd><span class="en">Iodinated · 80 mL</span><span class="ko">요오드 · 80 mL</span></dd>
+        </dl>
+      </div>
+
+      <!-- Series & device card -->
+      <div class="detail-card">
+        <div class="detail-card__title">
+          <svg class="detail-card__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="8" rx="1"/><circle cx="6" cy="8" r="1.5" fill="currentColor"/><circle cx="10" cy="8" r="1.5" fill="currentColor"/></svg>
+          <span class="en">Series & device</span>
+          <span class="ko">시리즈 & 장비</span>
+        </div>
+        <dl class="detail-list">
+          <dt><span class="en">Instances</span><span class="ko">슬라이스</span></dt>
+          <dd>520</dd>
+          <dt><span class="en">Total size</span><span class="ko">전체 크기</span></dt>
+          <dd>104.8 MB</dd>
+          <dt><span class="en">Manufacturer</span><span class="ko">제조사</span></dt>
+          <dd>SIEMENS</dd>
+          <dt><span class="en">Model</span><span class="ko">모델</span></dt>
+          <dd>SOMATOM Force</dd>
+          <dt><span class="en">Slice thickness</span><span class="ko">슬라이스 두께</span></dt>
+          <dd>1.0 mm</dd>
+          <dt>kVp</dt>
+          <dd>120</dd>
+          <dt><span class="en">Pixel spacing</span><span class="ko">픽셀 간격</span></dt>
+          <dd>0.78 × 0.78 mm</dd>
+        </dl>
+      </div>
+
+      <!-- CTAs -->
+      <div class="cta-stack">
+        <a href="#" class="btn btn--primary btn--block btn--lg">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2 V12 M3 7 L8 12 L13 7"/><path d="M2 14 H14"/></svg>
+          <span class="en">Add to cohort & order</span>
+          <span class="ko">코호트 추가 & 주문</span>
+        </a>
+        <a href="#" class="btn btn--secondary btn--block">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2 V10 M3 5 L8 10 L13 5"/></svg>
+          <span class="en">Sample download (free, 1 study)</span>
+          <span class="ko">샘플 다운로드 (무료, 1 스터디)</span>
+        </a>
+        <p style="font-size: 11px; color: var(--color-text-muted); text-align: center; line-height: 1.5;">
+          <span class="en">Sample tier · daily quota 1/1 remaining · 1 h presigned URL</span>
+          <span class="ko">샘플 등급 · 일일 quota 1/1 남음 · 1 시간 presigned URL</span>
+        </p>
+      </div>
+
+      <!-- Standards mini-card -->
+      <div class="detail-card" style="background: var(--color-bg-muted);">
+        <div class="detail-card__title">
+          <svg class="detail-card__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7 L7 11 L13 4"/></svg>
+          <span class="en">Standards & origin</span>
+          <span class="ko">표준 & 출처</span>
+        </div>
+        <p style="font-size: 12px; color: var(--color-text); line-height: 1.6;">
+          <span class="en">Indexed via DICOMweb QIDO-RS · thumbnail per PS3.18 Sup 203 · anonymized per PS3.15 Annex E (Basic + Retain Patient Characteristics + Clean Descriptors). Hospital partnership signed Q1 2026.</span>
+          <span class="ko">DICOMweb QIDO-RS 로 색인 · 썸네일 PS3.18 Sup 203 준수 · 익명화 PS3.15 Annex E (Basic + Retain Patient Characteristics + Clean Descriptors). 병원 파트너십 Q1 2026 체결.</span>
+        </p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="compliance-badges">
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>PIPA §28-8 compliant</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>K-MOHW 2024 aligned</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>HIPAA-aligned anonymization</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>DICOM PS3.18 Sup 203</span>
+    </div>
+    <div class="footer__right">
+      <a href="#"><span class="en">Audit log</span><span class="ko">감사 로그</span> ↗</a>
+      <a href="#"><span class="en">Trust Center</span><span class="ko">신뢰 센터</span></a>
+      <span>© 2026 RadiVault</span>
+    </div>
+  </footer>
+
+  <!-- Audit chain modal -->
+  <div class="modal-backdrop" data-open="false" id="auditModal" role="dialog" aria-modal="true" aria-labelledby="auditTitle">
+    <div class="modal">
+      <button class="modal__close" data-close-modal="auditModal" aria-label="Close">×</button>
+      <h2 class="modal__title" id="auditTitle">
+        <span class="en">Audit chain — Study 1.2.840.HOSP001.20240315.001</span>
+        <span class="ko">감사 체인 — 스터디 1.2.840.HOSP001.20240315.001</span>
+      </h2>
+      <p class="modal__sub">
+        <span class="en">Every step from hospital ingest to your access is logged in WORM audit storage.</span>
+        <span class="ko">병원 ingest 부터 당신의 접근까지 모든 단계가 WORM 감사 저장소에 기록됩니다.</span>
+      </p>
+      <div class="audit-chain">
+        <div class="audit-step">
+          <div class="audit-step__title">① Hospital ingest <span style="color:var(--color-success-fg);font-size:11px;">✓</span></div>
+          <div class="audit-step__meta">2024-03-15 09:14:22 KST · HOSP-001 / Bon Hospital · Gateway Agent v1.4.2</div>
+          <div class="audit-step__detail">
+            <span class="en">DICOM C-STORE received from hospital PACS. Original SOPInstanceUID hashed → pseudo_study_uid. PHI tags extracted to staging buffer.</span>
+            <span class="ko">병원 PACS 에서 DICOM C-STORE 수신. Original SOPInstanceUID 해시 → pseudo_study_uid. PHI 태그를 스테이징 버퍼로 추출.</span>
+          </div>
+        </div>
+        <div class="audit-step">
+          <div class="audit-step__title">② De-ID Engine — 4 layers <span style="color:var(--color-success-fg);font-size:11px;">✓</span></div>
+          <div class="audit-step__meta">2024-03-15 09:14:48 KST · De-ID worker v0.7.1 · 26 sec</div>
+          <div class="audit-step__detail">
+            <span class="en">L1 DICOM PHI scrub (PS3.15 Annex E Basic + 4 options). L2 Pixel OCR burn-in check (Presidio, 0 hits). L3 3D defacing (head only — N/A for chest). L4 Patient consent verify (PIPA §28-8 4-track, all granted).</span>
+            <span class="ko">L1 DICOM PHI scrub (PS3.15 Annex E Basic + 4 옵션). L2 픽셀 OCR burn-in 검증 (Presidio, 0 hits). L3 3D defacing (머리 전용 — 흉부 N/A). L4 환자 동의 검증 (PIPA §28-8 4 종, 모두 grant).</span>
+          </div>
+        </div>
+        <div class="audit-step">
+          <div class="audit-step__title">③ Hot Storage entry <span style="color:var(--color-success-fg);font-size:11px;">✓</span></div>
+          <div class="audit-step__meta">2024-03-15 09:15:02 KST · S3 ap-northeast-2 · KMS encrypted</div>
+          <div class="audit-step__detail">
+            <span class="en">Anonymized DICOM bundle stored. Thumbnail (256×256 JPEG) generated per PS3.18 Sup 203. Metadata indexed (modality=CT, body_part=CHEST, age_bucket=40-59, sex=F).</span>
+            <span class="ko">익명화 DICOM 번들 저장. PS3.18 Sup 203 따라 썸네일 (256×256 JPEG) 생성. 메타데이터 색인 (modality=CT, body_part=CHEST, age_bucket=40-59, sex=F).</span>
+          </div>
+        </div>
+        <div class="audit-step">
+          <div class="audit-step__title">④ Buyer access (you) <span style="color:var(--color-success-fg);font-size:11px;">✓</span></div>
+          <div class="audit-step__meta">2026-04-25 14:32:18 KST · buyer acme-ai · API key rv_live_****abcd</div>
+          <div class="audit-step__detail">
+            <span class="en">Search query matched. Thumbnail served via CDN (Cloudflare ap-northeast). Detail page rendered. No DICOM bundle downloaded yet.</span>
+            <span class="ko">검색 쿼리 매칭. 썸네일 CDN (Cloudflare ap-northeast) 통해 제공. 상세 페이지 렌더링. DICOM 번들 미다운로드.</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <a href="#" class="btn btn--ghost btn--sm">
+          <span class="en">Export full log (CSV)</span>
+          <span class="ko">전체 로그 내보내기 (CSV)</span>
+        </a>
+        <button class="btn btn--primary btn--sm" data-close-modal="auditModal">
+          <span class="en">Close</span>
+          <span class="ko">닫기</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // Locale toggle
+    document.querySelectorAll('[data-set-locale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const loc = btn.dataset.setLocale;
+        document.body.dataset.locale = loc;
+        document.documentElement.lang = loc;
+        document.querySelectorAll('[data-set-locale]').forEach((b) => {
+          const active = b.dataset.setLocale === loc;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+      });
+    });
+
+    // Audit modal
+    document.getElementById('auditLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('auditModal').dataset.open = 'true';
+    });
+    document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.closeModal;
+        document.getElementById(id).dataset.open = 'false';
+      });
+    });
+    // Click backdrop to close
+    document.querySelectorAll('.modal-backdrop').forEach((bd) => {
+      bd.addEventListener('click', (e) => {
+        if (e.target === bd) bd.dataset.open = 'false';
+      });
+    });
+    // Esc to close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-backdrop[data-open="true"]').forEach((bd) => bd.dataset.open = 'false');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -3,6 +3,12 @@
 See dev-spec §4.4 / §4.5 / §4.6. This module intentionally orchestrates all
 five concerns (filter/sort/limit/facets/total) in a single class so tests can
 exercise the stitching end-to-end without standing up FastAPI.
+
+v3 (dev-spec-buyer-search-v3 FR-V3-API-2/5):
+- Joins ``hospital`` so ``region_pseudo`` is selectable + filterable.
+- Adds 9 sort columns (hospital, modality, body_part, kcd, age, mfg, model,
+  size, date_asc).
+- Surfaces v3 fields onto ``StudyItem``.
 """
 
 from __future__ import annotations
@@ -11,10 +17,10 @@ import hashlib
 import time
 from dataclasses import dataclass
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from radivault_central.db.models import PatientPseudo, Study
+from radivault_central.db.models import Hospital, PatientPseudo, Study
 from radivault_search.errors import CursorFilterChanged, CursorVersion, StudyNotFound
 from radivault_search.query.cursor import (
     CURSOR_VERSION,
@@ -44,6 +50,32 @@ class ExecutorResult:
     facets_suppressed: bool
 
 
+# v3 — sort key → (column, direction). Direction is `desc` / `asc`.
+def _sort_column_and_dir(sort_key: str):
+    mapping = {
+        "date_desc": (Study.study_date_shifted, desc),
+        "date_asc": (Study.study_date_shifted, asc),
+        "ingested_desc": (Study.ingested_at, desc),
+        "hospital_asc": (Study.hospital_pk, asc),
+        "hospital_desc": (Study.hospital_pk, desc),
+        "modality_asc": (Study.modality, asc),
+        "modality_desc": (Study.modality, desc),
+        "body_part_asc": (Study.body_part, asc),
+        "body_part_desc": (Study.body_part, desc),
+        "kcd_asc": (Study.kcd_code, asc),
+        "kcd_desc": (Study.kcd_code, desc),
+        "age_asc": (PatientPseudo.age, asc),
+        "age_desc": (PatientPseudo.age, desc),
+        "manufacturer_asc": (Study.manufacturer, asc),
+        "manufacturer_desc": (Study.manufacturer, desc),
+        "model_asc": (Study.model_name, asc),
+        "model_desc": (Study.model_name, desc),
+        "size_asc": (Study.total_bytes, asc),
+        "size_desc": (Study.total_bytes, desc),
+    }
+    return mapping.get(sort_key, (Study.study_date_shifted, desc))
+
+
 def compute_hospital_opaque_id(
     *,
     hospital_pk: int,
@@ -56,7 +88,21 @@ def compute_hospital_opaque_id(
 
 
 def _apply_patient_joins(stmt, req: SearchRequest):
-    needs_patient = bool(req.sex) or bool(req.age_bucket)
+    """Apply joins for patient_pseudo (sex/age) + hospital (region_pseudo).
+
+    v3 — hospital is always joined so ``region_pseudo`` is in the SELECT
+    projection; patient_pseudo is joined only when sex/age filters apply or
+    age sort is requested. Both are LEFT joins to preserve study rows
+    missing those linkages.
+    """
+    sort_uses_age = req.sort in ("age_asc", "age_desc")
+    needs_patient = (
+        bool(req.sex)
+        or bool(req.age_bucket)
+        or req.age_min is not None
+        or req.age_max is not None
+        or sort_uses_age
+    )
     if needs_patient:
         stmt = stmt.join(
             PatientPseudo,
@@ -65,9 +111,8 @@ def _apply_patient_joins(stmt, req: SearchRequest):
         )
         if req.sex:
             stmt = stmt.where(PatientPseudo.sex.in_(req.sex))
-        if req.age_bucket:
-            # age_bucket is stored as SmallInteger on patient_pseudo; accept
-            # str or int forms from the buyer.
+        if req.age_bucket and req.age_min is None and req.age_max is None:
+            # Legacy bucket filter (deprecated, only honoured when no exact range).
             numeric = []
             for v in req.age_bucket:
                 try:
@@ -76,6 +121,18 @@ def _apply_patient_joins(stmt, req: SearchRequest):
                     continue
             if numeric:
                 stmt = stmt.where(PatientPseudo.age_bucket.in_(numeric))
+        if req.age_min is not None:
+            stmt = stmt.where(PatientPseudo.age >= req.age_min)
+        if req.age_max is not None:
+            stmt = stmt.where(PatientPseudo.age <= req.age_max)
+
+    # v3 — always LEFT JOIN hospital so region_pseudo + region filter are
+    # available. Hospital filter applied here.
+    stmt = stmt.join(
+        Hospital, Hospital.hospital_pk == Study.hospital_pk, isouter=True
+    )
+    if req.hospital_region:
+        stmt = stmt.where(Hospital.region_pseudo.in_(req.hospital_region))
     return stmt
 
 
@@ -122,10 +179,15 @@ def run_search(
     stmt = select(Study).where(*where_clauses)
     stmt = _apply_patient_joins(stmt, req)
 
-    sort_col = Study.ingested_at if req.sort == "ingested_desc" else Study.study_date_shifted
+    sort_col, sort_dir = _sort_column_and_dir(req.sort)
 
-    # Keyset WHERE clause: (sort_col, study_pk) < (cursor_d, cursor_p).
-    if cursor_d is not None and cursor_p is not None:
+    # Keyset WHERE clause (only for date_desc/ingested_desc legacy sorts —
+    # cursor pagination on the new sort enums is left for v0.1.5 + only
+    # validated against demo workloads of 250 rows).
+    if cursor_d is not None and cursor_p is not None and req.sort in (
+        "date_desc",
+        "ingested_desc",
+    ):
         from datetime import date as _date
         from datetime import datetime as _dt
 
@@ -140,36 +202,53 @@ def run_search(
             )
         )
 
-    stmt = stmt.order_by(desc(sort_col), desc(Study.study_pk)).limit(req.limit + 1)
+    # Stable secondary sort on study_pk so ties are deterministic.
+    secondary = desc(Study.study_pk) if sort_dir is desc else asc(Study.study_pk)
+    stmt = stmt.order_by(sort_dir(sort_col), secondary).limit(req.limit + 1)
 
     rows = list(session.scalars(stmt).all())
     has_more = len(rows) > req.limit
     page_rows = rows[: req.limit]
 
-    items = [
-        StudyItem(
-            pseudo_study_uid=r.pseudo_study_uid,
-            modality=r.modality,
-            body_part=r.body_part,
-            age_bucket=_age_bucket_label(session, r.patient_pseudo_pk),
-            sex=_sex_for(session, r.patient_pseudo_pk),
-            study_date_shifted=r.study_date_shifted.date()
-            if hasattr(r.study_date_shifted, "date")
-            else r.study_date_shifted,
-            manufacturer=r.manufacturer,
-            model_name=r.model_name,
-            n_instances=r.n_instances,
-            n_series=r.n_series,
-            total_bytes=r.total_bytes,
-            hospital_opaque_id=compute_hospital_opaque_id(
-                hospital_pk=r.hospital_pk, global_salt=global_salt, buyer_pk=buyer_pk
-            ),
-            ingested_at=r.ingested_at,
-            preview_status=getattr(r, "preview_status", None),
-            preview_slice_count=getattr(r, "preview_slice_count", None),
+    items = []
+    for r in page_rows:
+        pp = (
+            session.get(PatientPseudo, r.patient_pseudo_pk)
+            if r.patient_pseudo_pk is not None
+            else None
         )
-        for r in page_rows
-    ]
+        hosp = session.get(Hospital, r.hospital_pk)
+        items.append(
+            StudyItem(
+                pseudo_study_uid=r.pseudo_study_uid,
+                modality=r.modality,
+                body_part=r.body_part,
+                age_bucket=_age_bucket_label_from(pp),
+                sex=pp.sex if pp is not None else None,
+                study_date_shifted=r.study_date_shifted.date()
+                if hasattr(r.study_date_shifted, "date")
+                else r.study_date_shifted,
+                manufacturer=r.manufacturer,
+                model_name=r.model_name,
+                n_instances=r.n_instances,
+                n_series=r.n_series,
+                total_bytes=r.total_bytes,
+                hospital_opaque_id=compute_hospital_opaque_id(
+                    hospital_pk=r.hospital_pk,
+                    global_salt=global_salt,
+                    buyer_pk=buyer_pk,
+                ),
+                ingested_at=r.ingested_at,
+                preview_status=getattr(r, "preview_status", None),
+                preview_slice_count=getattr(r, "preview_slice_count", None),
+                # v3 fields.
+                patient_age=pp.age if pp is not None else None,
+                hospital_region_pseudo=hosp.region_pseudo if hosp is not None else None,
+                kcd_code=getattr(r, "kcd_code", None),
+                kcd_label_ko=getattr(r, "kcd_label_ko", None),
+                kcd_label_en=getattr(r, "kcd_label_en", None),
+            )
+        )
 
     # Exact total count — bounded by cost estimator already (FR-35).
     count_stmt = select(func.count(Study.study_pk)).where(*where_clauses)
@@ -187,9 +266,13 @@ def run_search(
             dialect=dialect,
         )
 
-    # Build next_cursor if more pages exist.
+    # Build next_cursor if more pages exist (legacy sort modes only).
     next_cursor: str | None = None
-    if has_more and page_rows:
+    if (
+        has_more
+        and page_rows
+        and req.sort in ("date_desc", "ingested_desc")
+    ):
         last = page_rows[-1]
         if req.sort == "ingested_desc":
             d_str = last.ingested_at.isoformat() if last.ingested_at is not None else ""
@@ -247,14 +330,19 @@ def run_search(
 # ---------------------------------------------------------------------------
 
 
-def _age_bucket_label(session: Session, patient_pk: int | None) -> str | None:
-    if patient_pk is None:
-        return None
-    pp = session.get(PatientPseudo, patient_pk)
+def _age_bucket_label_from(pp: PatientPseudo | None) -> str | None:
     if pp is None or pp.age_bucket is None:
         return None
     lo = int(pp.age_bucket)
     return f"{lo}-{lo + 10}"
+
+
+def _age_bucket_label(session: Session, patient_pk: int | None) -> str | None:
+    """Legacy single-row helper — retained for ``load_study_detail``."""
+    if patient_pk is None:
+        return None
+    pp = session.get(PatientPseudo, patient_pk)
+    return _age_bucket_label_from(pp)
 
 
 def _sex_for(session: Session, patient_pk: int | None) -> str | None:
@@ -289,12 +377,18 @@ def load_study_detail(
         )
         for s in series_rows
     ]
+    pp = (
+        session.get(PatientPseudo, study.patient_pseudo_pk)
+        if study.patient_pseudo_pk is not None
+        else None
+    )
+    hosp = session.get(Hospital, study.hospital_pk)
     return SearchStudyDetail(
         pseudo_study_uid=study.pseudo_study_uid,
         modality=study.modality,
         body_part=study.body_part,
-        age_bucket=_age_bucket_label(session, study.patient_pseudo_pk),
-        sex=_sex_for(session, study.patient_pseudo_pk),
+        age_bucket=_age_bucket_label_from(pp),
+        sex=pp.sex if pp is not None else None,
         study_date_shifted=study.study_date_shifted.date()
         if hasattr(study.study_date_shifted, "date")
         else study.study_date_shifted,
@@ -310,4 +404,9 @@ def load_study_detail(
         series=series_out,
         preview_status=getattr(study, "preview_status", None),
         preview_slice_count=getattr(study, "preview_slice_count", None),
+        patient_age=pp.age if pp is not None else None,
+        hospital_region_pseudo=hosp.region_pseudo if hosp is not None else None,
+        kcd_code=getattr(study, "kcd_code", None),
+        kcd_label_ko=getattr(study, "kcd_label_ko", None),
+        kcd_label_en=getattr(study, "kcd_label_en", None),
     )

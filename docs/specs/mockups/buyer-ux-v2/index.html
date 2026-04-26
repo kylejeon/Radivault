@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Buyer UX v2 Mockup Index</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/[email protected]/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+  <header class="nav">
+    <div class="nav__brand">
+      <span class="nav__brand-mark">R</span>
+      <span>RadiVault</span>
+      <span class="federated-pill">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="3" /><circle cx="2" cy="2" r="1.5" /><circle cx="14" cy="2" r="1.5" /><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1" /><line x1="14" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1" /></svg>
+        <span class="en">UX v2 Mockup</span>
+        <span class="ko">UX v2 목업</span>
+      </span>
+    </div>
+    <div class="nav__right">
+      <div class="locale-toggle" role="tablist">
+        <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+        <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="index-page">
+    <section class="index-hero">
+      <h1>
+        <span class="en">Buyer UX v2 — Mockup Suite</span>
+        <span class="ko">바이어 UX v2 — 목업 묶음</span>
+      </h1>
+      <p>
+        <span class="en">
+          A re-evaluation of RadiVault's current <code>/search</code>, <code>/studies/[uid]</code>, and <code>/account</code> pages against
+          Segmed, Gradient Health, TCIA, IDC, and Flywheel — and a v2 redesign that surfaces what makes RadiVault different:
+          <strong>federated 2 hospitals, PIPA-native compliance, Stripe-style developer experience, and de-id chain audit</strong>.
+        </span>
+        <span class="ko">
+          현재의 <code>/search</code>, <code>/studies/[uid]</code>, <code>/account</code> 화면을 Segmed, Gradient Health, TCIA, IDC, Flywheel 와 비교 평가하고,
+          RadiVault 의 차별점 — <strong>2 병원 연합, PIPA-native 컴플라이언스, Stripe 식 개발자 경험, 익명화 체인 감사</strong> — 이 화면에 드러나도록 재설계한 v2 묶음.
+        </span>
+      </p>
+    </section>
+
+    <section class="mockup-grid">
+      <a href="./search.html" class="mockup-card">
+        <span class="mockup-card__num">01</span>
+        <span class="mockup-card__title">
+          <span class="en">Search & Cohort</span>
+          <span class="ko">검색 & 코호트</span>
+        </span>
+        <span class="mockup-card__desc">
+          <span class="en">3-pane facets + result cards (96px thumb · hospital stripe · PIPA chip · color-coded modality) + cohort sidebar with diversity bar.</span>
+          <span class="ko">3-pane facet + 결과 카드 (96px 썸네일 · 병원 stripe · PIPA chip · 색상 모달리티) + 다양성 bar 가 있는 코호트 sidebar.</span>
+        </span>
+        <span class="mockup-card__path">/search</span>
+      </a>
+      <a href="./study-detail.html" class="mockup-card">
+        <span class="mockup-card__num">02</span>
+        <span class="mockup-card__title">
+          <span class="en">Study Detail</span>
+          <span class="ko">스터디 상세</span>
+        </span>
+        <span class="mockup-card__desc">
+          <span class="en">Larger viewer (384px) + 3-card metadata (Patient/Study/Series) + audit-chain link + dual CTA (sample download / add to cohort).</span>
+          <span class="ko">큰 viewer (384px) + 3 카드 메타데이터 (환자/스터디/시리즈) + 감사 체인 링크 + 이중 CTA (샘플 다운로드 / 코호트 추가).</span>
+        </span>
+        <span class="mockup-card__path">/studies/[uid]</span>
+      </a>
+      <a href="./account.html" class="mockup-card">
+        <span class="mockup-card__num">03</span>
+        <span class="mockup-card__title">
+          <span class="en">Account & API</span>
+          <span class="ko">계정 & API</span>
+        </span>
+        <span class="mockup-card__desc">
+          <span class="en">Profile + API key (reveal-once) + Quick-start integration (curl/python) + quota gauges + audit log preview + marketplace shortcuts.</span>
+          <span class="ko">프로필 + API 키 (1회 노출) + Quick-start 연동 (curl/python) + quota 게이지 + 감사 로그 미리보기 + 마켓플레이스 단축키.</span>
+        </span>
+        <span class="mockup-card__path">/account</span>
+      </a>
+    </section>
+
+    <section class="feature-list">
+      <h2>
+        <span class="en">RadiVault differentiators surfaced in v2</span>
+        <span class="ko">v2 에 부각된 RadiVault 차별점</span>
+      </h2>
+      <ul>
+        <li><span class="en">Federated 2 hospitals — color-coded stripe per card</span><span class="ko">2 병원 연합 — 카드 별 색상 stripe</span></li>
+        <li><span class="en">PIPA-native compliance chip with 4-layer tooltip</span><span class="ko">PIPA-native chip + 4 레이어 tooltip</span></li>
+        <li><span class="en">Stripe-style API key + curl/python quick-start</span><span class="ko">Stripe 식 API 키 + curl/python quick-start</span></li>
+        <li><span class="en">De-id chain audit timeline modal</span><span class="ko">익명화 체인 감사 timeline 모달</span></li>
+        <li><span class="en">Hot Storage thumbnail (PS3.18 Sup 203)</span><span class="ko">Hot Storage 썸네일 (PS3.18 Sup 203)</span></li>
+        <li><span class="en">Bilingual (EN/KO) prominent toggle</span><span class="ko">영문/한글 명시적 토글</span></li>
+        <li><span class="en">Color-coded modality chips (CT/MR/MG/CR/US/PT)</span><span class="ko">색상 코드 모달리티 chip</span></li>
+        <li><span class="en">Cohort diversity bar (modality distribution)</span><span class="ko">코호트 다양성 bar (모달리티 분포)</span></li>
+        <li><span class="en">SaMD evaluation-only disclaimer always visible</span><span class="ko">SaMD 평가 전용 면책 상시 노출</span></li>
+        <li><span class="en">Audit log preview on /account</span><span class="ko">/account 의 감사 로그 미리보기</span></li>
+      </ul>
+    </section>
+
+    <section class="feature-list">
+      <h2>
+        <span class="en">How to view</span>
+        <span class="ko">열어보는 법</span>
+      </h2>
+      <p style="font-size: 13px; color: var(--color-text-muted); line-height: 1.7;">
+        <span class="en">
+          Static HTML — open any of the three files above by double-clicking, or click the cards.
+          External dependencies: Google Fonts CDN (Inter, Pretendard) only. No React, no Next.js, no build step.
+          Interactions: facet chip toggle, language switch, audit-chain modal, API key reveal, copy buttons.
+        </span>
+        <span class="ko">
+          정적 HTML — 위 3 파일 중 하나를 더블클릭으로 열거나 카드를 클릭하세요.
+          외부 의존성: Google Fonts CDN (Inter, Pretendard) 만. React/Next.js/빌드 단계 없음.
+          인터랙션: facet chip 토글, 언어 토글, 감사 체인 모달, API 키 노출, 복사 버튼.
+        </span>
+      </p>
+    </section>
+
+    <section class="feature-list">
+      <h2>
+        <span class="en">Reference</span>
+        <span class="ko">참조</span>
+      </h2>
+      <p style="font-size: 13px; color: var(--color-text-muted); line-height: 1.7;">
+        <span class="en">
+          Full evaluation, competitive analysis, and improvement rationale:
+          <a href="../../design-spec-buyer-ux-evaluation.md"><code>docs/specs/design-spec-buyer-ux-evaluation.md</code></a>
+        </span>
+        <span class="ko">
+          전체 평가, 경쟁사 분석, 개선 근거:
+          <a href="../../design-spec-buyer-ux-evaluation.md"><code>docs/specs/design-spec-buyer-ux-evaluation.md</code></a>
+        </span>
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="compliance-badges">
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>PIPA §28-8 compliant</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>K-MOHW 2024 aligned</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>HIPAA-aligned anonymization</span>
+    </div>
+    <div class="footer__right">
+      <span>RadiVault v0.2 · UX v2 mockup · 2026-04-25</span>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('[data-set-locale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const loc = btn.dataset.setLocale;
+        document.body.dataset.locale = loc;
+        document.documentElement.lang = loc;
+        document.querySelectorAll('[data-set-locale]').forEach((b) => {
+          const active = b.dataset.setLocale === loc;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+      });
+    });
+  </script>
+</body>
+</html>

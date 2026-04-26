@@ -24,11 +24,20 @@ MAX_MODEL_LEN = 128
 
 @dataclass
 class StudyMetadata:
-    """Twelve buyer-facet MVP fields (FR-META-2)."""
+    """Twelve buyer-facet MVP fields (FR-META-2) + v3 additions.
+
+    v3 additions (dev-spec-buyer-search-v3 FR-V3-DATA-1, FR-V3-DATA-2):
+    - ``patient_age``  exact integer 0-120 (from PatientAge or birth-date diff)
+    - ``kcd_code`` / ``kcd_label_ko`` / ``kcd_label_en`` heuristic KCD-8
+      mapping populated by :func:`extract_study_metadata` from the
+      (modality, body_part) tuple via
+      :mod:`radivault_gateway.kcd_heuristic`.
+    """
 
     body_part_examined: str | None = None
     patient_sex: str | None = None  # "M" | "F" | "O"
-    patient_age_bucket: str | None = None  # "30-34" / "90+"
+    patient_age_bucket: str | None = None  # "30-34" / "90+" (deprecated, kept for compat)
+    patient_age: int | None = None  # v3 — exact integer 0-120
     manufacturer: str | None = None
     manufacturer_model_name: str | None = None
     study_date_shifted: date | None = None
@@ -39,6 +48,10 @@ class StudyMetadata:
     n_instances: int = 0
     total_bytes: int = 0
     series: list[dict] = field(default_factory=list)
+    # v3 KCD heuristic — populated post-parse from (modality, body_part).
+    kcd_code: str | None = None
+    kcd_label_ko: str | None = None
+    kcd_label_en: str | None = None
 
 
 def _parse_age_bucket(raw: str | None) -> str | None:
@@ -84,6 +97,58 @@ def _parse_birthdate_age(birth_raw: str, study_raw: str) -> str | None:
     if years < 0:
         return None
     return _parse_age_bucket(f"{years:03d}Y")
+
+
+def _parse_age_exact(raw: str | None) -> int | None:
+    """v3 (FR-V3-DATA-1) — DICOM PatientAge → exact integer years.
+
+    Returns ``None`` for empty / unparseable / out-of-range (>120 or <0)
+    values. Months → ``floor(months/12)``; days/weeks → ``None`` (neonatal
+    studies are out of scope for the v3 cohort search).
+    """
+    if not raw:
+        return None
+    val = raw.strip().upper()
+    if len(val) < 2:
+        return None
+    unit = val[-1]
+    try:
+        n = int(val[:-1])
+    except ValueError:
+        return None
+    if n < 0:
+        return None
+    if unit == "Y":
+        years = n
+    elif unit == "M":
+        years = n // 12
+    else:
+        return None  # 'D' / 'W' → out of v3 cohort scope.
+    if years < 0 or years > 120:
+        return None
+    return years
+
+
+def _parse_birthdate_age_exact(birth_raw: str, study_raw: str) -> int | None:
+    """v3 — fallback exact age from PatientBirthDate + StudyDate (years floor)."""
+    if not birth_raw or not study_raw:
+        return None
+    try:
+        birth_str = birth_raw.strip()
+        study_str = study_raw.strip()
+        if len(birth_str) < 8 or len(study_str) < 8:
+            return None
+        birth_d = date(int(birth_str[:4]), int(birth_str[4:6]), int(birth_str[6:8]))
+        study_d = date(int(study_str[:4]), int(study_str[4:6]), int(study_str[6:8]))
+    except ValueError:
+        return None
+    years = study_d.year - birth_d.year
+    # Adjust for months/days when birthday hasn't passed yet.
+    if (study_d.month, study_d.day) < (birth_d.month, birth_d.day):
+        years -= 1
+    if years < 0 or years > 120:
+        return None
+    return years
 
 
 def _parse_sex(raw: str | None) -> str | None:
@@ -209,6 +274,14 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
             str(getattr(first_ds, "StudyDate", "") or ""),
         )
 
+    # v3 FR-V3-DATA-1 — exact integer years (parallel to bucket for compat).
+    md.patient_age = _parse_age_exact(age_raw)
+    if md.patient_age is None:
+        md.patient_age = _parse_birthdate_age_exact(
+            str(getattr(first_ds, "PatientBirthDate", "") or ""),
+            str(getattr(first_ds, "StudyDate", "") or ""),
+        )
+
     md.study_date_shifted = _parse_study_date(str(getattr(first_ds, "StudyDate", "") or ""))
     md.study_year = md.study_date_shifted.year if md.study_date_shifted else None
 
@@ -217,5 +290,15 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
         md.slice_thickness_mm = _parse_float(getattr(first_ds, "SliceThickness", None))
     if first_modality == "CT":
         md.kvp = _parse_float(getattr(first_ds, "KVP", None))
+
+    # v3 FR-V3-DATA-2 — KCD-8 heuristic (modality + body_part) → diagnosis.
+    # Imported lazily to keep the extract.py module fast to import in tests
+    # that don't need KCD logic.
+    from radivault_gateway.kcd_heuristic import lookup_kcd
+
+    kcd_entry = lookup_kcd(first_modality, md.body_part_examined)
+    md.kcd_code = kcd_entry.code
+    md.kcd_label_ko = kcd_entry.label_ko
+    md.kcd_label_en = kcd_entry.label_en
 
     return md

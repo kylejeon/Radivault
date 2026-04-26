@@ -1,9 +1,9 @@
 """Whitelisted facet aggregation (dev-spec §4.5, FR-31..FR-34).
 
-Six fields only: modality, body_part, sex, age_bucket, manufacturer, year.
-
-``age_bucket`` / ``sex`` live on ``patient_pseudo``; the queries below join
-that table. ``year`` is derived from ``study_date_shifted``.
+v3 (FR-V3-API-3): adds ``hospital_region`` (group by hospital.region_pseudo)
+and ``kcd_code`` (group by study.kcd_code) facets. ``age_bucket`` is retained
+as a key but always returns ``[]`` (deprecation — the v3 sidebar uses
+``<AgeRangeInput>`` instead of bucket checkboxes).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import Session
 
-from radivault_central.db.models import PatientPseudo, Study
+from radivault_central.db.models import Hospital, PatientPseudo, Study
 from radivault_search.query.schema import FacetValue
 
 FACET_FIELDS = (
@@ -23,6 +23,9 @@ FACET_FIELDS = (
     "model_name",
     "year",
     "contrast_used",
+    # v3 additions.
+    "hospital_region",
+    "kcd_code",
 )
 
 MAX_BUCKETS = 50
@@ -34,7 +37,7 @@ def compute_facets(
     where_clauses: list,
     dialect: str,
 ) -> dict[str, list[FacetValue]]:
-    """Run the 6 GROUP BY queries and shape the output.
+    """Run the GROUP BY queries and shape the output.
 
     Each field executes a single grouped SELECT and truncates at 50 buckets.
     The remainder (if any) rolls up into a ``__other__`` row.
@@ -43,10 +46,8 @@ def compute_facets(
 
     base_filters = list(where_clauses)
 
-    # Simple string-valued facets.
-    # metadata-thumbnail-ingest FR-FACET-1: ``model_name`` is the new 8th
-    # facet (study.model_name = ManufacturerModelName).
-    for field in ("modality", "body_part", "manufacturer", "model_name"):
+    # Simple string-valued facets on the Study table.
+    for field in ("modality", "body_part", "manufacturer", "model_name", "kcd_code"):
         col = getattr(Study, field)
         stmt = (
             select(col, func.count(Study.study_pk))
@@ -79,21 +80,9 @@ def compute_facets(
     )
     result["sex"] = _shape_rows(session.execute(sex_stmt).all())
 
-    age_stmt = (
-        select(PatientPseudo.age_bucket, func.count(Study.study_pk))
-        .select_from(Study)
-        .join(
-            PatientPseudo,
-            PatientPseudo.patient_pseudo_pk == Study.patient_pseudo_pk,
-            isouter=True,
-        )
-        .where(*base_filters)
-        .group_by(PatientPseudo.age_bucket)
-        .order_by(desc(func.count(Study.study_pk)))
-    )
-    # age_bucket is SmallInteger on the central ORM — stringify for response.
-    rows = [(str(v) if v is not None else None, c) for v, c in session.execute(age_stmt).all()]
-    result["age_bucket"] = _shape_rows(rows)
+    # v3 — age_bucket is deprecated; UI no longer surfaces this facet but we
+    # keep the key to avoid breaking older clients. Always [] per FR-V3-API-3.
+    result["age_bucket"] = []
 
     # year — derive from study_date_shifted (ISO year).
     if dialect == "sqlite":
@@ -117,6 +106,17 @@ def compute_facets(
             s = str(int(float(v))) if isinstance(v, (int, float)) else str(v)
             normalized.append((s, c))
     result["year"] = _shape_rows(normalized)
+
+    # v3 — hospital_region facet (Hospital.region_pseudo).
+    region_stmt = (
+        select(Hospital.region_pseudo, func.count(Study.study_pk))
+        .select_from(Study)
+        .join(Hospital, Hospital.hospital_pk == Study.hospital_pk, isouter=True)
+        .where(*base_filters)
+        .group_by(Hospital.region_pseudo)
+        .order_by(desc(func.count(Study.study_pk)))
+    )
+    result["hospital_region"] = _shape_rows(session.execute(region_stmt).all())
 
     # Silence "case" import warning on ruff.
     _ = case

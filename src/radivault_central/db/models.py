@@ -55,6 +55,10 @@ class Hospital(Base):
     hospital_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     region: Mapped[str] = mapped_column(String, nullable=False, default="KR-SE")
+    # buyer-search-v3 FR-V3-DATA-3 — buyer-facing region pseudo (e.g. "SEOUL-A").
+    # Distinct from ``region`` (internal ISO code). Index ``idx_hospital_region_pseudo``
+    # added by alembic 0007.
+    region_pseudo: Mapped[str | None] = mapped_column(String(20))
     salt_version_current: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     allowed_ruleset_versions: Mapped[list | None] = mapped_column(_json_type())
     max_study_bytes: Mapped[int] = mapped_column(
@@ -113,6 +117,10 @@ class PatientPseudo(Base):
     )
     pseudo_patient_key: Mapped[str] = mapped_column(String, nullable=False)
     age_bucket: Mapped[int | None] = mapped_column(SmallInteger)
+    # buyer-search-v3 FR-V3-DATA-1 — exact integer 0-120. Deprecates ``age_bucket``
+    # (kept for backward compat through v0.2). CHECK constraint added by alembic
+    # 0007 on Postgres.
+    age: Mapped[int | None] = mapped_column(Integer)
     sex: Mapped[str | None] = mapped_column(String(1))
     offset_days_hash: Mapped[str | None] = mapped_column(String)
     first_seen_at: Mapped[datetime] = mapped_column(
@@ -128,6 +136,8 @@ class Study(Base):
         Index("idx_study_patient", "patient_pseudo_pk"),
         Index("idx_study_hospital_ingested", "hospital_pk", "ingested_at"),
         Index("idx_study_manufacturer", "manufacturer"),
+        # buyer-search-v3 FR-V3-DATA-2 — KCD facet aggregation + filter index.
+        Index("idx_study_kcd_code", "kcd_code"),
     )
 
     study_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
@@ -160,6 +170,14 @@ class Study(Base):
     central_object_present: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+
+    # buyer-search-v3 FR-V3-DATA-2 — KCD-8 (한국표준질병사인분류) heuristic mapping.
+    # Populated by Gateway extract (modality + body_part lookup) or
+    # ``backfill_v3_kcd_age_region.py``. Default fallback row "Z00.0" /
+    # "일반 의학적 검사" / "General medical examination" when no rule matches.
+    kcd_code: Mapped[str | None] = mapped_column(String(10))
+    kcd_label_ko: Mapped[str | None] = mapped_column(String(200))
+    kcd_label_en: Mapped[str | None] = mapped_column(String(200))
 
     # dev-spec-buyer-browse-preview FR-DATA-1: PHI verification gate +
     # preview cache pointers + sample download SOPInstanceUID.

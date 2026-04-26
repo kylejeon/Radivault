@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Study Detail (v2)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar">
+      <span class="trust-bar__dot"></span>
+      <span class="en">PIPA §28-8 · 정통망법 · KCD-8</span>
+      <span class="ko">개인정보보호법 §28-8 · 정통망법 · KCD-8</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./search.html" class="nav__link"><span class="en">← Back to Search</span><span class="ko">← 검색으로</span></a>
+    <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+    <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+    <a href="#" class="nav__link"><span class="en">API Docs</span><span class="ko">API 문서</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+    <a href="./account.html" class="account-menu">
+      <span class="account-menu__avatar">AC</span>
+      <span>acme-ai</span>
+    </a>
+  </div>
+</header>
+
+<!-- Sub-bar with breadcrumb + sibling nav -->
+<div class="subbar" style="padding-top:10px; padding-bottom:10px;">
+  <div style="flex:1; display:flex; align-items:center; gap:14px; font-size:12.5px;">
+    <span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span>
+    <span class="muted">/</span>
+    <span class="result-meta__kcd">I20.9</span>
+    <span class="mono muted">1.2.840.HOSP1.7392</span>
+    <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id revision · <span>a3f0…</span></span>
+  </div>
+  <div style="display:flex; gap:6px;">
+    <button class="btn btn--ghost btn--sm">← <span class="en">Prev</span><span class="ko">이전</span></button>
+    <span class="muted" style="align-self:center; font-size:12px;">3 / 250</span>
+    <button class="btn btn--ghost btn--sm"><span class="en">Next</span><span class="ko">다음</span> →</button>
+  </div>
+</div>
+
+<main class="layout-detail">
+
+  <!-- ===== Left: viewer ===== -->
+  <section class="viewer-pane">
+    <div class="viewer-canvas">
+      <div class="viewer-overlay">
+        <div>SEOUL-A · CT</div>
+        <div>WW 350 / WL 50</div>
+        <div>Slice 156 / 312</div>
+      </div>
+      <div class="viewer-overlay viewer-overlay--tr">
+        <div>SIEMENS SOMATOM Drive</div>
+        <div>kVp 120 · mAs 220</div>
+        <div>1.0 mm · soft</div>
+      </div>
+      <div class="viewer-overlay viewer-overlay--bl">
+        <div>F · 50-59</div>
+        <div>Acquired 2024-08 (date-shifted)</div>
+      </div>
+      <div class="viewer-overlay viewer-overlay--br">
+        <div style="color:var(--rv-teal-300);">
+          <span class="en">▣ De-ID verified · audit a3f0</span>
+          <span class="ko">▣ 익명화 검증됨 · audit a3f0</span>
+        </div>
+      </div>
+      <div class="viewer-tools">
+        <button title="Pan">✥</button>
+        <button title="Zoom">⚲</button>
+        <button title="Window/Level">◐</button>
+        <button title="Measure">⊟</button>
+        <button title="Annotate">✎</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Right rail: meta + De-ID + CTAs ===== -->
+  <aside class="right-rail">
+
+    <!-- Section 1: Patient/Study/Series cards -->
+    <div class="detail-section">
+      <div class="detail-section__title">
+        <span><span class="en">Metadata</span><span class="ko">메타데이터</span></span>
+        <a href="#" style="font-size:11px;"><span class="en">DICOM tags ↗</span><span class="ko">DICOM 태그 ↗</span></a>
+      </div>
+
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 3-5 6-5s6 2 6 5"/></svg>
+          <span><span class="en">Patient</span><span class="ko">환자</span></span>
+        </div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Pseudo ID</span><span class="ko">가명 ID</span></span><span class="detail-meta-row__v">PT-7392-A</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Sex</span><span class="ko">성별</span></span><span class="detail-meta-row__v">F</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Age bucket</span><span class="ko">연령 구간</span></span><span class="detail-meta-row__v">50-59</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Consent</span><span class="ko">동의</span></span><span class="detail-meta-row__v">PIPA §28-8</span></div>
+      </div>
+
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12"/></svg>
+          <span><span class="en">Study</span><span class="ko">스터디</span></span>
+        </div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Modality</span><span class="ko">모달리티</span></span><span class="detail-meta-row__v"><span class="mod-dot mod-dot--ct"></span>CT</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Body part</span><span class="ko">부위</span></span><span class="detail-meta-row__v">CHEST</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Diagnosis</span><span class="ko">진단</span></span><span class="detail-meta-row__v">I20.9</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Acquired</span><span class="ko">촬영일</span></span><span class="detail-meta-row__v">2024-08-* (shifted)</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Source</span><span class="ko">출처</span></span><span class="detail-meta-row__v">SEOUL-A</span></div>
+      </div>
+
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 6h6M5 9h6M5 11h4"/></svg>
+          <span><span class="en">Series &amp; device</span><span class="ko">시리즈 · 장비</span></span>
+        </div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Series</span><span class="ko">시리즈</span></span><span class="detail-meta-row__v">3</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Instances</span><span class="ko">인스턴스</span></span><span class="detail-meta-row__v">312</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Bytes</span><span class="ko">용량</span></span><span class="detail-meta-row__v">182 MB</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Manufacturer</span><span class="ko">제조사</span></span><span class="detail-meta-row__v">SIEMENS</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Model</span><span class="ko">모델</span></span><span class="detail-meta-row__v">SOMATOM Drive</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Slice (mm)</span><span class="ko">슬라이스 (mm)</span></span><span class="detail-meta-row__v">1.0</span></div>
+      </div>
+    </div>
+
+    <!-- Section 2: De-ID Chain Stepper (default-open, signature differentiator) -->
+    <div class="detail-section">
+      <div class="detail-section__title">
+        <span><span class="en">De-ID Chain</span><span class="ko">익명화 체인</span></span>
+        <a href="#" id="openAuditModal" style="font-size:11px;"><span class="en">View full audit log ↗</span><span class="ko">전체 audit 로그 ↗</span></a>
+      </div>
+
+      <div class="deid-stepper">
+        <div class="deid-stepper__head">
+          <span class="deid-stepper__head__icon">✓</span>
+          <span><span class="en">5 stages · all verified</span><span class="ko">5단계 · 모두 검증됨</span></span>
+        </div>
+
+        <div class="deid-step">
+          <span class="deid-step__num deid-step__num--done">1</span>
+          <div class="deid-step__body">
+            <span class="deid-step__title">DICOM PHI tag scrub (PS3.15 Annex E)</span>
+            <span class="deid-step__title-ko">DICOM PHI 태그 제거 (PS3.15 부록 E)</span>
+            <span class="deid-step__hash">audit · a3f0e7c2</span>
+          </div>
+        </div>
+
+        <div class="deid-step">
+          <span class="deid-step__num deid-step__num--done">2</span>
+          <div class="deid-step__body">
+            <span class="deid-step__title">UID re-generation (deterministic, salted)</span>
+            <span class="deid-step__title-ko">UID 재생성 (결정론적 · salt 적용)</span>
+            <span class="deid-step__hash">audit · b71c4d9a</span>
+          </div>
+        </div>
+
+        <div class="deid-step">
+          <span class="deid-step__num deid-step__num--done">3</span>
+          <div class="deid-step__body">
+            <span class="deid-step__title">Date shift (per-patient, ±365 days)</span>
+            <span class="deid-step__title-ko">날짜 시프트 (환자별 ±365일)</span>
+            <span class="deid-step__hash">audit · c08f2e15</span>
+          </div>
+        </div>
+
+        <div class="deid-step">
+          <span class="deid-step__num deid-step__num--done">4</span>
+          <div class="deid-step__body">
+            <span class="deid-step__title">Burn-in pixel OCR + masking</span>
+            <span class="deid-step__title-ko">번인 픽셀 OCR + 마스킹</span>
+            <span class="deid-step__hash">audit · d92a1f06</span>
+          </div>
+        </div>
+
+        <div class="deid-step">
+          <span class="deid-step__num deid-step__num--done">5</span>
+          <div class="deid-step__body">
+            <span class="deid-step__title">3D defacing (skull / face surface)</span>
+            <span class="deid-step__title-ko">3D defacing (두개골 / 안면 표면)</span>
+            <span class="deid-step__hash">audit · e51b8330</span>
+          </div>
+        </div>
+
+        <div class="deid-stepper__footer">
+          <span><span class="en">ruleset</span><span class="ko">룰셋</span> v0.2.1</span>
+          <span><span class="en">processed 2024-08-31</span><span class="ko">처리 2024-08-31</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Longitudinal timeline (Segmed has none) -->
+    <div class="detail-section">
+      <div class="detail-section__title">
+        <span><span class="en">Patient longitudinal</span><span class="ko">환자 시계열</span></span>
+        <span style="font-size:11px; color:var(--rv-stone-500);">PT-7392-A · 4 studies</span>
+      </div>
+      <div class="timeline">
+        <div class="timeline__step">
+          <div class="timeline__dot">CR</div>
+          <div class="timeline__date">2022-03</div>
+        </div>
+        <div class="timeline__step">
+          <div class="timeline__dot">CT</div>
+          <div class="timeline__date">2023-06</div>
+        </div>
+        <div class="timeline__step">
+          <div class="timeline__dot timeline__dot--filled">CT</div>
+          <div class="timeline__date">2024-08</div>
+        </div>
+        <div class="timeline__step">
+          <div class="timeline__dot">MR</div>
+          <div class="timeline__date">2025-01</div>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--rv-stone-500); margin-top:6px; text-align:center;">
+        <span class="en">All 4 studies from SEOUL-A · same anonymized patient</span>
+        <span class="ko">SEOUL-A 의 동일 익명 환자 4 study</span>
+      </div>
+    </div>
+
+    <!-- Section 4: CTAs (sticky) -->
+    <div class="detail-cta">
+      <button class="btn btn--primary">
+        ⬇ <span class="en">Sample download (10 instances · ZIP)</span>
+        <span class="ko">샘플 다운로드 (10 인스턴스 · ZIP)</span>
+      </button>
+      <button class="btn btn--ghost-teal">
+        + <span class="en">Add to cohort · my-angina-q4</span>
+        <span class="ko">+ 코호트에 추가 · my-angina-q4</span>
+      </button>
+      <p style="font-size:10.5px; color:var(--rv-stone-500); text-align:center; margin-top:4px; line-height:1.5;">
+        <span class="en">Sample = preview tier (free, self-serve). Full delivery requires signed contract per PIPA §28-8.</span>
+        <span class="ko">샘플 = preview tier (무료, self-serve). 전체 배송은 PIPA §28-8 에 따라 계약 필요.</span>
+      </p>
+    </div>
+  </aside>
+</main>
+
+<!-- Audit modal (hidden by default) -->
+<div id="auditModal" style="display:none; position:fixed; inset:0; background:rgba(28,25,23,0.6); z-index:200; align-items:center; justify-content:center;">
+  <div style="background:#fff; max-width:640px; width:92%; max-height:80vh; overflow-y:auto; border-radius:8px; box-shadow:var(--shadow-pop); padding:24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 style="font-size:16px; color:var(--rv-navy-900);">
+        <span class="en">Full audit log · study 1.2.840.HOSP1.7392</span>
+        <span class="ko">전체 audit 로그 · study 1.2.840.HOSP1.7392</span>
+      </h2>
+      <button id="closeAuditModal" style="font-size:18px; color:var(--rv-stone-500);">×</button>
+    </div>
+    <p style="font-size:12px; color:var(--rv-stone-500); margin-bottom:16px;">
+      <span class="en">WORM-stored, 5-year retention. Each step's audit hash is signed and chain-anchored.</span>
+      <span class="ko">WORM 저장, 5년 보관. 각 단계 audit hash 는 서명 및 체인 앵커링됩니다.</span>
+    </p>
+    <div style="font-family:var(--font-mono); font-size:11.5px; line-height:1.8; background:var(--rv-stone-50); padding:14px; border-radius:4px; border:1px solid var(--rv-stone-200);">
+<div><strong style="color:var(--rv-navy-900);">[1] PHI tag scrub</strong> · 2024-08-31T03:14:08Z · ruleset v0.2.1</div>
+<div style="color:var(--rv-stone-600);">  → 47 tags removed (0010,0010 PatientName · 0010,0030 PatientBirthDate · 0008,0090 ReferringPhysician · ...)</div>
+<div style="color:var(--rv-teal-700);">  audit · a3f0e7c2 0e9f55a1 4e2b86dd ...</div>
+<br>
+<div><strong style="color:var(--rv-navy-900);">[2] UID regen</strong> · 2024-08-31T03:14:11Z · salt #2026Q3</div>
+<div style="color:var(--rv-stone-600);">  → 312 SOPInstanceUID regenerated · 3 SeriesUID · 1 StudyUID</div>
+<div style="color:var(--rv-teal-700);">  audit · b71c4d9a 18f7a9c0 ...</div>
+<br>
+<div><strong style="color:var(--rv-navy-900);">[3] Date shift</strong> · 2024-08-31T03:14:12Z · per-patient ±365d</div>
+<div style="color:var(--rv-stone-600);">  → patient seed PT-7392-A · shift -218 days · all dates updated</div>
+<div style="color:var(--rv-teal-700);">  audit · c08f2e15 a3b80e4f ...</div>
+<br>
+<div><strong style="color:var(--rv-navy-900);">[4] Burn-in OCR</strong> · 2024-08-31T03:15:02Z · pydeface OCR + Tesseract</div>
+<div style="color:var(--rv-stone-600);">  → 0 PHI candidates detected on pixel data (CT chest, no overlay)</div>
+<div style="color:var(--rv-teal-700);">  audit · d92a1f06 4280cea3 ...</div>
+<br>
+<div><strong style="color:var(--rv-navy-900);">[5] 3D defacing</strong> · 2024-08-31T03:15:08Z · skipped (chest CT, no head)</div>
+<div style="color:var(--rv-stone-600);">  → not applicable for body part = CHEST</div>
+<div style="color:var(--rv-teal-700);">  audit · e51b8330 (skip-marker)</div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa"><span class="compliance-pill__dot"></span><span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span></span>
+      <span class="compliance-pill compliance-pill--info"><span class="compliance-pill__dot"></span><span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span></span>
+      <span class="compliance-pill compliance-pill--kcd"><span class="compliance-pill__dot"></span><span>KCD-8</span></span>
+      <span class="compliance-pill compliance-pill--moh"><span class="compliance-pill__dot"></span><span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 정합</span></span>
+    </div>
+    <a href="#" style="color:#A8A29E;"><span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span></a>
+  </div>
+  <p class="compliance-footer__legal">
+    <span class="en">RadiVault datasets are for AI/ML R&amp;D and validation. Not a SaMD. Not for clinical decision-making. Anonymization performed under PIPA §28-8 expert determination.</span>
+    <span class="ko">RadiVault 데이터셋은 AI/ML 연구·검증 용도입니다. SaMD 가 아니며, 임상 의사결정에 사용할 수 없습니다. 익명화는 PIPA §28-8 전문가 결정 하에 수행됩니다.</span>
+  </p>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+
+  const modal = document.getElementById('auditModal');
+  document.getElementById('openAuditModal').addEventListener('click', e => {
+    e.preventDefault();
+    modal.style.display = 'flex';
+  });
+  document.getElementById('closeAuditModal').addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  modal.addEventListener('click', e => {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+</script>
+</body>
+</html>

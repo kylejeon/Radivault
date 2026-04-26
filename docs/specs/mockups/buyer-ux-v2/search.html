@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Search & Cohort (v2 mockup)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/[email protected]/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+  <!-- Top nav -->
+  <header class="nav">
+    <div class="nav__brand">
+      <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+      <a href="./index.html" style="color:inherit; text-decoration:none;">RadiVault</a>
+      <span class="federated-pill" title="Federated across hospitals">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="3" /><circle cx="2" cy="2" r="1.5" /><circle cx="14" cy="2" r="1.5" /><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1" /><line x1="14" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1" /></svg>
+        <span class="en">Federated · 2 hospitals</span>
+        <span class="ko">연합 · 2 병원</span>
+      </span>
+    </div>
+    <div class="nav__center">
+      <a href="./search.html" class="nav__link is-active">
+        <span class="en">Search</span><span class="ko">검색</span>
+      </a>
+      <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+      <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+      <a href="#" class="nav__link"><span class="en">Docs</span><span class="ko">문서</span></a>
+    </div>
+    <div class="nav__right">
+      <a href="#" class="nav__link" title="Audit log">
+        <span class="en">Audit ↗</span><span class="ko">감사 ↗</span>
+      </a>
+      <div class="locale-toggle" role="tablist">
+        <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+        <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+      </div>
+      <a href="./account.html" class="account-menu">
+        <span class="account-menu__avatar">AC</span>
+        <span class="en">acme-ai</span>
+        <span class="ko">acme-ai</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Hero strip -->
+  <div class="hero-strip">
+    <span class="hero-strip__title">
+      <span class="en">RadiVault — Korean medical imaging for global AI</span>
+      <span class="ko">RadiVault — 글로벌 AI 를 위한 한국 의료영상 데이터</span>
+    </span>
+    <span class="hero-strip__sep">·</span>
+    <span class="hero-strip__metric"><strong>250</strong> <span class="en">studies</span><span class="ko">스터디</span></span>
+    <span class="hero-strip__sep">·</span>
+    <span class="hero-strip__metric"><strong>2</strong> <span class="en">partner hospitals</span><span class="ko">파트너 병원</span></span>
+    <span class="hero-strip__sep">·</span>
+    <span class="hero-strip__metric"><strong>5</strong> <span class="en">modality classes</span><span class="ko">모달리티 클래스</span></span>
+    <span class="hero-strip__sep">·</span>
+    <span class="hero-strip__metric"><span class="en">PIPA-native · HIPAA-aligned</span><span class="ko">PIPA-native · HIPAA-aligned</span></span>
+  </div>
+
+  <main class="layout-3pane">
+    <!-- Left: Facet sidebar -->
+    <aside class="facet-sidebar" aria-label="Filters">
+      <div class="facet-section" data-facet="federated">
+        <div class="facet-section__title">
+          <span><span class="en">Federated coverage</span><span class="ko">연합 분포</span></span>
+        </div>
+        <input class="facet-slider" type="range" min="1" max="2" value="1" aria-label="Min hospitals" id="minHospitals" />
+        <div class="facet-slider-label">
+          <span><span class="en">Across at least</span><span class="ko">최소</span></span>
+          <span><span class="facet-slider-value" id="minHospitalsValue">1</span> <span class="en">hospital(s)</span><span class="ko">개 병원에 분포</span></span>
+        </div>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Modality</span><span class="ko">모달리티</span></span>
+          <span style="color: var(--color-text-muted); font-weight: 400; font-size: 11px;">5</span>
+        </div>
+        <button class="facet-chip" aria-pressed="true" data-facet-chip>
+          <span class="modality-chip" data-modality="CT">CT</span>
+          <span class="facet-chip__count">98</span>
+        </button>
+        <button class="facet-chip" aria-pressed="false" data-facet-chip>
+          <span class="modality-chip" data-modality="MR">MR</span>
+          <span class="facet-chip__count">76</span>
+        </button>
+        <button class="facet-chip" aria-pressed="false" data-facet-chip>
+          <span class="modality-chip" data-modality="MG">MG</span>
+          <span class="facet-chip__count">34</span>
+        </button>
+        <button class="facet-chip" aria-pressed="false" data-facet-chip>
+          <span class="modality-chip" data-modality="CR">CR</span>
+          <span class="facet-chip__count">28</span>
+        </button>
+        <button class="facet-chip" aria-pressed="false" data-facet-chip>
+          <span class="modality-chip" data-modality="US">US</span>
+          <span class="facet-chip__count">14</span>
+        </button>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Body part</span><span class="ko">신체 부위</span></span>
+        </div>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">CHEST <span class="facet-chip__count">82</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">BRAIN <span class="facet-chip__count">54</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">ABDOMEN <span class="facet-chip__count">41</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">PELVIS <span class="facet-chip__count">29</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">BREAST <span class="facet-chip__count">34</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">EXTREMITY <span class="facet-chip__count">10</span></button>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Age bucket</span><span class="ko">연령</span></span>
+        </div>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">0–17 <span class="facet-chip__count">12</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">18–39 <span class="facet-chip__count">48</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">40–59 <span class="facet-chip__count">96</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">60–79 <span class="facet-chip__count">78</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">80+ <span class="facet-chip__count">16</span></button>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Sex</span><span class="ko">성별</span></span>
+        </div>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">F <span class="facet-chip__count">128</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">M <span class="facet-chip__count">122</span></button>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Manufacturer</span><span class="ko">제조사</span></span>
+        </div>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">SIEMENS <span class="facet-chip__count">112</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">GE <span class="facet-chip__count">88</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">PHILIPS <span class="facet-chip__count">34</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">CANON <span class="facet-chip__count">16</span></button>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Year</span><span class="ko">촬영 연도</span></span>
+        </div>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">2024 <span class="facet-chip__count">82</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">2023 <span class="facet-chip__count">96</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">2022 <span class="facet-chip__count">48</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false">2021 <span class="facet-chip__count">24</span></button>
+      </div>
+
+      <div class="facet-section">
+        <div class="facet-section__title">
+          <span><span class="en">Contrast</span><span class="ko">조영제</span></span>
+        </div>
+        <button class="facet-chip" data-facet-chip aria-pressed="false"><span class="en">With</span><span class="ko">사용</span> <span class="facet-chip__count">88</span></button>
+        <button class="facet-chip" data-facet-chip aria-pressed="false"><span class="en">Without</span><span class="ko">미사용</span> <span class="facet-chip__count">162</span></button>
+      </div>
+
+      <button class="clear-filters">
+        <span class="en">Clear all filters</span>
+        <span class="ko">필터 모두 해제</span>
+      </button>
+    </aside>
+
+    <!-- Center: Results -->
+    <section class="results-pane">
+      <div class="results-header">
+        <div>
+          <span class="results-count"><strong>247</strong> <span class="en">studies match</span><span class="ko">개 스터디</span></span>
+          <span class="results-latency">· 31 ms · p95 187 ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label style="font-size: 12px; color: var(--color-text-muted);">
+            <span class="en">Sort</span><span class="ko">정렬</span>:
+          </label>
+          <select class="sort-select">
+            <option><span class="en">Newest</span></option>
+            <option>n_instances ↓</option>
+            <option>size ↓</option>
+            <option>hospital diversity</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Result cards -->
+      <div role="table" aria-label="Search results">
+        <article class="study-card" role="row" data-hospital="HOSP-001" data-selected="true" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" checked aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#2563eb" stroke-width="1.5"><circle cx="32" cy="32" r="22"/><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="6"/><line x1="10" y1="32" x2="54" y2="32"/><line x1="32" y1="10" x2="32" y2="54"/></svg>
+            <span class="study-card__thumb-label">CT · 1/247</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="CT">CT</span>
+              <a href="./study-detail.html" class="study-card__title">CHEST</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-001);display:inline-block;"></span>
+                HOSP-001 / <span class="ko">본병원</span><span class="en">Bon Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>40–59</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>F</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">SIEMENS <strong>SOMATOM Force</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2024-03</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>520</strong> <span class="en">slices</span><span class="ko">슬라이스</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>104.8</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">
+              ✓ PIPA
+              <span class="verified-chip__tooltip">
+                <strong>Verified anonymization</strong><br/>
+                ① DICOM PHI scrub (PS3.15 Annex E)<br/>
+                ② Pixel OCR burn-in check (Presidio)<br/>
+                ③ 3D defacing (head only)<br/>
+                ④ Patient consent (PIPA §28-8)
+              </span>
+            </span>
+            <span class="sample-watermark">Sample</span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-002" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#7c3aed" stroke-width="1.5"><ellipse cx="32" cy="32" rx="20" ry="16"/><path d="M22 28 Q32 22 42 28 M22 36 Q32 42 42 36"/><circle cx="26" cy="30" r="2" fill="#7c3aed"/><circle cx="38" cy="30" r="2" fill="#7c3aed"/></svg>
+            <span class="study-card__thumb-label">MR · 1/183</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="MR">MR</span>
+              <a href="./study-detail.html" class="study-card__title">BRAIN</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-002);display:inline-block;"></span>
+                HOSP-002 / <span class="ko">튼튼병원</span><span class="en">Tuntun Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>60–79</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>M</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">SIEMENS <strong>MAGNETOM Vida 3T</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2024-01</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>183</strong> <span class="en">slices</span><span class="ko">슬라이스</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>76.2</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong><br/>① DICOM PHI scrub<br/>② Pixel OCR burn-in check<br/>③ 3D defacing<br/>④ Patient consent</span></span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-001" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#2563eb" stroke-width="1.5"><circle cx="32" cy="32" r="22"/><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="6"/><line x1="10" y1="32" x2="54" y2="32"/><line x1="32" y1="10" x2="32" y2="54"/></svg>
+            <span class="study-card__thumb-label">CT · 1/412</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="CT">CT</span>
+              <a href="./study-detail.html" class="study-card__title">ABDOMEN</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-001);display:inline-block;"></span>
+                HOSP-001 / <span class="ko">본병원</span><span class="en">Bon Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>18–39</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>M</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">GE <strong>Revolution CT</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2023-11</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>412</strong> <span class="en">slices</span><span class="ko">슬라이스</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>168.4</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong></span></span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-002" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#db2777" stroke-width="1.5"><ellipse cx="32" cy="36" rx="22" ry="18"/><circle cx="32" cy="36" r="3" fill="#db2777"/><path d="M14 30 Q32 22 50 30" stroke-width="1"/></svg>
+            <span class="study-card__thumb-label">MG · 1/4</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="MG">MG</span>
+              <a href="./study-detail.html" class="study-card__title">BREAST</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-002);display:inline-block;"></span>
+                HOSP-002 / <span class="ko">튼튼병원</span><span class="en">Tuntun Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>40–59</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>F</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">HOLOGIC <strong>Selenia Dimensions</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2024-02</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>4</strong> <span class="en">images</span><span class="ko">영상</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>62.0</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong></span></span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-001" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#7c3aed" stroke-width="1.5"><ellipse cx="32" cy="32" rx="20" ry="16"/><path d="M22 28 Q32 22 42 28 M22 36 Q32 42 42 36"/></svg>
+            <span class="study-card__thumb-label">MR · 1/142</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="MR">MR</span>
+              <a href="./study-detail.html" class="study-card__title">PELVIS</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-001);display:inline-block;"></span>
+                HOSP-001 / <span class="ko">본병원</span><span class="en">Bon Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>40–59</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>F</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">PHILIPS <strong>Ingenia 1.5T</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2024-04</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>142</strong> <span class="en">slices</span><span class="ko">슬라이스</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>59.6</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong></span></span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-002" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#16a34a" stroke-width="1.5"><rect x="14" y="10" width="36" height="44" rx="2"/><line x1="20" y1="20" x2="44" y2="20"/><line x1="20" y1="30" x2="44" y2="30"/><line x1="20" y1="40" x2="44" y2="40"/></svg>
+            <span class="study-card__thumb-label">CR · 1/2</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="CR">CR</span>
+              <a href="./study-detail.html" class="study-card__title">CHEST</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-002);display:inline-block;"></span>
+                HOSP-002 / <span class="ko">튼튼병원</span><span class="en">Tuntun Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>0–17</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>F</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">CANON <strong>CXDI-710C</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2024-04</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>2</strong> <span class="en">images</span><span class="ko">영상</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>14.2</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong></span></span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-001" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#ea580c" stroke-width="1.5"><path d="M32 14 Q14 32 32 50 Q50 32 32 14"/><circle cx="32" cy="32" r="5"/></svg>
+            <span class="study-card__thumb-label">US · 1/12</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="US">US</span>
+              <a href="./study-detail.html" class="study-card__title">ABDOMEN</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-001);display:inline-block;"></span>
+                HOSP-001 / <span class="ko">본병원</span><span class="en">Bon Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>18–39</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>F</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">PHILIPS <strong>EPIQ Elite</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2023-09</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>12</strong> <span class="en">images</span><span class="ko">영상</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>8.4</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong></span></span>
+          </div>
+        </article>
+
+        <article class="study-card" role="row" data-hospital="HOSP-002" tabindex="0">
+          <div class="study-card__stripe"></div>
+          <div class="study-card__check"><input type="checkbox" aria-label="Select study" /></div>
+          <div class="study-card__thumb">
+            <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#2563eb" stroke-width="1.5"><circle cx="32" cy="32" r="22"/><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="6"/></svg>
+            <span class="study-card__thumb-label">CT · 1/280</span>
+          </div>
+          <div class="study-card__body">
+            <div class="study-card__row1">
+              <span class="modality-chip" data-modality="CT">CT</span>
+              <a href="./study-detail.html" class="study-card__title">BRAIN</a>
+              <span class="study-card__hospital">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--color-hospital-stripe-002);display:inline-block;"></span>
+                HOSP-002 / <span class="ko">튼튼병원</span><span class="en">Tuntun Hospital</span>
+              </span>
+            </div>
+            <div class="study-card__row2">
+              <span class="study-card__meta-item"><span class="en">Age</span><span class="ko">연령</span> <strong>60–79</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><span class="en">Sex</span><span class="ko">성별</span> <strong>M</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">SIEMENS <strong>SOMATOM go.Top</strong></span>
+              <span>·</span>
+              <span class="study-card__meta-item">2024-02</span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>280</strong> <span class="en">slices</span><span class="ko">슬라이스</span></span>
+              <span>·</span>
+              <span class="study-card__meta-item"><strong>112.0</strong> MB</span>
+            </div>
+          </div>
+          <div class="study-card__right">
+            <span class="verified-chip">✓ PIPA<span class="verified-chip__tooltip"><strong>Verified anonymization</strong></span></span>
+          </div>
+        </article>
+      </div>
+
+      <div style="display:flex;justify-content:center;margin:20px 0;">
+        <button class="btn btn--ghost">
+          <span class="en">Load more (239 remaining)</span>
+          <span class="ko">더 보기 (239 개 남음)</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Right: Cohort sidebar -->
+    <aside class="cohort-sidebar" aria-label="Cohort">
+      <div class="cohort-title">
+        <span class="en">Your cohort</span>
+        <span class="ko">현재 코호트</span>
+      </div>
+
+      <div class="cohort-stats">
+        <div class="cohort-stat">
+          <span class="cohort-stat__value">1</span>
+          <span class="cohort-stat__label"><span class="en">studies</span><span class="ko">스터디</span></span>
+        </div>
+        <div class="cohort-stat">
+          <span class="cohort-stat__value">1</span>
+          <span class="cohort-stat__label"><span class="en">hospitals</span><span class="ko">병원</span></span>
+        </div>
+        <div class="cohort-stat">
+          <span class="cohort-stat__value">104.8</span>
+          <span class="cohort-stat__label">MB</span>
+        </div>
+      </div>
+
+      <div class="cohort-diversity">
+        <div class="cohort-diversity__label">
+          <span class="en">Modality distribution</span>
+          <span class="ko">모달리티 분포</span>
+        </div>
+        <div class="cohort-diversity__bar">
+          <span class="cohort-diversity__seg" style="background: var(--color-modality-ct); width: 100%;"></span>
+        </div>
+        <div class="cohort-diversity__legend">
+          <span class="cohort-diversity__legend-item"><span class="cohort-diversity__legend-dot" style="background: var(--color-modality-ct);"></span>CT 1</span>
+        </div>
+      </div>
+
+      <div class="cohort-items">
+        <div class="cohort-item">
+          <div class="cohort-item__thumb">
+            <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#2563eb" stroke-width="1.5"><circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="7"/><circle cx="16" cy="16" r="3"/></svg>
+          </div>
+          <div class="cohort-item__body">
+            <div class="cohort-item__title">CHEST · CT</div>
+            <div class="cohort-item__meta">
+              HOSP-001 · 520 slices · 104.8 MB
+            </div>
+          </div>
+          <button class="cohort-item__remove" aria-label="Remove">×</button>
+        </div>
+      </div>
+
+      <a href="#" class="btn btn--primary btn--block btn--lg">
+        <span class="en">Review & order →</span>
+        <span class="ko">검토 & 주문 →</span>
+      </a>
+      <a href="#" class="btn btn--secondary btn--block" style="margin-top:8px;">
+        <span class="en">Try sample download (1)</span>
+        <span class="ko">샘플 다운로드 (1)</span>
+      </a>
+
+      <div style="margin-top:16px; font-size:11px; color:var(--color-text-muted); line-height:1.5;">
+        <span class="en">Sample tier: 1 study free to evaluate. Order tier: full cohort delivered as DICOM + JSON within 48 hours.</span>
+        <span class="ko">샘플 등급: 1 스터디 평가용 무료. 주문 등급: 전체 코호트 48시간 내 DICOM + JSON 전달.</span>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="compliance-badges">
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>PIPA §28-8 compliant</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>K-MOHW 2024 aligned</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>HIPAA-aligned anonymization</span>
+      <span class="compliance-badge"><span class="compliance-badge__dot"></span>DICOM PS3.18 Sup 203</span>
+    </div>
+    <div class="footer__right">
+      <a href="#"><span class="en">Audit log</span><span class="ko">감사 로그</span> ↗</a>
+      <a href="#"><span class="en">Trust Center</span><span class="ko">신뢰 센터</span></a>
+      <span>© 2026 RadiVault</span>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // Locale toggle
+    document.querySelectorAll('[data-set-locale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const loc = btn.dataset.setLocale;
+        document.body.dataset.locale = loc;
+        document.documentElement.lang = loc;
+        document.querySelectorAll('[data-set-locale]').forEach((b) => {
+          const active = b.dataset.setLocale === loc;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+      });
+    });
+
+    // Facet chip toggle
+    document.querySelectorAll('[data-facet-chip]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const pressed = chip.getAttribute('aria-pressed') === 'true';
+        chip.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+      });
+    });
+
+    // Min hospitals slider
+    const slider = document.getElementById('minHospitals');
+    const sliderValue = document.getElementById('minHospitalsValue');
+    if (slider && sliderValue) {
+      slider.addEventListener('input', (e) => {
+        sliderValue.textContent = e.target.value;
+      });
+    }
+
+    // Study card click → toggle selected
+    document.querySelectorAll('.study-card').forEach((card) => {
+      const checkbox = card.querySelector('input[type="checkbox"]');
+      card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A' || e.target.tagName === 'INPUT' || e.target.closest('.verified-chip')) return;
+        if (checkbox) {
+          checkbox.checked = !checkbox.checked;
+          card.dataset.selected = checkbox.checked ? 'true' : 'false';
+        }
+      });
+      if (checkbox) {
+        checkbox.addEventListener('change', () => {
+          card.dataset.selected = checkbox.checked ? 'true' : 'false';
+        });
+      }
+    });
+
+    // Toast helper (used elsewhere)
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.dataset.show = 'true';
+      setTimeout(() => (el.dataset.show = 'false'), 1800);
+    }
+  </script>
+</body>
+</html>

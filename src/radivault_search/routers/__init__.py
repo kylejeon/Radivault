@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from radivault_search.routers.facets import router as facets_router
 from radivault_search.routers.hospitals import router as hospitals_router
+from radivault_search.routers.kcd_autocomplete import router as kcd_autocomplete_router
 from radivault_search.routers.probes import router as probes_router
 from radivault_search.routers.search import router as search_router
 from radivault_search.routers.version import router as version_router
@@ -15,6 +16,7 @@ from radivault_search.routers.version import router as version_router
 __all__ = [
     "facets_router",
     "hospitals_router",
+    "kcd_autocomplete_router",
     "probes_router",
     "search_router",
     "version_router",

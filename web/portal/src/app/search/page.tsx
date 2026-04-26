@@ -1,29 +1,27 @@
 import { MarketplaceNav } from "@/components/buyer/MarketplaceNav";
+import { SearchAppV3 } from "@/components/buyer/v3/SearchAppV3";
 import { getBuyerSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { SearchApp } from "./SearchApp";
 
 /**
- * /search — design-spec-portal-redesign §12.1, FR-BP-3.
+ * /search — buyer-search-v3 (FR-V3-UI-1) supersedes the v2 3-pane layout
+ * with the v3 dense 13-column table + 5-group accordion sidebar + KCD
+ * triple-ontology autocomplete. Old SearchApp.tsx kept for reference but
+ * no longer routed.
  *
- * 3-pane layout (facets · results · cohort). The legacy
- * `<components/TopNav>` is replaced by the v0.2 `<MarketplaceNav>` per
- * FR-BP-12 (adds Account entry + RadiVault Marketplace wordmark).
+ * BLOCKER #1 fix from qa-report-d13-demo-rehearsal preserved — accept
+ * either v0.2 email/password (buyerPk) or legacy paste-mode (apiKey).
  */
 export default async function SearchPage() {
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
-  // Accept either v0.2 email/password (buyerPk) or legacy paste-mode
-  // (apiKey). BLOCKER #1 fix from qa-report-d13-demo-rehearsal —
-  // signin endpoint sets buyerPk + delete apiKey, so apiKey-only check
-  // caused infinite /signin ↔ /search redirect loop.
   if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
   return (
     <div className="surface-buyer min-h-screen bg-bg">
       <MarketplaceNav active="/search" />
       <main className="mx-auto max-w-app">
-        <SearchApp locale="en" />
+        <SearchAppV3 locale="en" />
       </main>
     </div>
   );

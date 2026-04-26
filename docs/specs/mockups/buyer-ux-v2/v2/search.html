@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Search & Cohort (v2)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar" title="Compliance posture">
+      <span class="trust-bar__dot"></span>
+      <span class="en">PIPA §28-8 · 정통망법 · KCD-8</span>
+      <span class="ko">개인정보보호법 §28-8 · 정통망법 · KCD-8</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./search.html" class="nav__link is-active"><span class="en">Search</span><span class="ko">검색</span></a>
+    <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+    <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+    <a href="#" class="nav__link"><span class="en">API Docs</span><span class="ko">API 문서</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+    <a href="./account.html" class="account-menu">
+      <span class="account-menu__avatar">AC</span>
+      <span>acme-ai</span>
+    </a>
+  </div>
+</header>
+
+<!-- ============ SUB-BAR (search input + KCD autocomplete demo) ============ -->
+<div class="subbar">
+  <div class="search-input-wrap">
+    <svg class="search-input__icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" />
+      <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <input
+      type="text"
+      class="search-input"
+      id="searchBox"
+      placeholder="협심증 / Angina / I20 — KCD-8 · SNOMED · RadLex"
+      value="협심증"
+      autocomplete="off"
+    />
+    <div class="autocomplete is-open" id="autocomplete">
+      <div class="autocomplete__hint">
+        <span><span class="en">Triple ontology autocomplete</span><span class="ko">트리플 ontology 자동완성</span></span>
+        <span class="en">3 results · 한·영 simultaneous</span>
+        <span class="ko">3건 · 한·영 동시</span>
+      </div>
+      <div class="autocomplete__row">
+        <div class="autocomplete__code">I20.9</div>
+        <div class="autocomplete__ko">협심증, 상세불명</div>
+        <div class="autocomplete__en">Angina pectoris, unspecified</div>
+        <div class="autocomplete__source autocomplete__source--kcd">KCD-8</div>
+      </div>
+      <div class="autocomplete__row">
+        <div class="autocomplete__code">194828000</div>
+        <div class="autocomplete__ko">협심증 (안정형)</div>
+        <div class="autocomplete__en">Angina (disorder)</div>
+        <div class="autocomplete__source autocomplete__source--snomed">SNOMED</div>
+      </div>
+      <div class="autocomplete__row">
+        <div class="autocomplete__code">RID3501</div>
+        <div class="autocomplete__ko">관상동맥 (해부)</div>
+        <div class="autocomplete__en">Coronary artery</div>
+        <div class="autocomplete__source autocomplete__source--radlex">RadLex</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px;">
+    <button class="btn btn--ghost btn--sm">
+      <span class="en">Save query</span><span class="ko">쿼리 저장</span>
+    </button>
+    <button class="btn btn--primary btn--sm">
+      <span class="en">Search</span><span class="ko">검색 실행</span>
+    </button>
+  </div>
+</div>
+
+<!-- ============ MAIN 2-col layout ============ -->
+<main class="layout-2col">
+
+  <!-- ===== Left vertical accordion sidebar ===== -->
+  <aside class="sidebar" aria-label="Filters">
+
+    <!-- Group 1: Data Source -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">데이터 출처</span>
+          <span class="en">Data source</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" checked />
+            <span class="hospital-badge hospital-badge--seoul">
+              <span class="hospital-badge__dot"></span>
+              <span>SEOUL-A</span>
+            </span>
+          </span>
+          <span class="facet-row__count">142</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" checked />
+            <span class="hospital-badge hospital-badge--busan">
+              <span class="hospital-badge__dot"></span>
+              <span>BUSAN-B</span>
+            </span>
+          </span>
+          <span class="facet-row__count">108</span>
+        </label>
+        <label class="facet-row" style="opacity:0.55;">
+          <span class="facet-row__check">
+            <input type="checkbox" disabled />
+            <span class="hospital-badge"><span class="hospital-badge__dot" style="background:var(--rv-amber-500)"></span><span>DAEGU-C</span></span>
+          </span>
+          <span class="facet-row__count"><span class="en">soon</span><span class="ko">예정</span></span>
+        </label>
+        <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--rv-stone-200);">
+          <label class="facet-row">
+            <span class="facet-row__check">
+              <input type="checkbox" checked />
+              <span><span class="en">De-ID chain verified</span><span class="ko">익명화 체인 검증됨</span></span>
+            </span>
+            <span class="facet-row__count">250</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group 2: Clinical -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">임상 정보</span>
+          <span class="en">Clinical</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <div style="font-size:11px; color:var(--rv-stone-500); margin-bottom:6px;">
+          <span class="en">KCD-8 / SNOMED / RadLex (selected)</span>
+          <span class="ko">KCD-8 / SNOMED / RadLex (선택됨)</span>
+        </div>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" checked />
+            <span class="result-meta__kcd">I20.9</span>
+            <span><span class="ko">협심증</span><span class="en">Angina</span></span>
+          </span>
+          <span class="facet-row__count">38</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" />
+            <span class="result-meta__kcd">I25.1</span>
+            <span><span class="ko">죽상경화성 심장병</span><span class="en">Atherosclerotic HD</span></span>
+          </span>
+          <span class="facet-row__count">21</span>
+        </label>
+
+        <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--rv-stone-200); font-size:11px; color:var(--rv-stone-500); margin-bottom:6px;">
+          <span class="en">Body part (RadLex)</span><span class="ko">부위 (RadLex)</span>
+        </div>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span><span class="ko">흉부</span><span class="en">Chest</span></span></span><span class="facet-row__count">112</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span><span class="ko">두부</span><span class="en">Head</span></span></span><span class="facet-row__count">58</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span><span class="ko">복부</span><span class="en">Abdomen</span></span></span><span class="facet-row__count">42</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span><span class="ko">유방</span><span class="en">Breast</span></span></span><span class="facet-row__count">22</span></label>
+      </div>
+    </div>
+
+    <!-- Group 3: Patient -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">환자 정보</span>
+          <span class="en">Patient</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <div style="font-size:11px; color:var(--rv-stone-500); margin-bottom:6px;"><span class="en">Sex</span><span class="ko">성별</span></div>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span>F</span></span><span class="facet-row__count">128</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span>M</span></span><span class="facet-row__count">122</span></label>
+
+        <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--rv-stone-200); font-size:11px; color:var(--rv-stone-500); margin-bottom:6px;">
+          <span class="en">Age bucket</span><span class="ko">연령 구간</span>
+        </div>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>30-39</span></span><span class="facet-row__count">34</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span>40-49</span></span><span class="facet-row__count">61</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span>50-59</span></span><span class="facet-row__count">78</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>60-69</span></span><span class="facet-row__count">52</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>70+</span></span><span class="facet-row__count">25</span></label>
+      </div>
+    </div>
+
+    <!-- Group 4: Imaging tech -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">영상 기술</span>
+          <span class="en">Imaging tech</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <div style="font-size:11px; color:var(--rv-stone-500); margin-bottom:6px;"><span class="en">Modality</span><span class="ko">모달리티</span></div>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span class="mod-dot mod-dot--ct"></span><span>CT</span></span><span class="facet-row__count">98</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" checked /><span class="mod-dot mod-dot--mr"></span><span>MR</span></span><span class="facet-row__count">62</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span class="mod-dot mod-dot--cr"></span><span>CR / DR</span></span><span class="facet-row__count">38</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span class="mod-dot mod-dot--mg"></span><span>MG</span></span><span class="facet-row__count">22</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span class="mod-dot mod-dot--us"></span><span>US</span></span><span class="facet-row__count">18</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span class="mod-dot mod-dot--pt"></span><span>PET / NM</span></span><span class="facet-row__count">12</span></label>
+
+        <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--rv-stone-200); font-size:11px; color:var(--rv-stone-500); margin-bottom:6px;">
+          <span class="en">Manufacturer</span><span class="ko">제조사</span>
+        </div>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>SIEMENS</span></span><span class="facet-row__count">112</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>GE Medical</span></span><span class="facet-row__count">88</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>Philips</span></span><span class="facet-row__count">42</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>Canon</span></span><span class="facet-row__count">8</span></label>
+      </div>
+    </div>
+
+    <!-- Group 5: Time -->
+    <div class="accordion__group">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">시간</span>
+          <span class="en">Time</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2025</span></span><span class="facet-row__count">82</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2024</span></span><span class="facet-row__count">112</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2023</span></span><span class="facet-row__count">42</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2022</span></span><span class="facet-row__count">14</span></label>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Center: results ===== -->
+  <section class="results">
+
+    <div class="results__head">
+      <div>
+        <div class="results__count">
+          250 <small><span class="en">studies · 38 ms · across 2 hospitals</span><span class="ko">스터디 · 38 ms · 2 병원에 분포</span></small>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <span class="sort-control">
+          <span class="en">Sort: Relevance</span><span class="ko">정렬: 관련도</span>
+          <svg width="10" height="10" viewBox="0 0 12 12"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </span>
+      </div>
+    </div>
+
+    <!-- Result row 1 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--seoul"></div>
+      <div class="result-thumb">
+        <span class="result-thumb__label">CT · 312</span>
+      </div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span><span>SEOUL-A</span></span>
+          <span class="result-meta__kcd">I20.9</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>a3f0</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--ct"></span>
+          <span class="en">Chest CT — angina workup, contrast-enhanced</span>
+          <span class="ko">흉부 CT — 협심증 평가, 조영증강</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>F · 54</strong></span>
+          <span><span class="en">312 instances</span><span class="ko">312 인스턴스</span></span>
+          <span>SIEMENS · SOMATOM Drive</span>
+          <span><span class="en">Acquired 2024-08</span><span class="ko">촬영 2024-08</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP1.7392</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 2 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--busan"></div>
+      <div class="result-thumb"><span class="result-thumb__label">MR · 188</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span><span>BUSAN-B</span></span>
+          <span class="result-meta__kcd">I20.9</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>9c1e</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--mr"></span>
+          <span class="en">Cardiac MR — perfusion stress, late gadolinium</span>
+          <span class="ko">심장 MR — 부하 perfusion, 후기 가돌리늄</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>M · 47</strong></span>
+          <span><span class="en">188 instances</span><span class="ko">188 인스턴스</span></span>
+          <span>Philips · Ingenia 3T</span>
+          <span><span class="en">Acquired 2024-09</span><span class="ko">촬영 2024-09</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP2.4218</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 3 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--seoul"></div>
+      <div class="result-thumb"><span class="result-thumb__label">CT · 256</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span><span>SEOUL-A</span></span>
+          <span class="result-meta__kcd">I25.1</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>2b7d</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--ct"></span>
+          <span class="en">Coronary CT angiogram — calcium score 312</span>
+          <span class="ko">관상동맥 CT — 칼슘 score 312</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>M · 62</strong></span>
+          <span><span class="en">256 instances</span><span class="ko">256 인스턴스</span></span>
+          <span>SIEMENS · SOMATOM Force</span>
+          <span><span class="en">Acquired 2024-06</span><span class="ko">촬영 2024-06</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP1.5512</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 4 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--busan"></div>
+      <div class="result-thumb"><span class="result-thumb__label">MR · 412</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span><span>BUSAN-B</span></span>
+          <span class="result-meta__kcd">I20.9</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>5e80</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--mr"></span>
+          <span class="en">Brain MR — TIA workup, DWI + ADC</span>
+          <span class="ko">뇌 MR — TIA 평가, DWI + ADC</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>F · 58</strong></span>
+          <span><span class="en">412 instances</span><span class="ko">412 인스턴스</span></span>
+          <span>GE Medical · SIGNA Pioneer 3T</span>
+          <span><span class="en">Acquired 2024-04</span><span class="ko">촬영 2024-04</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP2.1184</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 5 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--seoul"></div>
+      <div class="result-thumb"><span class="result-thumb__label">MG · 4</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span><span>SEOUL-A</span></span>
+          <span class="result-meta__kcd">N63</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>7a02</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--mg"></span>
+          <span class="en">Mammography (FFDM) — screening, BI-RADS 3</span>
+          <span class="ko">유방촬영 (FFDM) — 검진, BI-RADS 3</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>F · 49</strong></span>
+          <span><span class="en">4 instances</span><span class="ko">4 인스턴스</span></span>
+          <span>Hologic · Selenia Dimensions</span>
+          <span><span class="en">Acquired 2024-05</span><span class="ko">촬영 2024-05</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP1.0921</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 6 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--busan"></div>
+      <div class="result-thumb"><span class="result-thumb__label">CR · 2</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span><span>BUSAN-B</span></span>
+          <span class="result-meta__kcd">J18.9</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>cf21</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--cr"></span>
+          <span class="en">Chest X-ray (PA + LAT) — pneumonia r/o</span>
+          <span class="ko">흉부 X-ray (PA + LAT) — 폐렴 r/o</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>M · 71</strong></span>
+          <span><span class="en">2 instances</span><span class="ko">2 인스턴스</span></span>
+          <span>Canon · CXDI-810C</span>
+          <span><span class="en">Acquired 2024-11</span><span class="ko">촬영 2024-11</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP2.6638</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 7 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--seoul"></div>
+      <div class="result-thumb"><span class="result-thumb__label">US · 28</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span><span>SEOUL-A</span></span>
+          <span class="result-meta__kcd">K76.0</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>1d44</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--us"></span>
+          <span class="en">Abdominal US — fatty liver follow-up</span>
+          <span class="ko">복부 초음파 — 지방간 추적</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>M · 52</strong></span>
+          <span><span class="en">28 instances</span><span class="ko">28 인스턴스</span></span>
+          <span>Samsung Medison · RS85</span>
+          <span><span class="en">Acquired 2024-07</span><span class="ko">촬영 2024-07</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP1.4471</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+    <!-- Result row 8 -->
+    <article class="result-row">
+      <div class="result-row__stripe result-row__stripe--busan"></div>
+      <div class="result-thumb"><span class="result-thumb__label">PET · 168</span></div>
+      <div class="result-meta">
+        <div class="result-meta__top">
+          <span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span><span>BUSAN-B</span></span>
+          <span class="result-meta__kcd">C34.9</span>
+          <span class="audit-hash-chip"><span class="audit-hash-chip__icon"></span>de-id · <span>e90b</span></span>
+        </div>
+        <div class="result-meta__title">
+          <span class="mod-dot mod-dot--pt"></span>
+          <span class="en">PET-CT (FDG) — lung mass staging</span>
+          <span class="ko">PET-CT (FDG) — 폐 종괴 병기 결정</span>
+        </div>
+        <div class="result-meta__row">
+          <span><strong>M · 68</strong></span>
+          <span><span class="en">168 instances</span><span class="ko">168 인스턴스</span></span>
+          <span>SIEMENS · Biograph mCT</span>
+          <span><span class="en">Acquired 2024-10</span><span class="ko">촬영 2024-10</span></span>
+          <span class="result-meta__uid">1.2.840.HOSP2.8830</span>
+        </div>
+      </div>
+      <div class="result-actions">
+        <a href="./study-detail.html" class="btn btn--primary btn--sm"><span class="en">View</span><span class="ko">상세</span></a>
+        <button class="btn btn--ghost-teal btn--sm"><span class="en">+ Cohort</span><span class="ko">+ 코호트</span></button>
+      </div>
+    </article>
+
+  </section>
+</main>
+
+<!-- ===== Sticky bottom-right cohort drawer ===== -->
+<aside class="cohort-drawer" aria-label="Cohort drawer">
+  <div class="cohort-drawer__head">
+    <span class="cohort-drawer__count">
+      <strong>3</strong>
+      <span><span class="en">in cohort</span><span class="ko">코호트에</span></span>
+    </span>
+    <span style="font-family:var(--font-mono); font-size:11px; color:var(--rv-teal-300);">my-angina-q4</span>
+  </div>
+  <div class="cohort-drawer__body">
+    <div class="cohort-stat">
+      <div class="cohort-stat__value">2</div>
+      <div class="cohort-stat__label"><span class="en">hospitals</span><span class="ko">병원</span></div>
+    </div>
+    <div class="cohort-stat">
+      <div class="cohort-stat__value">756</div>
+      <div class="cohort-stat__label"><span class="en">instances</span><span class="ko">인스턴스</span></div>
+    </div>
+    <div class="cohort-stat">
+      <div class="cohort-stat__value">412 MB</div>
+      <div class="cohort-stat__label"><span class="en">est. size</span><span class="ko">예상 용량</span></div>
+    </div>
+  </div>
+  <div class="cohort-drawer__actions">
+    <button class="btn btn--ghost btn--sm" style="flex:1;"><span class="en">Save</span><span class="ko">저장</span></button>
+    <button class="btn btn--primary btn--sm" style="flex:2;"><span class="en">Order →</span><span class="ko">주문하기 →</span></button>
+  </div>
+</aside>
+
+<!-- ===== Footer ===== -->
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa">
+        <span class="compliance-pill__dot"></span>
+        <span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span>
+      </span>
+      <span class="compliance-pill compliance-pill--info">
+        <span class="compliance-pill__dot"></span>
+        <span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span>
+      </span>
+      <span class="compliance-pill compliance-pill--kcd">
+        <span class="compliance-pill__dot"></span><span>KCD-8</span>
+      </span>
+      <span class="compliance-pill compliance-pill--moh">
+        <span class="compliance-pill__dot"></span>
+        <span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 · 심평원 정합</span>
+      </span>
+    </div>
+    <a href="#" style="color:#A8A29E;">
+      <span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span>
+    </a>
+  </div>
+</footer>
+
+<script>
+  // Locale toggle
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+
+  // Accordion expand/collapse
+  document.querySelectorAll('.accordion__head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.parentElement.classList.toggle('is-open');
+    });
+  });
+
+  // Search input → autocomplete open/close
+  const searchBox = document.getElementById('searchBox');
+  const ac = document.getElementById('autocomplete');
+  searchBox.addEventListener('focus', () => ac.classList.add('is-open'));
+  searchBox.addEventListener('blur', () => setTimeout(() => ac.classList.remove('is-open'), 150));
+  searchBox.addEventListener('input', () => {
+    if (searchBox.value.length > 0) ac.classList.add('is-open');
+    else ac.classList.remove('is-open');
+  });
+
+  // Autocomplete row click
+  document.querySelectorAll('.autocomplete__row').forEach(row => {
+    row.addEventListener('click', () => {
+      const ko = row.querySelector('.autocomplete__ko').textContent;
+      const en = row.querySelector('.autocomplete__en').textContent;
+      const code = row.querySelector('.autocomplete__code').textContent;
+      searchBox.value = `${ko} / ${en} / ${code}`;
+      ac.classList.remove('is-open');
+    });
+  });
+</script>
+</body>
+</html>

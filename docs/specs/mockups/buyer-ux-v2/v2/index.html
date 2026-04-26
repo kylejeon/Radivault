@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault Buyer UX v2 — Anti-Segmed Redesign</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar" title="Compliance posture">
+      <span class="trust-bar__dot"></span>
+      <span class="en">PIPA §28-8 · KCD-8 · MoH</span>
+      <span class="ko">PIPA §28-8 · KCD-8 · 보건복지부</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./index.html" class="nav__link is-active"><span class="en">Guide</span><span class="ko">가이드</span></a>
+    <a href="./search.html" class="nav__link"><span class="en">Search</span><span class="ko">검색</span></a>
+    <a href="./study-detail.html" class="nav__link"><span class="en">Study Detail</span><span class="ko">스터디 상세</span></a>
+    <a href="./account.html" class="nav__link"><span class="en">Account</span><span class="ko">계정</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+  </div>
+</header>
+
+<main class="guide">
+  <h1>
+    <span class="en">RadiVault Buyer UX v2 — Anti-Segmed Redesign</span>
+    <span class="ko">RadiVault 바이어 UX v2 — Segmed 차별 리디자인</span>
+  </h1>
+  <p class="guide__sub">
+    <span class="en">v1 mockup mirrored Segmed Openda too closely. v2 enforces 4-axis differentiation: visual, structural, data, interaction. Open the three screens below to see the redesign in motion.</span>
+    <span class="ko">v1 목업이 Segmed Openda 와 시각·구조·데이터·인터랙션 4축에서 너무 비슷했습니다. v2 는 그 4축을 모두 차별화합니다. 아래 3 화면을 열어 직접 확인하세요.</span>
+  </p>
+
+  <div class="guide__cards">
+    <a class="guide-card" href="./search.html">
+      <div class="guide-card__num">S-1</div>
+      <div class="guide-card__title"><span class="en">Search & Cohort</span><span class="ko">검색 · 코호트</span></div>
+      <div class="guide-card__body">
+        <span class="en">Vertical accordion sidebar (5 groups), KCD/SNOMED/RadLex triple ontology autocomplete, per-row hospital region badge with colored stripe, sticky bottom-right cohort drawer.</span>
+        <span class="ko">좌측 vertical accordion 5 그룹, KCD/SNOMED/RadLex 트리플 ontology 자동완성, 결과 row 마다 병원 region 배지와 색상 stripe, 우측 하단 sticky cohort drawer.</span>
+      </div>
+    </a>
+    <a class="guide-card" href="./study-detail.html">
+      <div class="guide-card__num">S-2</div>
+      <div class="guide-card__title"><span class="en">Study Detail + De-ID Chain</span><span class="ko">스터디 상세 · 익명화 체인</span></div>
+      <div class="guide-card__body">
+        <span class="en">Permanent right-rail De-ID Chain stepper (5 steps + audit hash), longitudinal patient timeline (Segmed has none), Patient/Study/Series 3 cards, separated Sample / Add-to-cohort CTAs.</span>
+        <span class="ko">우측 영구 De-ID Chain stepper (5단계 + audit hash), 한 환자 longitudinal timeline (Segmed 미구현), Patient/Study/Series 3 카드, Sample/Cohort CTA 명확 분리.</span>
+      </div>
+    </a>
+    <a class="guide-card" href="./account.html">
+      <div class="guide-card__num">S-3</div>
+      <div class="guide-card__title"><span class="en">Account & Onboarding</span><span class="ko">계정 · 온보딩</span></div>
+      <div class="guide-card__body">
+        <span class="en">Tier-aware profile (preview-only self-serve), API key reveal-once with curl/Python/Postman tabs, today/monthly quota gauge, recent 5-event audit log preview, 5-step onboarding checklist.</span>
+        <span class="ko">Tier 기반 프로필 (preview-tier self-serve), API key reveal-once + curl/Python/Postman 탭, 오늘/월별 쿼터 게이지, 최근 5건 감사 로그, 5단계 온보딩 체크리스트.</span>
+      </div>
+    </a>
+  </div>
+
+  <h2 class="section-h"><span class="en">Why v2 is not Segmed — 5 axes</span><span class="ko">v2 가 Segmed 가 아닌 이유 — 5축</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th><span class="en">Axis</span><span class="ko">축</span></th>
+        <th><span class="en">Segmed Openda</span><span class="ko">Segmed Openda</span></th>
+        <th><span class="en">RadiVault v1 (mistake)</span><span class="ko">RadiVault v1 (실수)</span></th>
+        <th><span class="en">RadiVault v2 (this redesign)</span><span class="ko">RadiVault v2 (본 리디자인)</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong><span class="en">1. Color</span><span class="ko">1. 컬러</span></strong></td>
+        <td class="col-segmed">#2563EB Tailwind blue-600</td>
+        <td class="col-segmed">#2563EB (same as Segmed)</td>
+        <td class="col-v2">#0B2545 navy + #14B8A6 teal accent</td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">2. Layout</span><span class="ko">2. 레이아웃</span></strong></td>
+        <td class="col-segmed"><span class="en">12-col SearchUI / horizontal pill chips</span><span class="ko">12-col SearchUI / 가로 pill chip</span></td>
+        <td class="col-segmed"><span class="en">3-pane mirror (facet pills + center + cart)</span><span class="ko">3-pane 미러 (facet pill + center + cart)</span></td>
+        <td class="col-v2"><span class="en">2-col asymmetric · vertical accordion · sticky bottom-right cohort drawer</span><span class="ko">2-col 비대칭 · vertical accordion · 우하단 sticky cohort drawer</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">3. Provenance</span><span class="ko">3. 출처</span></strong></td>
+        <td class="col-segmed"><span class="en">Aggregate slogan ("5 continents · 150M studies")</span><span class="ko">집계 슬로건 ("5 대륙 · 1.5억 study")</span></td>
+        <td class="col-segmed"><span class="en">Hospital opaque ID chip only</span><span class="ko">opaque hospital ID chip 만</span></td>
+        <td class="col-v2"><span class="en">Per-row hospital region badge (SEOUL-A, BUSAN-B) + 4px colored stripe + count</span><span class="ko">결과 row 마다 region 배지 (SEOUL-A, BUSAN-B) + 4px 색상 stripe + 카운트</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">4. De-ID</span><span class="ko">4. 익명화</span></strong></td>
+        <td class="col-segmed"><span class="en">"Segmed Incognito" marketing label only</span><span class="ko">"Segmed Incognito" 마케팅 라벨만</span></td>
+        <td class="col-segmed"><span class="en">PIPA chip + tooltip (passive)</span><span class="ko">PIPA chip + tooltip (수동)</span></td>
+        <td class="col-v2"><span class="en">5-step Chain stepper sticky on right rail (default open) + per-step audit hash</span><span class="ko">우측 영구 5단계 Chain stepper (기본 노출) + 각 단계 audit hash</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">5. Search</span><span class="ko">5. 검색</span></strong></td>
+        <td class="col-segmed"><span class="en">SNOMED only autocomplete (English)</span><span class="ko">SNOMED 만 자동완성 (영문)</span></td>
+        <td class="col-segmed"><span class="en">Plain text input</span><span class="ko">단순 텍스트 입력</span></td>
+        <td class="col-v2"><span class="en">KCD-8 + SNOMED + RadLex triple ontology, ko/en simultaneous</span><span class="ko">KCD-8 + SNOMED + RadLex 트리플 ontology, 한·영 동시</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h"><span class="en">Why v2 is not Segmed — visual diff (10 items)</span><span class="ko">시각 차별 — 10 항목</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th><span class="en">Element</span><span class="ko">요소</span></th>
+        <th><span class="en">Segmed</span><span class="ko">Segmed</span></th>
+        <th><span class="en">v2</span><span class="ko">v2</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td><span class="en">Primary color</span><span class="ko">메인 컬러</span></td><td class="col-segmed">#2563EB</td><td class="col-v2">#0B2545</td></tr>
+      <tr><td>2</td><td><span class="en">Accent color</span><span class="ko">액센트</span></td><td class="col-segmed">#1890FF (Ant Blue)</td><td class="col-v2">#14B8A6 (teal)</td></tr>
+      <tr><td>3</td><td><span class="en">Canvas</span><span class="ko">캔버스</span></td><td class="col-segmed">#FFFFFF cold</td><td class="col-v2">#FAFAF9 (warm stone)</td></tr>
+      <tr><td>4</td><td><span class="en">Font (Korean)</span><span class="ko">한글 폰트</span></td><td class="col-segmed">— none</td><td class="col-v2">Pretendard 1st-class</td></tr>
+      <tr><td>5</td><td><span class="en">Header bg</span><span class="ko">헤더 bg</span></td><td class="col-segmed">white + thin border</td><td class="col-v2">#13315C navy</td></tr>
+      <tr><td>6</td><td><span class="en">Facet style</span><span class="ko">facet 스타일</span></td><td class="col-segmed"><span class="en">horizontal pill chips</span><span class="ko">가로 pill chip</span></td><td class="col-v2"><span class="en">vertical accordion + ko/en group label</span><span class="ko">vertical accordion + 한·영 라벨</span></td></tr>
+      <tr><td>7</td><td><span class="en">Modality marker</span><span class="ko">모달리티 표시</span></td><td class="col-segmed">colored pill</td><td class="col-v2"><span class="en">single 8px dot + label</span><span class="ko">8px 단색 dot + 라벨</span></td></tr>
+      <tr><td>8</td><td><span class="en">Per-row stripe</span><span class="ko">row stripe</span></td><td class="col-segmed">— none</td><td class="col-v2">4px hospital-color left bar</td></tr>
+      <tr><td>9</td><td><span class="en">Cart UX</span><span class="ko">cart UX</span></td><td class="col-segmed">top horizontal cart</td><td class="col-v2"><span class="en">bottom-right sticky cohort drawer</span><span class="ko">우하단 sticky cohort drawer</span></td></tr>
+      <tr><td>10</td><td><span class="en">Audit display</span><span class="ko">감사 표시</span></td><td class="col-segmed"><span class="en">admin-only, hidden from buyer</span><span class="ko">admin only, buyer 미노출</span></td><td class="col-v2"><span class="en">teal hash chip on row + sticky stepper on detail</span><span class="ko">row 에 teal hash chip + 상세 sticky stepper</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h"><span class="en">RadiVault 5 strengths · screen mapping</span><span class="ko">RadiVault 5 강점 · 화면 매핑</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th><span class="en">Strength</span><span class="ko">강점</span></th>
+        <th><span class="en">Visible on</span><span class="ko">노출 화면</span></th>
+        <th><span class="en">Component</span><span class="ko">컴포넌트</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><span class="en">Per-hospital provenance (SEOUL-A, BUSAN-B)</span><span class="ko">병원별 출처 (SEOUL-A, BUSAN-B)</span></td>
+        <td>search · study-detail</td>
+        <td><code>&lt;HospitalBadge&gt;</code></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><span class="en">Visible 5-step De-ID chain + audit hash</span><span class="ko">노출형 5단계 De-ID 체인 + audit hash</span></td>
+        <td>study-detail (right rail) · search (row hash chip)</td>
+        <td><code>&lt;DeIDChainStepper&gt;</code></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><span class="en">Triple ontology (KCD-8 + SNOMED + RadLex), ko/en simultaneous</span><span class="ko">트리플 ontology (KCD-8 + SNOMED + RadLex), 한·영 동시</span></td>
+        <td>search (sub-bar)</td>
+        <td><code>&lt;KCDAutocomplete&gt;</code></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><span class="en">Patient-grouped longitudinal timeline</span><span class="ko">환자 단위 longitudinal timeline</span></td>
+        <td>study-detail</td>
+        <td><code>&lt;LongitudinalTimeline&gt;</code></td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><span class="en">PIPA + 정통망법 + KCD/MoH compliance footer</span><span class="ko">PIPA + 정통망법 + KCD/MoH 컴플라이언스 풋터</span></td>
+        <td><span class="en">all screens (header + footer)</span><span class="ko">모든 화면 (헤더 + 풋터)</span></td>
+        <td><code>&lt;PIPATrustBar&gt;</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h"><span class="en">v1 → v2 changelog (top 5)</span><span class="ko">v1 → v2 변경 핵심 5</span></h2>
+  <ol style="line-height:2; margin-left:18px; color:var(--rv-stone-700);">
+    <li><span class="en"><strong>Color migration</strong> — every <code>#2563EB</code> replaced with <code>#0B2545</code> navy + <code>#14B8A6</code> teal accent. v1 token <code>--color-primary-600</code> deprecated.</span><span class="ko"><strong>컬러 이전</strong> — 모든 <code>#2563EB</code> 가 <code>#0B2545</code> navy + <code>#14B8A6</code> teal 액센트로 교체. v1 토큰 <code>--color-primary-600</code> 폐기.</span></li>
+    <li><span class="en"><strong>Layout shift</strong> — 3-pane horizontal pill → 2-column asymmetric with vertical accordion left, sticky cohort drawer bottom-right.</span><span class="ko"><strong>레이아웃 전환</strong> — 3-pane 가로 pill → 2-col 비대칭 (좌 vertical accordion / 우하단 sticky cohort drawer).</span></li>
+    <li><span class="en"><strong>Provenance promotion</strong> — opaque hospital ID chip replaced by region-level pseudo-brand badge (SEOUL-A, BUSAN-B) + 4px colored stripe per row.</span><span class="ko"><strong>출처 강화</strong> — opaque hospital ID chip → region-level 가명 배지 (SEOUL-A, BUSAN-B) + 4px 색상 stripe 결과 row 마다.</span></li>
+    <li><span class="en"><strong>De-ID Chain promoted from modal to permanent right rail</strong> — 5 steps + audit hash visible by default on study-detail.</span><span class="ko"><strong>De-ID Chain 모달 → 우측 영구 사이드</strong> — 5단계 + audit hash 가 study-detail 우측에 기본 노출.</span></li>
+    <li><span class="en"><strong>Triple ontology autocomplete</strong> — replaces plain text search. KCD-8 (한국 표준질병코드) + SNOMED + RadLex with ko/en simultaneous rows.</span><span class="ko"><strong>트리플 ontology 자동완성</strong> — 단순 텍스트 검색 대체. KCD-8 + SNOMED + RadLex 한·영 동시 row.</span></li>
+  </ol>
+
+  <h2 class="section-h"><span class="en">Open in browser</span><span class="ko">브라우저에서 열기</span></h2>
+  <p>
+    <span class="en">All four files are static. Double-click any HTML or open via <code>file://</code>. External deps: Inter (Google Fonts) + Pretendard (CDN). No JS framework, vanilla only.</span>
+    <span class="ko">4 파일 모두 정적입니다. HTML 더블클릭 또는 <code>file://</code> 로 열기. 외부 의존성: Inter (Google Fonts) + Pretendard (CDN). JS 프레임워크 없음, vanilla 만.</span>
+  </p>
+
+</main>
+
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa">
+        <span class="compliance-pill__dot"></span>
+        <span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span>
+      </span>
+      <span class="compliance-pill compliance-pill--info">
+        <span class="compliance-pill__dot"></span>
+        <span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span>
+      </span>
+      <span class="compliance-pill compliance-pill--kcd">
+        <span class="compliance-pill__dot"></span>
+        <span>KCD-8</span>
+      </span>
+      <span class="compliance-pill compliance-pill--moh">
+        <span class="compliance-pill__dot"></span>
+        <span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 · 심평원 정합</span>
+      </span>
+    </div>
+    <a href="#" style="color:#A8A29E;">
+      <span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span>
+    </a>
+  </div>
+  <p class="compliance-footer__legal">
+    <span class="en">RadiVault is not a SaMD. Datasets are for AI/ML R&amp;D and validation. Anonymization performed under PIPA §28-8 expert determination + KCD/MoH guideline alignment. © 2026 RadiVault Inc.</span>
+    <span class="ko">RadiVault 은 SaMD 가 아닙니다. 데이터셋은 AI/ML 연구 · 검증 용도입니다. 익명화는 PIPA §28-8 전문가 결정 + KCD/보건복지부 가이드라인 정합 하에 수행됩니다. © 2026 RadiVault Inc.</span>
+  </p>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -66,5 +66,16 @@ def test_facet_sex_and_age(seeded) -> None:
     facets = compute_facets(seeded, where_clauses=[], dialect="sqlite")
     sex_values = {f.value for f in facets["sex"]}
     assert "M" in sex_values
-    age_values = {f.value for f in facets["age_bucket"]}
-    assert "60" in age_values
+    # buyer-search-v3 FR-V3-API-3 — age_bucket facet is deprecated and now
+    # always returns []; the v3 sidebar uses <AgeRangeInput> instead.
+    assert facets["age_bucket"] == []
+
+
+def test_v3_facet_hospital_region_and_kcd(seeded) -> None:
+    """buyer-search-v3 FR-V3-API-3 — new ``hospital_region`` + ``kcd_code`` facets."""
+    facets = compute_facets(seeded, where_clauses=[], dialect="sqlite")
+    # Schema present (may be empty when DB has no region_pseudo / kcd_code).
+    assert "hospital_region" in facets
+    assert "kcd_code" in facets
+    assert isinstance(facets["hospital_region"], list)
+    assert isinstance(facets["kcd_code"], list)

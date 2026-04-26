@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Search & Cohort (v3)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<!-- ============ NAV (preserved from v2) ============ -->
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar" title="Compliance posture">
+      <span class="trust-bar__dot"></span>
+      <span class="en">PIPA §28-8 · 정통망법 · KCD-8</span>
+      <span class="ko">개인정보보호법 §28-8 · 정통망법 · KCD-8</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./search.html" class="nav__link is-active"><span class="en">Search</span><span class="ko">검색</span></a>
+    <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+    <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+    <a href="#" class="nav__link"><span class="en">API Docs</span><span class="ko">API 문서</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+    <a href="./account.html" class="account-menu">
+      <span class="account-menu__avatar">AC</span>
+      <span>acme-ai</span>
+    </a>
+  </div>
+</header>
+
+<!-- ============ SUB-BAR (search input + KCD autocomplete) ============ -->
+<div class="subbar">
+  <div class="search-input-wrap">
+    <svg class="search-input__icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" />
+      <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <input
+      type="text"
+      class="search-input"
+      id="searchBox"
+      placeholder="협심증 / Angina / I20 — KCD-8 · SNOMED · RadLex"
+      value="협심증"
+      autocomplete="off"
+    />
+    <div class="autocomplete is-open" id="autocomplete">
+      <div class="autocomplete__hint">
+        <span><span class="en">Triple ontology autocomplete</span><span class="ko">트리플 ontology 자동완성</span></span>
+        <span class="en">3 results · 한·영 simultaneous</span>
+        <span class="ko">3건 · 한·영 동시</span>
+      </div>
+      <div class="autocomplete__row">
+        <div class="autocomplete__code">I20.9</div>
+        <div class="autocomplete__ko">협심증, 상세불명</div>
+        <div class="autocomplete__en">Angina pectoris, unspecified</div>
+        <div class="autocomplete__source autocomplete__source--kcd">KCD-8</div>
+      </div>
+      <div class="autocomplete__row">
+        <div class="autocomplete__code">194828000</div>
+        <div class="autocomplete__ko">협심증 (안정형)</div>
+        <div class="autocomplete__en">Angina (disorder)</div>
+        <div class="autocomplete__source autocomplete__source--snomed">SNOMED</div>
+      </div>
+      <div class="autocomplete__row">
+        <div class="autocomplete__code">RID3501</div>
+        <div class="autocomplete__ko">관상동맥 (해부)</div>
+        <div class="autocomplete__en">Coronary artery</div>
+        <div class="autocomplete__source autocomplete__source--radlex">RadLex</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px;">
+    <button class="btn btn--ghost btn--sm">
+      <span class="en">Save query</span><span class="ko">쿼리 저장</span>
+    </button>
+    <button class="btn btn--primary btn--sm">
+      <span class="en">Search</span><span class="ko">검색 실행</span>
+    </button>
+  </div>
+</div>
+
+<!-- ============ MAIN 2-col layout ============ -->
+<main class="layout-2col">
+
+  <!-- ===== Left vertical accordion sidebar (preserved) ===== -->
+  <aside class="sidebar" aria-label="Filters">
+
+    <!-- Group 1: Hospital
+         De-ID/anonymization is a baseline guarantee for every study on the
+         platform — never a filter (would imply non-verified data exists).
+         Trust signal lives in the nav header trust bar + results header
+         "all PIPA-verified" inline phrase. -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">병원</span>
+          <span class="en">Hospital</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" checked />
+            <span class="hospital-badge hospital-badge--seoul">
+              <span class="hospital-badge__dot"></span><span>SEOUL-A</span>
+            </span>
+          </span>
+          <span class="facet-row__count">142</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" checked />
+            <span class="hospital-badge hospital-badge--busan">
+              <span class="hospital-badge__dot"></span><span>BUSAN-B</span>
+            </span>
+          </span>
+          <span class="facet-row__count">108</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <span class="hospital-badge hospital-badge--daegu">
+              <span class="hospital-badge__dot"></span><span>DAEGU-C</span>
+            </span>
+          </span>
+          <span class="facet-row__count muted">soon</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Group 2: Clinical -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">임상 정보</span>
+          <span class="en">Clinical</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <div style="font-size:10.5px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:4px 0 6px;">
+          <span class="en">KCD code</span><span class="ko">KCD 코드</span>
+        </div>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" checked />
+            <span class="mono" style="font-size:11.5px;">I20.9</span>
+            <span style="font-size:11.5px;"><span class="ko">협심증</span><span class="en">Angina</span></span>
+          </span>
+          <span class="facet-row__count">38</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" />
+            <span class="mono" style="font-size:11.5px;">I25.1</span>
+            <span style="font-size:11.5px;"><span class="ko">관상동맥경화</span><span class="en">Atheroscl. heart</span></span>
+          </span>
+          <span class="facet-row__count">21</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check">
+            <input type="checkbox" />
+            <span class="mono" style="font-size:11.5px;">I63.9</span>
+            <span style="font-size:11.5px;"><span class="ko">뇌경색</span><span class="en">Cerebral infarct.</span></span>
+          </span>
+          <span class="facet-row__count">17</span>
+        </label>
+
+        <div style="font-size:10.5px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:12px 0 6px;">
+          <span class="en">Body part</span><span class="ko">부위</span>
+        </div>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" checked /><span><span class="en">Chest</span><span class="ko">흉부</span></span></span>
+          <span class="facet-row__count">112</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span><span class="en">Head</span><span class="ko">두부</span></span></span>
+          <span class="facet-row__count">58</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span><span class="en">Abdomen</span><span class="ko">복부</span></span></span>
+          <span class="facet-row__count">42</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Group 3: Patient
+         v3.2: Age range — was 4 fixed-bucket checkboxes (40-49 / 50-59 /
+         60-69 / 70+), now a true min-max numeric range with optional
+         dual-thumb slider. Vanilla JS handles two-way sync between
+         number inputs ↔ slider thumbs and demo result-count update. -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">환자 정보</span>
+          <span class="en">Patient</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <div style="font-size:10.5px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:4px 0 6px;">
+          <span class="en">Sex</span><span class="ko">성별</span>
+        </div>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" checked /><span>F · <span class="en">female</span><span class="ko">여성</span></span></span>
+          <span class="facet-row__count">128</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" checked /><span>M · <span class="en">male</span><span class="ko">남성</span></span></span>
+          <span class="facet-row__count">122</span>
+        </label>
+
+        <div style="font-size:10.5px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:12px 0 6px;">
+          <span class="en">Age (years)</span><span class="ko">나이 (세)</span>
+        </div>
+        <div class="age-range" id="ageRange">
+          <div class="age-range__inputs">
+            <div class="age-range__field">
+              <label class="age-range__label" for="ageMin"><span class="en">Min</span><span class="ko">최소</span></label>
+              <input
+                type="number"
+                id="ageMin"
+                class="age-range__input"
+                min="0" max="120" step="1" value="0"
+                aria-label="Minimum age in years"
+              />
+            </div>
+            <span class="age-range__sep">–</span>
+            <div class="age-range__field">
+              <label class="age-range__label" for="ageMax"><span class="en">Max</span><span class="ko">최대</span></label>
+              <input
+                type="number"
+                id="ageMax"
+                class="age-range__input"
+                min="0" max="120" step="1" value="100"
+                aria-label="Maximum age in years"
+              />
+            </div>
+          </div>
+          <div class="age-range__slider" aria-hidden="false">
+            <div class="age-range__slider__track"></div>
+            <div class="age-range__slider__fill" id="ageSliderFill" style="left:0%; right:0%;"></div>
+            <input
+              type="range"
+              id="ageSliderMin"
+              min="0" max="120" step="1" value="0"
+              aria-label="Minimum age slider"
+            />
+            <input
+              type="range"
+              id="ageSliderMax"
+              min="0" max="120" step="1" value="100"
+              aria-label="Maximum age slider"
+            />
+          </div>
+          <div class="age-range__hint">
+            <span><span class="en">Range: 0–120</span><span class="ko">범위: 0–120</span></span>
+            <span class="age-range__hint__count" id="ageRangeCount">250 <span class="en">studies</span><span class="ko">건</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group 4: Imaging -->
+    <div class="accordion__group is-open">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">영상 기술</span>
+          <span class="en">Imaging</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <div style="font-size:10.5px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:4px 0 6px;">
+          <span class="en">Modality</span><span class="ko">모달리티</span>
+        </div>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" checked /><span><span class="mod-dot mod-dot--ct"></span>CT</span></span>
+          <span class="facet-row__count">98</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" checked /><span><span class="mod-dot mod-dot--mr"></span>MR</span></span>
+          <span class="facet-row__count">62</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span><span class="mod-dot mod-dot--cr"></span>CR/DR</span></span>
+          <span class="facet-row__count">48</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span><span class="mod-dot mod-dot--mg"></span>MG</span></span>
+          <span class="facet-row__count">28</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span><span class="mod-dot mod-dot--us"></span>US</span></span>
+          <span class="facet-row__count">14</span>
+        </label>
+
+        <div style="font-size:10.5px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:12px 0 6px;">
+          <span class="en">Slice thickness (mm)</span><span class="ko">슬라이스 두께 (mm)</span>
+        </div>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span>≤ 1.5</span></span>
+          <span class="facet-row__count">82</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span>1.5 - 3.0</span></span>
+          <span class="facet-row__count">128</span>
+        </label>
+        <label class="facet-row">
+          <span class="facet-row__check"><input type="checkbox" /><span>> 3.0</span></span>
+          <span class="facet-row__count">40</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Group 5: Time -->
+    <div class="accordion__group">
+      <button class="accordion__head">
+        <span>
+          <span class="ko">시간</span>
+          <span class="en">Time</span>
+        </span>
+        <svg class="accordion__head__chev" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="accordion__body">
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2024</span></span><span class="facet-row__count">112</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2023</span></span><span class="facet-row__count">88</span></label>
+        <label class="facet-row"><span class="facet-row__check"><input type="checkbox" /><span>2022</span></span><span class="facet-row__count">50</span></label>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Right: dense result table ===== -->
+  <section class="results">
+
+    <!-- Results header (count + sort + column toggle) -->
+    <div class="results__head">
+      <div>
+        <span class="results__count">250</span>
+        <small>
+          <span class="en">studies · all PIPA-verified · 2 hospitals · 38 ms</span>
+          <span class="ko">건 · 전체 PIPA 검증 완료 · 2개 병원 · 38 ms</span>
+        </small>
+      </div>
+      <div class="results__controls">
+        <button class="sort-control">
+          <span class="en">Sort: Exam Date ↓</span><span class="ko">정렬: 촬영일 ↓</span>
+        </button>
+        <div class="col-toggle" id="colToggle">
+          <button class="col-toggle__btn" id="colToggleBtn">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M4 6h6M6 9h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span class="en">Show columns</span><span class="ko">컬럼 표시</span>
+            <span style="font-size:10px; opacity:0.6;">▾</span>
+          </button>
+          <!-- v3.2: Order matches new grid track order; Audit hash removed
+               (admin/audit data, not buyer-facing); count 13/16 → 13/15. -->
+          <div class="col-toggle__menu" id="colToggleMenu">
+            <div class="col-toggle__menu__title"><span class="en">Visible columns (13/15)</span><span class="ko">표시 컬럼 (13/15)</span></div>
+            <label class="col-toggle__row"><span><input type="checkbox" checked disabled /> <span class="en">Hospital</span><span class="ko">병원</span></span><span class="col-toggle__row__hint">always</span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Exam Date</span><span class="ko">촬영일</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Modality</span><span class="ko">모달리티</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">BodyPart</span><span class="ko">부위</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> KCD</span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Sex</span><span class="ko">성별</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Age</span><span class="ko">나이</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Manufacturer</span><span class="ko">제조사</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Model</span><span class="ko">모델</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Series · Inst.</span><span class="ko">시리즈 · 인스턴스</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> <span class="en">Size</span><span class="ko">용량</span></span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" checked /> UID</span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" /> <span class="en">Slice thickness</span><span class="ko">슬라이스 두께</span></span><span class="col-toggle__row__hint">v0.1.5</span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" /> KVP <span class="muted">(CT)</span></span><span class="col-toggle__row__hint">v0.1.5</span></label>
+            <label class="col-toggle__row"><span><input type="checkbox" /> <span class="en">Field strength</span><span class="ko">자기장</span> <span class="muted">(MR)</span></span><span class="col-toggle__row__hint">v0.1.5</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ DENSE RESULT TABLE — 25 rows ============
+         v3.2: Column order changed — Exam Date moved from position 11 to
+         position 4 (right after Hospital, before Modality). All 25 data
+         rows + header reflect new track order:
+           stripe . check . hospital . examdate . modality . bodypart . kcd .
+           sex . age . mfg . model . series . size . uid . action -->
+    <div class="result-table" id="resultTable">
+
+      <!-- Header row (15 sortable + stripe + check + action = 16 cells; Audit hash removed from toggle but column count unchanged) -->
+      <div class="result-table__row result-table__row--head" role="row">
+        <div class="col-stripe"></div>
+        <div class="col col-check"><input type="checkbox" id="selAll" aria-label="Select all" /></div>
+        <div class="col col-sort" data-sort="hospital"><span><span class="en">Hospital</span><span class="ko">병원</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort is-sorted-desc" data-sort="examdate"><span><span class="en">Exam Date</span><span class="ko">촬영일</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="modality"><span><span class="en">Modality</span><span class="ko">모달리티</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="bodypart"><span><span class="en">BodyPart</span><span class="ko">부위</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="kcd"><span>KCD · <span class="en">Diagnosis</span><span class="ko">진단</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="sex" style="text-align:center; justify-content:center;"><span><span class="en">Sex</span><span class="ko">성별</span></span></div>
+        <div class="col col-sort" data-sort="age" style="text-align:right; justify-content:flex-end;"><span><span class="en">Age</span><span class="ko">나이</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="mfg"><span><span class="en">Manufacturer</span><span class="ko">제조사</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="model"><span><span class="en">Model</span><span class="ko">모델</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="series" style="text-align:right; justify-content:flex-end;"><span><span class="en">Sr · Inst</span><span class="ko">시리즈·인스턴스</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="size" style="text-align:right; justify-content:flex-end;"><span><span class="en">Size</span><span class="ko">용량</span></span><span class="col-sort__indicator"></span></div>
+        <div class="col col-sort" data-sort="uid" style="text-align:right; justify-content:flex-end;"><span>UID</span><span class="col-sort__indicator"></span></div>
+        <div class="col" style="text-align:right;"></div>
+      </div>
+
+      <!-- Row 1 — SEOUL-A · 2024-08-15 · CT · Chest · I20.9 · F · 52 -->
+      <div class="result-table__row" data-uid="1.2.840.HOSP1.7392" data-age="52">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-08-15</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I20.9</span><span class="col-kcd__label"><span class="ko">협심증, 상세불명</span><span class="en">Angina, unspec.</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">52</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">SOMATOM Drive</div>
+        <div class="col col-series"><strong>3</strong>·312</div>
+        <div class="col col-size">478 MB</div>
+        <div class="col col-uid">…a3f0</div>
+        <div class="col col-action"><a href="./study-detail.html" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 2 — BUSAN-B · 2024-09-19 · MR · Chest · I20.9 · M · 47 -->
+      <div class="result-table__row" data-age="47">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-09-19</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I20.9</span><span class="col-kcd__label"><span class="ko">협심증, 상세불명</span><span class="en">Angina, unspec.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">47</div>
+        <div class="col col-mfg">PHILIPS</div>
+        <div class="col col-model">Ingenia 3.0T</div>
+        <div class="col col-series"><strong>5</strong>·188</div>
+        <div class="col col-size">312 MB</div>
+        <div class="col col-uid">…9c1e</div>
+        <div class="col col-action"><a href="./study-detail.html" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 3 — SEOUL-A · 2024-08-30 · CT · Head · I63.9 · F · 63 -->
+      <div class="result-table__row" data-age="63">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-08-30</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">HEAD</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I63.9</span><span class="col-kcd__label"><span class="ko">뇌경색</span><span class="en">Cerebral infarction</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">63</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">TrioTim</div>
+        <div class="col col-series"><strong>3</strong>·245</div>
+        <div class="col col-size">480 MB</div>
+        <div class="col col-uid">…b71c</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 4 — BUSAN-B · 2024-09-04 · CT · Chest · I25.1 · M · 58 -->
+      <div class="result-table__row" data-age="58">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-09-04</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I25.1</span><span class="col-kcd__label"><span class="ko">관상동맥경화</span><span class="en">Atheroscl. heart dis.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">58</div>
+        <div class="col col-mfg">GE</div>
+        <div class="col col-model">Revolution CT</div>
+        <div class="col col-series"><strong>4</strong>·412</div>
+        <div class="col col-size">680 MB</div>
+        <div class="col col-uid">…c08f</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 5 — SEOUL-A · 2024-10-25 · MR · Head · I63.9 · F · 67 -->
+      <div class="result-table__row" data-age="67">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-10-25</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">HEAD</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I63.9</span><span class="col-kcd__label"><span class="ko">뇌경색</span><span class="en">Cerebral infarction</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">67</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">Skyra 3.0T</div>
+        <div class="col col-series"><strong>6</strong>·524</div>
+        <div class="col col-size">920 MB</div>
+        <div class="col col-uid">…d92a</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 6 — BUSAN-B · 2024-07-22 · CR · Chest · J18.9 · F · 71 -->
+      <div class="result-table__row" data-age="71">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-07-22</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--cr"></span>CR</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">J18.9</span><span class="col-kcd__label"><span class="ko">폐렴, 상세불명</span><span class="en">Pneumonia, unspec.</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">71</div>
+        <div class="col col-mfg">CANON</div>
+        <div class="col col-model">CXDI-720C</div>
+        <div class="col col-series"><strong>1</strong>·2</div>
+        <div class="col col-size">8 MB</div>
+        <div class="col col-uid">…e51b</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 7 — SEOUL-A · 2024-07-08 · MG · Breast · C50.9 · F · 53 -->
+      <div class="result-table__row" data-age="53">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-07-08</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mg"></span>MG</div>
+        <div class="col col-body">BREAST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">C50.9</span><span class="col-kcd__label"><span class="ko">유방암</span><span class="en">Breast carcinoma</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">53</div>
+        <div class="col col-mfg">HOLOGIC</div>
+        <div class="col col-model">Selenia Dim.</div>
+        <div class="col col-series"><strong>2</strong>·8</div>
+        <div class="col col-size">128 MB</div>
+        <div class="col col-uid">…7b22</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 8 — BUSAN-B · 2024-06-19 · CT · Abdomen · K85.9 · M · 55 -->
+      <div class="result-table__row" data-age="55">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-06-19</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">ABDOMEN</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">K85.9</span><span class="col-kcd__label"><span class="ko">급성 췌장염</span><span class="en">Acute pancreatitis</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">55</div>
+        <div class="col col-mfg">GE</div>
+        <div class="col col-model">Revolution CT</div>
+        <div class="col col-series"><strong>4</strong>·368</div>
+        <div class="col col-size">560 MB</div>
+        <div class="col col-uid">…1f4d</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 9 — SEOUL-A · 2024-11-13 · CT · Chest · I20.9 · M · 61 -->
+      <div class="result-table__row" data-age="61">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-11-13</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I20.9</span><span class="col-kcd__label"><span class="ko">협심증, 상세불명</span><span class="en">Angina, unspec.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">61</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">SOMATOM Drive</div>
+        <div class="col col-series"><strong>3</strong>·298</div>
+        <div class="col col-size">442 MB</div>
+        <div class="col col-uid">…6a83</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 10 — BUSAN-B · 2024-10-02 · MR · Head · I63.9 · F · 56 -->
+      <div class="result-table__row" data-age="56">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-10-02</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">HEAD</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I63.9</span><span class="col-kcd__label"><span class="ko">뇌경색</span><span class="en">Cerebral infarction</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">56</div>
+        <div class="col col-mfg">PHILIPS</div>
+        <div class="col col-model">Ingenia 3.0T</div>
+        <div class="col col-series"><strong>5</strong>·480</div>
+        <div class="col col-size">820 MB</div>
+        <div class="col col-uid">…f205</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 11 — SEOUL-A · 2024-06-03 · CR · Chest · J18.9 · M · 65 -->
+      <div class="result-table__row" data-age="65">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-06-03</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--cr"></span>CR</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">J18.9</span><span class="col-kcd__label"><span class="ko">폐렴</span><span class="en">Pneumonia</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">65</div>
+        <div class="col col-mfg">SAMSUNG</div>
+        <div class="col col-model">GC85A</div>
+        <div class="col col-series"><strong>1</strong>·2</div>
+        <div class="col col-size">7 MB</div>
+        <div class="col col-uid">…3ea1</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 12 — BUSAN-B · 2024-05-11 · CT · Abdomen · C22.0 · M · 69 -->
+      <div class="result-table__row" data-age="69">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-05-11</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">ABDOMEN</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">C22.0</span><span class="col-kcd__label"><span class="ko">간세포암</span><span class="en">Hepatocellular ca.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">69</div>
+        <div class="col col-mfg">GE</div>
+        <div class="col col-model">LightSpeed VCT</div>
+        <div class="col col-series"><strong>4</strong>·412</div>
+        <div class="col col-size">632 MB</div>
+        <div class="col col-uid">…8c92</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 13 — SEOUL-A · 2024-04-29 · MR · Spine · M51.2 · F · 41 -->
+      <div class="result-table__row" data-age="41">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-04-29</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">SPINE</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">M51.2</span><span class="col-kcd__label"><span class="ko">추간판 변위</span><span class="en">Disc displacement</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">41</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">Aera 1.5T</div>
+        <div class="col col-series"><strong>4</strong>·256</div>
+        <div class="col col-size">428 MB</div>
+        <div class="col col-uid">…2db7</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 14 — BUSAN-B · 2024-04-04 · MG · Breast · N63 · F · 45 -->
+      <div class="result-table__row" data-age="45">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-04-04</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mg"></span>MG</div>
+        <div class="col col-body">BREAST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">N63</span><span class="col-kcd__label"><span class="ko">유방종괴</span><span class="en">Breast lump</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">45</div>
+        <div class="col col-mfg">HOLOGIC</div>
+        <div class="col col-model">Selenia Dim.</div>
+        <div class="col col-series"><strong>2</strong>·8</div>
+        <div class="col col-size">122 MB</div>
+        <div class="col col-uid">…b471</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 15 — SEOUL-A · 2024-03-22 · CT · Pelvis · N40 · M · 74 -->
+      <div class="result-table__row" data-age="74">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-03-22</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">PELVIS</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">N40</span><span class="col-kcd__label"><span class="ko">전립선 비대증</span><span class="en">Prostatic hyperpl.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">74</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">SOMATOM Drive</div>
+        <div class="col col-series"><strong>3</strong>·286</div>
+        <div class="col col-size">462 MB</div>
+        <div class="col col-uid">…5f08</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 16 — BUSAN-B · 2024-03-15 · US · Abdomen · K80.2 · F · 57 -->
+      <div class="result-table__row" data-age="57">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-03-15</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--us"></span>US</div>
+        <div class="col col-body">ABDOMEN</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">K80.2</span><span class="col-kcd__label"><span class="ko">담낭결석</span><span class="en">Calculus of gallbl.</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">57</div>
+        <div class="col col-mfg">GE</div>
+        <div class="col col-model">LOGIQ E10</div>
+        <div class="col col-series"><strong>1</strong>·24</div>
+        <div class="col col-size">42 MB</div>
+        <div class="col col-uid">…9d33</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 17 — SEOUL-A · 2024-02-08 · CT · Chest · C34.9 · M · 76 -->
+      <div class="result-table__row" data-age="76">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2024-02-08</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">C34.9</span><span class="col-kcd__label"><span class="ko">폐 악성신생물</span><span class="en">Lung neoplasm</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">76</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">SOMATOM Drive</div>
+        <div class="col col-series"><strong>4</strong>·420</div>
+        <div class="col col-size">692 MB</div>
+        <div class="col col-uid">…7c14</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 18 — BUSAN-B · 2024-01-12 · MR · Head · G40.9 · M · 32 -->
+      <div class="result-table__row" data-age="32">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2024-01-12</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">HEAD</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">G40.9</span><span class="col-kcd__label"><span class="ko">간질, 상세불명</span><span class="en">Epilepsy, unspec.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">32</div>
+        <div class="col col-mfg">PHILIPS</div>
+        <div class="col col-model">Achieva 3.0T</div>
+        <div class="col col-series"><strong>6</strong>·612</div>
+        <div class="col col-size">980 MB</div>
+        <div class="col col-uid">…1a05</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 19 — SEOUL-A · 2023-12-28 · CT · Head · S06.5 · M · 82 -->
+      <div class="result-table__row" data-age="82">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2023-12-28</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">HEAD</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">S06.5</span><span class="col-kcd__label"><span class="ko">외상성 경막하 출혈</span><span class="en">Subdural hemorrh.</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">82</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">SOMATOM Force</div>
+        <div class="col col-series"><strong>3</strong>·322</div>
+        <div class="col col-size">524 MB</div>
+        <div class="col col-uid">…6fb9</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 20 — BUSAN-B · 2023-12-19 · CT · Chest · I20.9 · F · 91  (89+ cap edge case) -->
+      <div class="result-table__row" data-age="91">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2023-12-19</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I20.9</span><span class="col-kcd__label"><span class="ko">협심증, 상세불명</span><span class="en">Angina, unspec.</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">91</div>
+        <div class="col col-mfg">GE</div>
+        <div class="col col-model">Revolution CT</div>
+        <div class="col col-series"><strong>3</strong>·294</div>
+        <div class="col col-size">478 MB</div>
+        <div class="col col-uid">…0e26</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 21 — SEOUL-A · 2023-12-01 · MR · Chest · I50.9 · M · 49 -->
+      <div class="result-table__row" data-age="49">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2023-12-01</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I50.9</span><span class="col-kcd__label"><span class="ko">심부전</span><span class="en">Heart failure</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">49</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">Skyra 3.0T</div>
+        <div class="col col-series"><strong>5</strong>·408</div>
+        <div class="col col-size">744 MB</div>
+        <div class="col col-uid">…3927</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 22 — BUSAN-B · 2023-11-15 · CR · Chest · A15.0 · M · 35 -->
+      <div class="result-table__row" data-age="35">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2023-11-15</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--cr"></span>CR</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">A15.0</span><span class="col-kcd__label"><span class="ko">폐결핵</span><span class="en">Tuberculosis of lung</span></span></div>
+        <div class="col col-sex">M</div>
+        <div class="col col-age">35</div>
+        <div class="col col-mfg">CANON</div>
+        <div class="col col-model">CXDI-720C</div>
+        <div class="col col-series"><strong>1</strong>·2</div>
+        <div class="col col-size">8 MB</div>
+        <div class="col col-uid">…4c8a</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 23 — SEOUL-A · 2023-10-22 · CT · Abdomen · C25.9 · F · 65 -->
+      <div class="result-table__row" data-age="65">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2023-10-22</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">ABDOMEN</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">C25.9</span><span class="col-kcd__label"><span class="ko">췌장암</span><span class="en">Pancreatic neoplasm</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">65</div>
+        <div class="col col-mfg">SIEMENS</div>
+        <div class="col col-model">SOMATOM Drive</div>
+        <div class="col col-series"><strong>4</strong>·402</div>
+        <div class="col col-size">640 MB</div>
+        <div class="col col-uid">…ea15</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 24 — BUSAN-B · 2023-10-04 · MR · Spine · M54.5 · F · 38 -->
+      <div class="result-table__row" data-age="38">
+        <div class="col-stripe col-stripe--busan"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--busan"><span class="hospital-badge__dot"></span>BUSAN-B</span></div>
+        <div class="col col-date">2023-10-04</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--mr"></span>MR</div>
+        <div class="col col-body">SPINE</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">M54.5</span><span class="col-kcd__label"><span class="ko">요통</span><span class="en">Low back pain</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">38</div>
+        <div class="col col-mfg">PHILIPS</div>
+        <div class="col col-model">Ingenia 1.5T</div>
+        <div class="col col-series"><strong>4</strong>·240</div>
+        <div class="col col-size">412 MB</div>
+        <div class="col col-uid">…77b3</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+      <!-- Row 25 — SEOUL-A · 2023-09-08 · CT · Chest · I20.9 · F · 44 -->
+      <div class="result-table__row" data-age="44">
+        <div class="col-stripe col-stripe--seoul"></div>
+        <div class="col col-check"><input type="checkbox" /></div>
+        <div class="col"><span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span></div>
+        <div class="col col-date">2023-09-08</div>
+        <div class="col col-modality"><span class="mod-dot mod-dot--ct"></span>CT</div>
+        <div class="col col-body">CHEST</div>
+        <div class="col col-kcd"><span class="col-kcd__chip">I20.9</span><span class="col-kcd__label"><span class="ko">협심증, 상세불명</span><span class="en">Angina, unspec.</span></span></div>
+        <div class="col col-sex">F</div>
+        <div class="col col-age">44</div>
+        <div class="col col-mfg">GE</div>
+        <div class="col col-model">Revolution CT</div>
+        <div class="col col-series"><strong>3</strong>·310</div>
+        <div class="col col-size">488 MB</div>
+        <div class="col col-uid">…b09d</div>
+        <div class="col col-action"><a href="#" class="btn btn--primary btn--xs"><span class="en">View →</span><span class="ko">보기 →</span></a></div>
+      </div>
+
+    </div><!-- /result-table -->
+
+    <!-- ============ PIPA risk caption (v3.2 — updated to firm production policy) ============
+         Was: hedging language ("demo: actual ages shown for illustration. Production may bucket…")
+         Now: declarative production policy + explicit control mechanisms (PIPA §28-8 DUA, IRB,
+         per-query audit, k-anonymity ≥ 5). Amber color preserved as "policy-significant"
+         signal — buyers should still notice this is a regulated data surface. -->
+    <div class="pipa-note" role="note">
+      <strong>NOTE</strong>
+      <span class="en">
+        Production policy: exact patient age (years) and exam date (YYYY-MM-DD) are
+        surfaced to verified buyers. Per-buyer access controlled via signed PIPA
+        §28-8 data use agreement, IRB approval, and per-query audit log. Aggregate
+        re-identification risk is mitigated by hospital-level k-anonymity ≥ 5
+        cohort guarantees enforced at fulfillment time.
+      </span>
+      <span class="ko">
+        실 운영 정책: 검증된 구매자에게 정확한 환자 나이 (세) 및 검사 일자
+        (YYYY-MM-DD) 노출. 구매자별 접근은 PIPA §28-8 데이터 이용 동의서, IRB
+        승인, 쿼리별 감사 로그로 통제. 집계 재식별 위험은 fulfillment 단계의
+        병원별 k-익명성 ≥ 5 코호트 보장으로 완화.
+      </span>
+    </div>
+
+    <!-- Pagination footer -->
+    <div class="results__footer">
+      <div>
+        <span class="en">Showing 1-25 of 250 · </span>
+        <span class="ko">1-25 / 250 · </span>
+        <span class="muted"><span class="en">25 rows per page</span><span class="ko">페이지당 25행</span></span>
+      </div>
+      <div class="pager">
+        <button>‹</button>
+        <button class="is-active">1</button>
+        <button>2</button>
+        <button>3</button>
+        <button>4</button>
+        <button>…</button>
+        <button>10</button>
+        <button>›</button>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<!-- ===== Cohort drawer (sticky bottom-right — preserved) ===== -->
+<aside class="cohort-drawer" aria-label="Cohort drawer">
+  <div class="cohort-drawer__head">
+    <span><span class="en">Selected cohort</span><span class="ko">선택된 코호트</span></span>
+    <span class="cohort-drawer__count"><strong>3</strong> <span style="font-size:11px; color:rgba(255,255,255,0.65);"><span class="en">studies</span><span class="ko">건</span></span></span>
+  </div>
+  <div class="cohort-drawer__body">
+    <div class="cohort-stat">
+      <div class="cohort-stat__value">2</div>
+      <div class="cohort-stat__label"><span class="en">hospitals</span><span class="ko">병원</span></div>
+    </div>
+    <div class="cohort-stat">
+      <div class="cohort-stat__value">756</div>
+      <div class="cohort-stat__label"><span class="en">instances</span><span class="ko">인스턴스</span></div>
+    </div>
+    <div class="cohort-stat">
+      <div class="cohort-stat__value">412 MB</div>
+      <div class="cohort-stat__label"><span class="en">total size</span><span class="ko">전체 용량</span></div>
+    </div>
+  </div>
+  <div class="cohort-drawer__actions">
+    <button class="btn btn--ghost btn--sm" style="flex:1;"><span class="en">Save</span><span class="ko">저장</span></button>
+    <button class="btn btn--primary btn--sm" style="flex:1;"><span class="en">Order →</span><span class="ko">주문 →</span></button>
+  </div>
+</aside>
+
+<!-- ===== Compliance footer (preserved) ===== -->
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa"><span class="compliance-pill__dot"></span><span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span></span>
+      <span class="compliance-pill compliance-pill--info"><span class="compliance-pill__dot"></span><span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span></span>
+      <span class="compliance-pill compliance-pill--kcd"><span class="compliance-pill__dot"></span><span>KCD-8</span></span>
+      <span class="compliance-pill compliance-pill--moh"><span class="compliance-pill__dot"></span><span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 정합</span></span>
+    </div>
+    <a href="#" style="color:#A8A29E;"><span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span></a>
+  </div>
+</footer>
+
+<script>
+  // Locale toggle
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+
+  // Accordion expand/collapse
+  document.querySelectorAll('.accordion__head').forEach(h => {
+    h.addEventListener('click', () => h.parentElement.classList.toggle('is-open'));
+  });
+
+  // Search input → autocomplete
+  const ac = document.getElementById('autocomplete');
+  const sb = document.getElementById('searchBox');
+  sb.addEventListener('focus', () => ac.classList.add('is-open'));
+  sb.addEventListener('blur', () => setTimeout(() => ac.classList.remove('is-open'), 150));
+  document.querySelectorAll('.autocomplete__row').forEach(r => {
+    r.addEventListener('click', () => {
+      const ko = r.querySelector('.autocomplete__ko').textContent;
+      sb.value = ko;
+      ac.classList.remove('is-open');
+    });
+  });
+
+  // Column toggle dropdown
+  const ct = document.getElementById('colToggle');
+  document.getElementById('colToggleBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    ct.classList.toggle('is-open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!ct.contains(e.target)) ct.classList.remove('is-open');
+  });
+
+  // Sortable column headers (mock — toggle indicator only)
+  document.querySelectorAll('.col-sort').forEach(h => {
+    h.addEventListener('click', () => {
+      const wasAsc = h.classList.contains('is-sorted-asc');
+      const wasDesc = h.classList.contains('is-sorted-desc');
+      document.querySelectorAll('.col-sort').forEach(x => x.classList.remove('is-sorted-asc','is-sorted-desc'));
+      if (wasDesc) h.classList.add('is-sorted-asc');
+      else h.classList.add('is-sorted-desc');
+    });
+  });
+
+  // Row checkbox → row selection state + cohort count update (mock)
+  document.querySelectorAll('.result-table__row:not(.result-table__row--head) .col-check input').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.result-table__row').classList.toggle('is-selected', cb.checked);
+    });
+  });
+
+  // Select all
+  document.getElementById('selAll').addEventListener('change', (e) => {
+    document.querySelectorAll('.result-table__row:not(.result-table__row--head) .col-check input').forEach(cb => {
+      cb.checked = e.target.checked;
+      cb.closest('.result-table__row').classList.toggle('is-selected', e.target.checked);
+    });
+  });
+
+  // ============================================================
+  // v3.2: Age range — two-way bind number inputs ↔ dual-thumb slider
+  // and update demo result count by filtering .result-table__row[data-age].
+  // ============================================================
+  (function ageRangeInit() {
+    const ageMin = document.getElementById('ageMin');
+    const ageMax = document.getElementById('ageMax');
+    const sMin = document.getElementById('ageSliderMin');
+    const sMax = document.getElementById('ageSliderMax');
+    const fill = document.getElementById('ageSliderFill');
+    const countEl = document.getElementById('ageRangeCount');
+    if (!ageMin || !ageMax || !sMin || !sMax) return;
+
+    const RANGE_MIN = 0;
+    const RANGE_MAX = 120;
+    // Note: results show 1 page (25 rows) of a 250-study match set. Scale factor
+    // estimates total cohort size from the visible page distribution.
+    const TOTAL_AT_FULL = 250;
+
+    function clampInt(v, lo, hi) {
+      v = parseInt(v, 10);
+      if (Number.isNaN(v)) v = lo;
+      return Math.max(lo, Math.min(hi, v));
+    }
+
+    function updateFill(min, max) {
+      const minPct = ((min - RANGE_MIN) / (RANGE_MAX - RANGE_MIN)) * 100;
+      const maxPct = ((max - RANGE_MIN) / (RANGE_MAX - RANGE_MIN)) * 100;
+      fill.style.left = minPct + '%';
+      fill.style.right = (100 - maxPct) + '%';
+    }
+
+    function updateCount(min, max) {
+      const rows = document.querySelectorAll('.result-table__row:not(.result-table__row--head)[data-age]');
+      let visible = 0;
+      let total = 0;
+      rows.forEach(r => {
+        const a = parseInt(r.dataset.age, 10);
+        total += 1;
+        const inRange = a >= min && a <= max;
+        if (inRange) visible += 1;
+        // Visually dim out-of-range rows (demo only — production would
+        // re-fire SearchRequest with age_min/age_max to backend).
+        r.style.opacity = inRange ? '' : '0.35';
+      });
+      // Estimate full cohort count proportional to visible/total fraction.
+      const scaled = total > 0
+        ? Math.round((visible / total) * TOTAL_AT_FULL)
+        : TOTAL_AT_FULL;
+      // Replace text node only; preserve <span class="en"/.ko"> children.
+      countEl.firstChild.textContent = scaled + ' ';
+    }
+
+    function syncFromInputs() {
+      let lo = clampInt(ageMin.value, RANGE_MIN, RANGE_MAX);
+      let hi = clampInt(ageMax.value, RANGE_MIN, RANGE_MAX);
+      if (lo > hi) { const t = lo; lo = hi; hi = t; }
+      ageMin.value = lo;
+      ageMax.value = hi;
+      sMin.value = lo;
+      sMax.value = hi;
+      updateFill(lo, hi);
+      updateCount(lo, hi);
+    }
+
+    function syncFromSlider() {
+      let lo = clampInt(sMin.value, RANGE_MIN, RANGE_MAX);
+      let hi = clampInt(sMax.value, RANGE_MIN, RANGE_MAX);
+      if (lo > hi) { const t = lo; lo = hi; hi = t; }
+      sMin.value = lo;
+      sMax.value = hi;
+      ageMin.value = lo;
+      ageMax.value = hi;
+      updateFill(lo, hi);
+      updateCount(lo, hi);
+    }
+
+    ageMin.addEventListener('input', syncFromInputs);
+    ageMax.addEventListener('input', syncFromInputs);
+    ageMin.addEventListener('change', syncFromInputs);
+    ageMax.addEventListener('change', syncFromInputs);
+    sMin.addEventListener('input', syncFromSlider);
+    sMax.addEventListener('input', syncFromSlider);
+
+    // Initial paint
+    updateFill(parseInt(ageMin.value, 10), parseInt(ageMax.value, 10));
+  })();
+</script>
+</body>
+</html>

@@ -37,6 +37,7 @@ from radivault_search.preview.storage import LocalPreviewStore, S3PreviewStore
 from radivault_search.routers import (
     facets_router,
     hospitals_router,
+    kcd_autocomplete_router,
     probes_router,
     search_router,
     version_router,
@@ -182,6 +183,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     app.include_router(search_router)
     app.include_router(facets_router)
     app.include_router(hospitals_router)
+    app.include_router(kcd_autocomplete_router)
     app.include_router(preview_router)
 
     @app.get("/metrics", include_in_schema=False)

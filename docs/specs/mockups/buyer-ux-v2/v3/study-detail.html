@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Study detail (v3)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar">
+      <span class="trust-bar__dot"></span>
+      <span class="en">PIPA §28-8 · 정통망법 · KCD-8</span>
+      <span class="ko">개인정보보호법 §28-8 · 정통망법 · KCD-8</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./search.html" class="nav__link"><span class="en">Search</span><span class="ko">검색</span></a>
+    <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+    <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+    <a href="#" class="nav__link"><span class="en">API Docs</span><span class="ko">API 문서</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+    <a href="./account.html" class="account-menu">
+      <span class="account-menu__avatar">AC</span>
+      <span>acme-ai</span>
+    </a>
+  </div>
+</header>
+
+<!-- ============ DETAIL SUB-BAR ============ -->
+<div class="detail-subbar">
+  <div class="detail-subbar__breadcrumb">
+    <a href="./search.html">← <span class="en">Back to search</span><span class="ko">검색으로</span></a>
+  </div>
+  <div class="detail-subbar__title">
+    <span class="hospital-badge hospital-badge--seoul"><span class="hospital-badge__dot"></span>SEOUL-A</span>
+    <span class="col-kcd__chip">I20.9</span>
+    <span class="mod-dot mod-dot--ct" style="margin:0 4px 0 0;"></span><span style="font-weight:700; color:var(--rv-stone-900);">CT</span>
+    <span style="color:var(--rv-stone-500);">·</span>
+    <span class="mono">1.2.840.HOSP1.7392.20240815.001</span>
+  </div>
+  <div class="detail-subbar__nav">
+    <button class="btn btn--ghost btn--xs">← <span class="en">Prev</span><span class="ko">이전</span></button>
+    <span style="font-family:var(--font-mono); font-size:11px;">3 / 250</span>
+    <button class="btn btn--ghost btn--xs"><span class="en">Next</span><span class="ko">다음</span> →</button>
+  </div>
+</div>
+
+<!-- ============ MAIN: viewer + right rail ============ -->
+<main class="layout-detail">
+
+  <!-- ===== LEFT: Viewer pane ===== -->
+  <section class="viewer-pane" aria-label="DICOM viewer">
+    <div class="viewer-canvas">
+      <div class="viewer-overlay">
+        SEOUL-A · CT<br>
+        WW 350 / WL 50<br>
+        slice 156 / 312
+      </div>
+      <div class="viewer-overlay viewer-overlay--tr">
+        SIEMENS · SOMATOM Drive<br>
+        2024-08-15 (shifted)<br>
+        kVp 120 · mAs 220
+      </div>
+      <div class="viewer-overlay viewer-overlay--bl">
+        F · 52<br>
+        pseudo PT-7392-A
+      </div>
+      <div class="viewer-overlay viewer-overlay--br">
+        ▣ De-ID a3f0…<br>
+        ruleset v0.2.1
+      </div>
+    </div>
+
+    <div class="viewer-tools" aria-label="Viewer tools">
+      <button title="Pan">✥</button>
+      <button title="Zoom">⊕</button>
+      <button title="Window/Level">◐</button>
+      <button title="Measure">📏</button>
+      <button title="ROI">▭</button>
+    </div>
+
+    <!-- Slice slider (NEW v3) -->
+    <div class="slice-slider-wrap">
+      <span class="slice-info">slice</span>
+      <input type="range" class="slice-slider" id="sliceSlider" min="1" max="312" value="156" />
+      <span class="slice-info" id="sliceLabel">156 / 312</span>
+    </div>
+
+    <div class="viewer-disclaimer">
+      <span class="en">Display only — not for diagnostic use (SaMD disclaimer)</span>
+      <span class="ko">표시 전용 — 진단 용도 아님 (SaMD 면책)</span>
+    </div>
+  </section>
+
+  <!-- ===== RIGHT RAIL: Quality + Rich metadata + CTA ===== -->
+  <aside class="right-rail" aria-label="Study metadata">
+
+    <!-- Quality metrics (NEW v3) -->
+    <section class="detail-section">
+      <div class="detail-section__title">
+        <span><span class="en">Data quality</span><span class="ko">데이터 품질</span></span>
+        <span class="muted" style="font-family:var(--font-mono); font-size:10px; text-transform:none;">v0.1.5</span>
+      </div>
+      <div class="quality-metrics">
+        <div class="quality-metric">
+          <div class="quality-metric__label"><span class="en">Image count</span><span class="ko">이미지 수</span></div>
+          <div class="quality-metric__value">312</div>
+          <div class="quality-metric__sub">3 series</div>
+        </div>
+        <div class="quality-metric">
+          <div class="quality-metric__label"><span class="en">Slice thickness</span><span class="ko">슬라이스 두께</span></div>
+          <div class="quality-metric__value">1.0 mm</div>
+          <div class="quality-metric__sub">range 1.0–2.5</div>
+        </div>
+        <div class="quality-metric">
+          <div class="quality-metric__label"><span class="en">Resolution</span><span class="ko">해상도</span></div>
+          <div class="quality-metric__value">512×512</div>
+          <div class="quality-metric__sub">0.69 mm/px</div>
+        </div>
+        <div class="quality-metric quality-metric--score">
+          <div class="quality-metric__label"><span class="en">Completeness</span><span class="ko">완전성</span></div>
+          <div class="quality-metric__value">98%</div>
+          <div class="quality-metric__sub">12/12 fields</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Patient card -->
+    <section class="detail-section">
+      <div class="detail-section__title">
+        <span><span class="en">Metadata</span><span class="ko">메타데이터</span></span>
+        <a href="#" style="font-size:10px; text-transform:none; letter-spacing:0;"><span class="en">DICOM tags ↗</span><span class="ko">DICOM 태그 ↗</span></a>
+      </div>
+
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head"><span class="en">Patient</span><span class="ko">환자</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Pseudo ID</span><span class="ko">가명 ID</span></span><span class="detail-meta-row__v">PT-7392-A</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Sex</span><span class="ko">성별</span></span><span class="detail-meta-row__v">F</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Age (years)</span><span class="ko">나이 (세)</span></span><span class="detail-meta-row__v">52</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Consent</span><span class="ko">동의</span></span><span class="detail-meta-row__v">PIPA §28-8</span></div>
+      </div>
+
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head"><span class="en">Study</span><span class="ko">검사</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Exam Date (shifted)</span><span class="ko">촬영일 (시프트)</span></span><span class="detail-meta-row__v">2024-08-15</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Accession</span><span class="ko">접수</span></span><span class="detail-meta-row__v">masked</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Description</span><span class="ko">설명</span></span><span class="detail-meta-row__v" style="max-width:65%;"><span class="en">Chest CT — angina workup</span><span class="ko">흉부CT — 협심증</span></span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Modality</span><span class="ko">모달리티</span></span><span class="detail-meta-row__v"><span class="mod-dot mod-dot--ct"></span>CT</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">BodyPart</span><span class="ko">부위</span></span><span class="detail-meta-row__v">CHEST</span></div>
+      </div>
+
+      <!-- Series cards (3) -->
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head">
+          <span><span class="en">Series</span><span class="ko">시리즈</span></span>
+          <span class="detail-meta-card__head__count">3 series · 312 inst</span>
+        </div>
+        <div class="series-mini">
+          <div class="series-mini__num">1</div>
+          <div>
+            <span class="series-mini__title"><span class="en">Topogram</span><span class="ko">토포그램</span></span>
+            <span class="series-mini__sub">CT · 1.0 mm · 512²</span>
+          </div>
+          <div class="series-mini__count">2 inst</div>
+        </div>
+        <div class="series-mini">
+          <div class="series-mini__num">2</div>
+          <div>
+            <span class="series-mini__title"><span class="en">Pre-contrast Chest</span><span class="ko">조영전 흉부</span></span>
+            <span class="series-mini__sub">CT · 1.0 mm · 512²</span>
+          </div>
+          <div class="series-mini__count">155 inst</div>
+        </div>
+        <div class="series-mini">
+          <div class="series-mini__num">3</div>
+          <div>
+            <span class="series-mini__title"><span class="en">Post-contrast Chest</span><span class="ko">조영후 흉부</span></span>
+            <span class="series-mini__sub">CT · 1.0 mm · 512²</span>
+          </div>
+          <div class="series-mini__count">155 inst</div>
+        </div>
+      </div>
+
+      <!-- Acquisition card (modality-specific) -->
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head"><span class="en">Acquisition</span><span class="ko">획득 정보</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Manufacturer</span><span class="ko">제조사</span></span><span class="detail-meta-row__v">SIEMENS</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Model</span><span class="ko">모델</span></span><span class="detail-meta-row__v">SOMATOM Drive</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k">KVP <span class="muted">(CT)</span></span><span class="detail-meta-row__v">120 kV</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Tube current</span><span class="ko">관전류</span></span><span class="detail-meta-row__v">220 mAs</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k"><span class="en">Contrast</span><span class="ko">조영제</span></span><span class="detail-meta-row__v">Iohexol 350</span></div>
+      </div>
+
+      <!-- Pixel/spatial card -->
+      <div class="detail-meta-card">
+        <div class="detail-meta-card__head"><span class="en">Pixel & spatial</span><span class="ko">픽셀 · 공간</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k">PhotomtrInterp</span><span class="detail-meta-row__v">MONOCHROME2</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k">PixelSpacing</span><span class="detail-meta-row__v">0.69 / 0.69</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-row__k">FrameOfRef</span><span class="detail-meta-row__v">1.2.840…7392</span></div>
+      </div>
+    </section>
+
+    <!-- Related studies (longitudinal — preserved differentiator) -->
+    <section class="detail-section">
+      <div class="detail-section__title">
+        <span><span class="en">Related studies (longitudinal)</span><span class="ko">관련 검사 (시계열)</span></span>
+        <span class="muted" style="font-size:10px; text-transform:none;">PT-7392-A</span>
+      </div>
+      <div class="timeline">
+        <div class="timeline__step">
+          <div class="timeline__dot timeline__dot--filled">CR</div>
+          <div class="timeline__date">2022-03</div>
+          <div class="timeline__hospital">SEOUL-A</div>
+        </div>
+        <div class="timeline__step">
+          <div class="timeline__dot timeline__dot--filled">CT</div>
+          <div class="timeline__date">2023-06</div>
+          <div class="timeline__hospital">SEOUL-A</div>
+        </div>
+        <div class="timeline__step">
+          <div class="timeline__dot timeline__dot--current">CT</div>
+          <div class="timeline__date">2024-08</div>
+          <div class="timeline__hospital">SEOUL-A</div>
+        </div>
+        <div class="timeline__step">
+          <div class="timeline__dot">MR</div>
+          <div class="timeline__date">2025-01</div>
+          <div class="timeline__hospital">SEOUL-A</div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--rv-stone-500);">
+        <span class="en">3 prior studies for this patient — 1 follow-up scheduled.</span>
+        <span class="ko">동일 환자 이전 검사 3건 · 후속 1건 예정.</span>
+      </div>
+    </section>
+
+    <!-- CTA (sticky bottom) -->
+    <div class="detail-cta">
+      <button class="btn btn--primary" style="width:100%;">
+        ⬇ <span class="en">Sample download (ZIP)</span><span class="ko">샘플 다운로드 (ZIP)</span>
+      </button>
+      <button class="btn btn--ghost-teal" style="width:100%;">
+        + <span class="en">Add to cohort</span><span class="ko">코호트에 추가</span>
+      </button>
+      <div class="detail-cta__hint">
+        <strong><span class="en">Sample</span><span class="ko">샘플</span></strong>
+        <span class="en"> = 1 representative slice DICOM (preview tier · free). Full study delivery requires contract.</span>
+        <span class="ko"> = 대표 슬라이스 1장 DICOM (preview tier · 무료). 전체 study 배송은 계약 필요.</span>
+      </div>
+    </div>
+
+  </aside>
+</main>
+
+<!-- ============ FOOTER: Compliance & audit (collapsible — DEMOTED from sticky) ============ -->
+<section class="compliance-collapse" id="complianceCollapse">
+  <button class="compliance-collapse__head" id="complianceHead">
+    <span style="display:inline-flex; align-items:center; gap:10px;">
+      <span class="trust-bar" style="background:rgba(20,184,166,0.15); border-color:rgba(20,184,166,0.4); color:var(--rv-teal-700);">
+        <span class="trust-bar__dot" style="background:var(--rv-teal-500);"></span>
+        <span><span class="en">5 / 5 De-ID stages verified</span><span class="ko">5 / 5 익명화 단계 검증</span></span>
+      </span>
+      <span><span class="en">Compliance & audit</span><span class="ko">컴플라이언스 · 감사</span></span>
+      <span class="muted" style="font-size:11px;"><span class="en">administrative — view post-purchase</span><span class="ko">행정 정보 — 구매 후 확인</span></span>
+    </span>
+    <span class="compliance-collapse__head__chev">▾</span>
+  </button>
+
+  <div class="compliance-collapse__body">
+
+    <!-- De-ID Chain (DEMOTED — was sticky right rail in v2) -->
+    <div class="deid-stepper">
+      <div class="deid-stepper__head">
+        <span class="deid-stepper__head__icon">✓</span>
+        <span><span class="en">De-ID chain · 5 stages · all verified</span><span class="ko">익명화 체인 · 5단계 · 전체 검증 완료</span></span>
+      </div>
+      <div class="deid-step">
+        <div class="deid-step__num deid-step__num--done">1</div>
+        <div class="deid-step__body">
+          <span class="deid-step__title"><span class="en">PHI tag scrub</span><span class="ko">PHI 태그 제거</span></span>
+          <span class="deid-step__title-ko"><span class="en">DICOM PS3.15 Annex E Basic Profile</span><span class="ko">DICOM PS3.15 Annex E 기본 프로파일</span></span>
+          <span class="deid-step__hash">a3f0…</span>
+        </div>
+      </div>
+      <div class="deid-step">
+        <div class="deid-step__num deid-step__num--done">2</div>
+        <div class="deid-step__body">
+          <span class="deid-step__title"><span class="en">UID re-generation</span><span class="ko">UID 재생성</span></span>
+          <span class="deid-step__title-ko"><span class="en">SHA-256 + per-hospital salt</span><span class="ko">SHA-256 + 병원별 salt</span></span>
+          <span class="deid-step__hash">b71c…</span>
+        </div>
+      </div>
+      <div class="deid-step">
+        <div class="deid-step__num deid-step__num--done">3</div>
+        <div class="deid-step__body">
+          <span class="deid-step__title"><span class="en">Date shift</span><span class="ko">날짜 시프트</span></span>
+          <span class="deid-step__title-ko"><span class="en">Per-patient ±1y offset</span><span class="ko">환자별 ±1년 오프셋</span></span>
+          <span class="deid-step__hash">c08f…</span>
+        </div>
+      </div>
+      <div class="deid-step">
+        <div class="deid-step__num deid-step__num--done">4</div>
+        <div class="deid-step__body">
+          <span class="deid-step__title"><span class="en">Burn-in OCR scrub</span><span class="ko">번인 OCR 제거</span></span>
+          <span class="deid-step__title-ko"><span class="en">Tesseract + KO/EN dict (recall 99.92%)</span><span class="ko">Tesseract + 한·영 사전</span></span>
+          <span class="deid-step__hash">d92a…</span>
+        </div>
+      </div>
+      <div class="deid-step">
+        <div class="deid-step__num deid-step__num--done">5</div>
+        <div class="deid-step__body">
+          <span class="deid-step__title"><span class="en">3D defacing</span><span class="ko">3D 디페이싱</span></span>
+          <span class="deid-step__title-ko"><span class="en">pydeface — n/a (chest CT)</span><span class="ko">pydeface — 적용 안 됨 (흉부CT)</span></span>
+          <span class="deid-step__hash">e51b…</span>
+        </div>
+      </div>
+      <div class="deid-stepper__footer">
+        <span><span class="en">ruleset v0.2.1</span><span class="ko">룰셋 v0.2.1</span></span>
+        <span>2024-08-31 14:22 KST</span>
+      </div>
+    </div>
+
+    <!-- Audit info -->
+    <div class="audit-info">
+      <h4><span class="en">PIPA consent provenance & audit chain</span><span class="ko">PIPA 동의 출처 · 감사 체인</span></h4>
+      <dl>
+        <dt><span class="en">Hospital IRB</span><span class="ko">병원 IRB</span></dt>
+        <dd>SEOUL-A · #2024-0388</dd>
+        <dt><span class="en">Consent type</span><span class="ko">동의 유형</span></dt>
+        <dd>broad · PIPA §28-8</dd>
+        <dt><span class="en">Ingest at</span><span class="ko">수집 시각</span></dt>
+        <dd>2024-08-31 14:22 KST</dd>
+        <dt><span class="en">Anchor hash</span><span class="ko">앵커 해시</span></dt>
+        <dd>e51b3a2f8c10…</dd>
+        <dt><span class="en">Chain status</span><span class="ko">체인 상태</span></dt>
+        <dd style="color:var(--rv-success-fg);">✓ continuous · 3,824 events</dd>
+        <dt><span class="en">WORM retention</span><span class="ko">WORM 보존</span></dt>
+        <dd>5y per PIPA</dd>
+      </dl>
+      <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--rv-stone-200); font-size:11px; color:var(--rv-stone-500);">
+        <span class="en">Full audit log + chain proof available post-purchase via Account → Audit log.</span>
+        <span class="ko">전체 감사 로그 · 체인 증명은 구매 후 Account → 감사 로그 에서 확인 가능.</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===== Compliance footer (preserved) ===== -->
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa"><span class="compliance-pill__dot"></span><span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span></span>
+      <span class="compliance-pill compliance-pill--info"><span class="compliance-pill__dot"></span><span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span></span>
+      <span class="compliance-pill compliance-pill--kcd"><span class="compliance-pill__dot"></span><span>KCD-8</span></span>
+      <span class="compliance-pill compliance-pill--moh"><span class="compliance-pill__dot"></span><span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 정합</span></span>
+    </div>
+    <a href="#" style="color:#A8A29E;"><span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span></a>
+  </div>
+  <div class="compliance-footer__legal">
+    <span class="en">RadiVault is a software-only data marketplace. Imagery is for research preview only and not intended for clinical diagnosis (SaMD disclaimer).</span>
+    <span class="ko">RadiVault 는 소프트웨어 기반 데이터 마켓플레이스입니다. 노출되는 영상은 연구 프리뷰 목적이며 임상 진단 용도가 아닙니다 (SaMD 면책).</span>
+  </div>
+</footer>
+
+<script>
+  // Locale toggle
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+
+  // Slice slider live label
+  const slider = document.getElementById('sliceSlider');
+  const label = document.getElementById('sliceLabel');
+  slider.addEventListener('input', () => {
+    label.textContent = slider.value + ' / 312';
+  });
+
+  // Compliance collapse toggle
+  const cc = document.getElementById('complianceCollapse');
+  document.getElementById('complianceHead').addEventListener('click', () => {
+    cc.classList.toggle('is-open');
+  });
+</script>
+</body>
+</html>

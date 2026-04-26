@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Buyer UX v3 (Dense list redesign)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar">
+      <span class="trust-bar__dot"></span>
+      <span class="en">Buyer UX v3 — dense list redesign</span>
+      <span class="ko">Buyer UX v3 — dense list 재디자인</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./search.html" class="nav__link"><span class="en">Search</span><span class="ko">검색</span></a>
+    <a href="./study-detail.html" class="nav__link"><span class="en">Detail</span><span class="ko">상세</span></a>
+    <a href="./account.html" class="nav__link"><span class="en">Account</span><span class="ko">계정</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+  </div>
+</header>
+
+<main class="guide">
+
+  <h1>RadiVault Buyer UX <span style="color:var(--rv-teal-700);">v3</span> — Dense list redesign</h1>
+  <p class="guide__sub">
+    <span class="en">v2 was too low-density and over-emphasized De-ID provenance to buyers. v3 absorbs Segmed Openda's dense table style while preserving v2's anti-Segmed signature (navy/teal, Pretendard, hospital badges, KCD-triple ontology).</span>
+    <span class="ko">v2 는 정보 밀도가 낮았고 De-ID provenance 를 buyer 에게 과도 노출했습니다. v3 는 Segmed Openda 의 dense table 스타일을 흡수하되, v2 의 anti-Segmed 시각 시그니처(navy/teal, Pretendard, 병원 badge, KCD 트리플 ontology)는 보존합니다.</span>
+  </p>
+
+  <!-- ===== Mockup links ===== -->
+  <div class="guide__cards">
+    <a class="guide-card" href="./search.html">
+      <div class="guide-card__num">S-1</div>
+      <div class="guide-card__title">search.html</div>
+      <div class="guide-card__body">
+        <span class="en">Dense table · 25 rows visible · 11 columns · sortable headers · column toggle · NO thumbnails.</span>
+        <span class="ko">Dense table · 25행 노출 · 11컬럼 · 정렬 가능 · 컬럼 토글 · 썸네일 없음.</span>
+      </div>
+    </a>
+    <a class="guide-card" href="./study-detail.html">
+      <div class="guide-card__num">S-2</div>
+      <div class="guide-card__title">study-detail.html</div>
+      <div class="guide-card__body">
+        <span class="en">Viewer + slice slider · rich metadata (Patient/Study/Series/Acquisition/Pixel · 14 fields) · longitudinal timeline · De-ID demoted to footer collapse.</span>
+        <span class="ko">뷰어 + 슬라이스 슬라이더 · rich metadata (환자/검사/시리즈/획득/픽셀 · 14필드) · 시계열 타임라인 · De-ID 는 footer collapse 로 격하.</span>
+      </div>
+    </a>
+    <a class="guide-card" href="./account.html">
+      <div class="guide-card__num">S-3</div>
+      <div class="guide-card__title">account.html</div>
+      <div class="guide-card__body">
+        <span class="en">Identical to v2. Profile · API key reveal-once · quota · audit log preview · onboarding checklist · danger zone.</span>
+        <span class="ko">v2 와 동일. 프로필 · API 키 1회 노출 · 사용량 · 감사 로그 · 온보딩 · 위험 영역.</span>
+      </div>
+    </a>
+  </div>
+
+  <!-- ===== What changed from v2 ===== -->
+  <h2 class="section-h"><span class="en">What changed from v2 — 5 axes</span><span class="ko">v2 → v3 변경 — 5축</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th><span class="en">Axis</span><span class="ko">축</span></th>
+        <th><span class="en">v2 (previous)</span><span class="ko">v2 (이전)</span></th>
+        <th><span class="en">v3 (now)</span><span class="ko">v3 (현재)</span></th>
+        <th><span class="en">Why</span><span class="ko">이유</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong><span class="en">A1. List density</span><span class="ko">A1. 리스트 밀도</span></strong></td>
+        <td class="col-v2">card row · 96px thumbnail · 8 visible</td>
+        <td class="col-v3">dense table · 52px row · 25 visible</td>
+        <td><span class="en">Kyle: "thumbnail slows search and reduces row count". Segmed Openda has no thumb either.</span><span class="ko">Kyle: "썸네일은 속도 저하 + 적게 보임". Segmed 도 썸네일 없음.</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">A2. Per-row info</span><span class="ko">A2. 행당 정보</span></strong></td>
+        <td class="col-v2">~7 fields · narrative meta</td>
+        <td class="col-v3">11 cols · scan-friendly grid</td>
+        <td><span class="en">Buyer compares many studies fast. Manufacturer/Model/Date/Series/Size all visible at once.</span><span class="ko">Buyer 가 다수 study 를 빠르게 비교. 제조사/모델/날짜/시리즈/용량 모두 한눈에.</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">A3. De-ID chain</span><span class="ko">A3. De-ID 체인</span></strong></td>
+        <td class="col-v2">sticky right-rail · default visible</td>
+        <td class="col-v3">collapsed footer · administrative</td>
+        <td><span class="en">Kyle: "buyer doesn't need De-ID detail to decide". Segmed treats De-ID as admin-only. Promote post-purchase only.</span><span class="ko">Kyle: "buyer 의사결정에 De-ID detail 불필요". Segmed 도 admin-only. 구매 후 행정 정보로 격하.</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">A4. Detail metadata</span><span class="ko">A4. 상세 메타</span></strong></td>
+        <td class="col-v2">Patient/Study/Series/device — 9 fields</td>
+        <td class="col-v3">+Acquisition (KVP/mAs/contrast) +Pixel +Quality metrics — 14 fields</td>
+        <td><span class="en">Buyer needs acquisition params (KVP, MR field strength, slice thickness) for AI training fitness check.</span><span class="ko">Buyer 는 AI 학습 적합성 판단을 위해 획득 파라미터(KVP, MR 자기장, 슬라이스 두께)가 필요.</span></td>
+      </tr>
+      <tr>
+        <td><strong><span class="en">A5. Longitudinal</span><span class="ko">A5. 시계열</span></strong></td>
+        <td class="col-v2">single line · date only</td>
+        <td class="col-v3">+ hospital per-step · current marker · "n prior, n follow-up" caption</td>
+        <td><span class="en">Differentiator vs Segmed (Openda has patient grouping but not visualized as timeline). Strengthened.</span><span class="ko">Segmed 와의 차별점 (Openda 의 patient grouping 은 timeline 시각화 없음). 강화.</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ===== What v3 absorbs from Segmed Openda ===== -->
+  <h2 class="section-h"><span class="en">What v3 absorbs from Segmed Openda</span><span class="ko">v3 가 Segmed Openda 에서 흡수한 것</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th><span class="en">#</span></th>
+        <th><span class="en">Pattern</span><span class="ko">패턴</span></th>
+        <th><span class="en">Where in v3</span><span class="ko">v3 위치</span></th>
+        <th><span class="en">Differentiation preserved</span><span class="ko">차별 보존</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><span class="en">Dense table list (no thumbnail)</span><span class="ko">Dense table 리스트 (썸네일 없음)</span></td>
+        <td>search.html result-table</td>
+        <td><span class="en">Per-row 4px hospital stripe + region badge — Segmed has neither.</span><span class="ko">행당 4px 병원 stripe + region badge — Segmed 둘 다 없음.</span></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><span class="en">Sortable column headers</span><span class="ko">컬럼 정렬 헤더</span></td>
+        <td>search.html — 9 sortable</td>
+        <td><span class="en">Same UX, but column labels in ko/en simultaneous; KCD chip is RadiVault-only.</span><span class="ko">동일 UX. 단 컬럼 라벨 한·영 동시 + KCD chip 은 RadiVault 만.</span></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><span class="en">Customize columns dropdown</span><span class="ko">컬럼 가시성 토글</span></td>
+        <td>search.html "Show columns ▾"</td>
+        <td><span class="en">v0.1.5 advanced cols (slice thickness, KVP, MR field strength) flagged as future-enable.</span><span class="ko">v0.1.5 고급 컬럼(슬라이스 두께, KVP, MR 자기장) 은 향후 활성화 표기.</span></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><span class="en">De-ID hidden from buyer-facing</span><span class="ko">De-ID 를 buyer 화면에서 숨김</span></td>
+        <td>study-detail.html footer collapse</td>
+        <td><span class="en">RadiVault still SHOWS chain (collapse → expand). Segmed completely hides. Trust ladder preserved.</span><span class="ko">RadiVault 는 체인을 노출 (접기→펼치기). Segmed 는 완전 숨김. 신뢰 사다리 보존.</span></td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><span class="en">Rich metadata cards (Acquisition + Pixel)</span><span class="ko">상세 메타 카드 (획득 + 픽셀)</span></td>
+        <td>study-detail.html right rail</td>
+        <td><span class="en">PIPA consent provenance + IRB number unique to RadiVault.</span><span class="ko">PIPA 동의 출처 + IRB 번호 는 RadiVault 만 노출.</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ===== Component inventory ===== -->
+  <h2 class="section-h"><span class="en">Component inventory (NEW · CHANGED · REMOVED · PRESERVED)</span><span class="ko">컴포넌트 인벤토리 (신규 · 변경 · 제거 · 보존)</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Component</th>
+        <th><span class="en">Purpose</span><span class="ko">목적</span></th>
+        <th><span class="en">Where</span><span class="ko">위치</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;ResultTable&gt;</code></td><td>Dense sortable result table (11 cols)</td><td>search.html</td></tr>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;ColumnToggle&gt;</code></td><td>Show/hide columns dropdown</td><td>search.html header</td></tr>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;QualityMetricsCard&gt;</code></td><td>Image count · slice thickness · resolution · completeness</td><td>study-detail right rail</td></tr>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;AcquisitionCard&gt;</code></td><td>Modality-specific (KVP/mAs/MR field/contrast)</td><td>study-detail right rail</td></tr>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;SeriesMiniCard&gt;</code></td><td>Per-series compact row (3-card)</td><td>study-detail right rail</td></tr>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;SliceSlider&gt;</code></td><td>Range slider for viewer slice nav</td><td>study-detail viewer pane</td></tr>
+      <tr><td class="col-v3">NEW</td><td><code>&lt;ComplianceCollapse&gt;</code></td><td>Collapsible footer wrapping De-ID + audit</td><td>study-detail footer</td></tr>
+      <tr><td class="col-v2">CHANGED</td><td><code>&lt;DeIDChainStepper&gt;</code></td><td>props.collapsed default <strong>true</strong> (was false)</td><td>study-detail footer</td></tr>
+      <tr><td class="col-v2">CHANGED</td><td><code>&lt;LongitudinalTimeline&gt;</code></td><td>+ hospital per-step + current marker</td><td>study-detail right rail</td></tr>
+      <tr><td class="col-segmed">REMOVED</td><td><code>&lt;StudyThumbnail&gt;</code> (search list)</td><td>96×96 thumb in result row</td><td>search.html (was result-row)</td></tr>
+      <tr><td class="col-segmed">REMOVED</td><td><code>&lt;AuditHashChip&gt;</code> (search row)</td><td>per-row teal hash chip</td><td>search.html (was result-meta__top)</td></tr>
+      <tr><td>PRESERVED</td><td><code>&lt;HospitalBadge&gt;</code></td><td>Region pseudo-brand (SEOUL-A/BUSAN-B/...)</td><td>row · header · facet · drawer</td></tr>
+      <tr><td>PRESERVED</td><td><code>&lt;KCDAutocomplete&gt;</code></td><td>Triple ontology dropdown (KCD/SNOMED/RadLex, ko/en)</td><td>search subbar</td></tr>
+      <tr><td>PRESERVED</td><td><code>&lt;PIPATrustBar&gt;</code></td><td>Header mini + footer compliance pills</td><td>all pages</td></tr>
+      <tr><td>PRESERVED</td><td><code>&lt;CohortDrawer&gt;</code></td><td>Bottom-right sticky cohort stat</td><td>search.html</td></tr>
+      <tr><td>PRESERVED</td><td><code>&lt;ModalityDot&gt;</code></td><td>8px colored dot per modality</td><td>row · facet · viewer overlay</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ===== Result table column spec ===== -->
+  <h2 class="section-h"><span class="en">Result table column spec (11 visible + 4 toggle)</span><span class="ko">결과 테이블 컬럼 명세 (기본 11 + 토글 4)</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th><span class="en">Column (en)</span></th>
+        <th><span class="ko">컬럼 (한)</span></th>
+        <th><span class="en">Width</span><span class="ko">너비</span></th>
+        <th><span class="en">Sortable?</span><span class="ko">정렬</span></th>
+        <th><span class="en">Default visible?</span><span class="ko">기본 표시</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>—</td><td>(stripe)</td><td>(스트라이프)</td><td>4 px</td><td>—</td><td>always</td></tr>
+      <tr><td>—</td><td>(checkbox)</td><td>(선택)</td><td>32 px</td><td>—</td><td>always</td></tr>
+      <tr><td>1</td><td>Hospital</td><td>병원</td><td>96 px</td><td>YES</td><td>YES (locked)</td></tr>
+      <tr><td>2</td><td>Modality</td><td>모달리티</td><td>72 px</td><td>YES</td><td>YES</td></tr>
+      <tr><td>3</td><td>Body part</td><td>부위</td><td>96 px</td><td>YES</td><td>YES</td></tr>
+      <tr><td>4</td><td>KCD · Diagnosis</td><td>KCD · 진단</td><td>min 140 px (1.4fr)</td><td>YES</td><td>YES</td></tr>
+      <tr><td>5</td><td>Patient (sex · age)</td><td>환자 (성별 · 연령)</td><td>96 px</td><td>YES</td><td>YES</td></tr>
+      <tr><td>6</td><td>Manufacturer · Model</td><td>제조사 · 모델</td><td>min 140 px (1.2fr)</td><td>YES</td><td>YES</td></tr>
+      <tr><td>7</td><td>Date</td><td>촬영일</td><td>80 px</td><td>YES (default ↓)</td><td>YES</td></tr>
+      <tr><td>8</td><td>Sr · Inst (series · instances)</td><td>시리즈 · 인스턴스</td><td>96 px</td><td>YES</td><td>YES</td></tr>
+      <tr><td>9</td><td>Size</td><td>용량</td><td>72 px</td><td>YES</td><td>YES</td></tr>
+      <tr><td>10</td><td>UID (last 6)</td><td>UID (말미 6자)</td><td>72 px</td><td>YES</td><td>YES</td></tr>
+      <tr><td>—</td><td>View action</td><td>보기 액션</td><td>72 px</td><td>—</td><td>YES (hover)</td></tr>
+      <tr><td>11+</td><td>Slice thickness</td><td>슬라이스 두께</td><td>—</td><td>YES</td><td>NO (v0.1.5)</td></tr>
+      <tr><td>12+</td><td>KVP (CT)</td><td>KVP (CT)</td><td>—</td><td>YES</td><td>NO (v0.1.5)</td></tr>
+      <tr><td>13+</td><td>Field strength (MR)</td><td>자기장 (MR)</td><td>—</td><td>YES</td><td>NO (v0.1.5)</td></tr>
+      <tr><td>14+</td><td>Audit hash</td><td>감사 해시</td><td>—</td><td>NO</td><td>NO (collapse)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ===== Detail metadata fields ===== -->
+  <h2 class="section-h"><span class="en">Study-detail rich metadata fields (14)</span><span class="ko">상세 메타 필드 (14개)</span></h2>
+  <table class="diff-table">
+    <thead>
+      <tr>
+        <th>Card</th>
+        <th>Field</th>
+        <th>DICOM tag</th>
+        <th>MVP / v0.1.5</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td rowspan="4"><strong>Patient</strong></td><td>Pseudo ID</td><td>(0010,0020) re-gen</td><td>MVP</td></tr>
+      <tr><td>Sex</td><td>(0010,0040)</td><td>MVP</td></tr>
+      <tr><td>Age bucket (5y)</td><td>(0010,1010) bucket</td><td>MVP</td></tr>
+      <tr><td>Consent (PIPA §28-8)</td><td>(custom)</td><td>MVP</td></tr>
+      <tr><td rowspan="5"><strong>Study</strong></td><td>Date (shifted)</td><td>(0008,0020) shift</td><td>MVP</td></tr>
+      <tr><td>Accession (masked)</td><td>(0008,0050)</td><td>MVP</td></tr>
+      <tr><td>Description</td><td>(0008,1030)</td><td>v0.1.5</td></tr>
+      <tr><td>Modality</td><td>(0008,0060)</td><td>MVP</td></tr>
+      <tr><td>Body part</td><td>(0018,0015)</td><td>MVP</td></tr>
+      <tr><td rowspan="3"><strong>Series</strong> (×N)</td><td>Title / description</td><td>(0008,103E)</td><td>v0.1.5</td></tr>
+      <tr><td>Modality · slice · resolution</td><td>(0008,0060) (0018,0050) (0028,0010)</td><td>v0.1.5</td></tr>
+      <tr><td># instances</td><td>(derived)</td><td>MVP</td></tr>
+      <tr><td rowspan="5"><strong>Acquisition</strong></td><td>Manufacturer</td><td>(0008,0070)</td><td>MVP</td></tr>
+      <tr><td>Model</td><td>(0008,1090)</td><td>MVP</td></tr>
+      <tr><td>KVP (CT)</td><td>(0018,0060)</td><td>MVP (CT only)</td></tr>
+      <tr><td>Tube current (mAs)</td><td>(0018,1151)</td><td>v0.1.5</td></tr>
+      <tr><td>Magnetic field (MR)</td><td>(0018,0087)</td><td>v0.1.5</td></tr>
+      <tr><td rowspan="3"><strong>Pixel & spatial</strong></td><td>PhotomtrInterp</td><td>(0028,0004)</td><td>v0.1.5</td></tr>
+      <tr><td>PixelSpacing</td><td>(0028,0030)</td><td>v0.1.5</td></tr>
+      <tr><td>FrameOfReferenceUID prefix</td><td>(0020,0052)</td><td>v0.1.5</td></tr>
+      <tr><td rowspan="4"><strong>Quality (NEW)</strong></td><td>Image count</td><td>(derived)</td><td>MVP</td></tr>
+      <tr><td>Slice thickness range</td><td>(0018,0050) min/max</td><td>v0.1.5</td></tr>
+      <tr><td>Resolution</td><td>(0028,0010)×(0028,0011)</td><td>MVP</td></tr>
+      <tr><td>Completeness score (12-field fill rate)</td><td>(derived)</td><td>v0.1.5</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ===== Footer ===== -->
+</main>
+
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa"><span class="compliance-pill__dot"></span><span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span></span>
+      <span class="compliance-pill compliance-pill--info"><span class="compliance-pill__dot"></span><span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span></span>
+      <span class="compliance-pill compliance-pill--kcd"><span class="compliance-pill__dot"></span><span>KCD-8</span></span>
+      <span class="compliance-pill compliance-pill--moh"><span class="compliance-pill__dot"></span><span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 정합</span></span>
+    </div>
+    <a href="#" style="color:#A8A29E;"><span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span></a>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+</script>
+</body>
+</html>

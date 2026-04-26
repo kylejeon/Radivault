@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadiVault — Account (v2)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-locale="en">
+
+<header class="nav">
+  <div class="nav__brand">
+    <a href="./index.html" class="nav__brand-mark" style="text-decoration:none;">R</a>
+    <a href="./index.html" style="color:#fff; text-decoration:none;">RadiVault</a>
+    <span class="trust-bar">
+      <span class="trust-bar__dot"></span>
+      <span class="en">PIPA §28-8 · 정통망법 · KCD-8</span>
+      <span class="ko">개인정보보호법 §28-8 · 정통망법 · KCD-8</span>
+    </span>
+  </div>
+  <div class="nav__center">
+    <a href="./search.html" class="nav__link"><span class="en">Search</span><span class="ko">검색</span></a>
+    <a href="#" class="nav__link"><span class="en">Cohorts</span><span class="ko">코호트</span></a>
+    <a href="#" class="nav__link"><span class="en">Orders</span><span class="ko">주문</span></a>
+    <a href="#" class="nav__link"><span class="en">API Docs</span><span class="ko">API 문서</span></a>
+  </div>
+  <div class="nav__right">
+    <div class="locale-toggle" role="tablist">
+      <button class="is-active" data-set-locale="en" role="tab" aria-selected="true">EN</button>
+      <button data-set-locale="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+    <a href="./account.html" class="account-menu" style="background:rgba(20,184,166,0.18);">
+      <span class="account-menu__avatar">AC</span>
+      <span>acme-ai</span>
+    </a>
+  </div>
+</header>
+
+<main class="account-grid">
+
+  <!-- ===== Profile card (full width) ===== -->
+  <section class="card" style="grid-column:1 / -1;">
+    <div class="card__head">
+      <div>
+        <div class="card__title"><span class="en">Profile</span><span class="ko">프로필</span></div>
+        <div class="card__sub">acme-ai · <span class="en">signed in just now</span><span class="ko">방금 로그인</span></div>
+      </div>
+      <span class="hospital-badge" style="background:var(--rv-amber-100); color:var(--rv-amber-600); border-color:#FCD34D;">
+        <span class="en">PREVIEW TIER</span><span class="ko">PREVIEW TIER</span>
+      </span>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:16px;">
+      <div>
+        <div style="font-size:11px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em;"><span class="en">Buyer ID</span><span class="ko">바이어 ID</span></div>
+        <div class="mono" style="margin-top:4px; color:var(--rv-stone-900); font-weight:600;">b_4f2a91e0c8d5</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em;"><span class="en">Email</span><span class="ko">이메일</span></div>
+        <div style="margin-top:4px; color:var(--rv-stone-900); font-weight:500;">dana@acme-ai.io</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em;"><span class="en">Tier</span><span class="ko">등급</span></div>
+        <div style="margin-top:4px; color:var(--rv-stone-900); font-weight:600;"><span class="en">Preview (self-serve)</span><span class="ko">Preview (self-serve)</span></div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em;"><span class="en">Member since</span><span class="ko">가입일</span></div>
+        <div class="mono" style="margin-top:4px; color:var(--rv-stone-900); font-weight:600;">2026-04-12</div>
+      </div>
+    </div>
+    <div style="margin-top:16px; padding-top:14px; border-top:1px dashed var(--rv-stone-200); font-size:12px; color:var(--rv-stone-600);">
+      <span class="en">⚠ Preview tier allows search + sample download (10 instances/study). Full DICOM delivery requires a signed contract per PIPA §28-8 expert determination. </span>
+      <span class="ko">⚠ Preview tier 는 검색과 샘플 다운로드 (study 당 10 인스턴스) 를 허용합니다. 전체 DICOM 배송은 PIPA §28-8 전문가 결정에 따라 계약이 필요합니다. </span>
+      <a href="#"><span class="en">Request contract upgrade →</span><span class="ko">계약 업그레이드 요청 →</span></a>
+    </div>
+  </section>
+
+  <!-- ===== API Key + Quick Start ===== -->
+  <section class="card" style="grid-column:1 / -1;">
+    <div class="card__head">
+      <div>
+        <div class="card__title"><span class="en">API key</span><span class="ko">API 키</span></div>
+        <div class="card__sub"><span class="en">Reveal-once · masked thereafter</span><span class="ko">한 번만 노출 · 이후 마스킹</span></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn--ghost btn--sm"><span class="en">Rotate</span><span class="ko">회전</span></button>
+        <button class="btn btn--ghost-teal btn--sm" id="revealBtn"><span class="en">Reveal once</span><span class="ko">1회 노출</span></button>
+      </div>
+    </div>
+
+    <div class="api-key-mask">
+      <span class="api-key-mask__value" id="apiKeyValue">rv_live_••••••••••••••••••••••••••••••••3kF8a2</span>
+      <button class="btn btn--ghost btn--sm" id="copyKeyBtn"><span class="en">Copy</span><span class="ko">복사</span></button>
+    </div>
+
+    <!-- Quick start tabs -->
+    <div class="tabs">
+      <div class="tab is-active" data-tab="curl">curl</div>
+      <div class="tab" data-tab="python">Python</div>
+      <div class="tab" data-tab="postman">Postman</div>
+    </div>
+
+    <div id="tab-curl" class="tab-pane">
+      <div class="code-block">
+        <button class="code-block__copy"><span class="en">Copy</span><span class="ko">복사</span></button>
+<span class="tok-c"># Search studies (preview tier — 250 calls/day)</span>
+curl -X POST https://api.radivault.io/v1/search/studies \
+  -H <span class="tok-s">"Authorization: Bearer $RV_API_KEY"</span> \
+  -H <span class="tok-s">"Content-Type: application/json"</span> \
+  -d '{
+    <span class="tok-k">"modality"</span>: [<span class="tok-s">"CT"</span>, <span class="tok-s">"MR"</span>],
+    <span class="tok-k">"kcd_code"</span>: <span class="tok-s">"I20.9"</span>,
+    <span class="tok-k">"hospitals"</span>: [<span class="tok-s">"SEOUL-A"</span>],
+    <span class="tok-k">"limit"</span>: <span class="tok-v">20</span>
+  }'</div>
+    </div>
+    <div id="tab-python" class="tab-pane" style="display:none;">
+      <div class="code-block">
+        <button class="code-block__copy"><span class="en">Copy</span><span class="ko">복사</span></button>
+<span class="tok-c"># pip install radivault</span>
+<span class="tok-k">from</span> radivault <span class="tok-k">import</span> Client
+client = Client(api_key=<span class="tok-s">"$RV_API_KEY"</span>)
+
+studies = client.search(
+    modality=[<span class="tok-s">"CT"</span>, <span class="tok-s">"MR"</span>],
+    kcd_code=<span class="tok-s">"I20.9"</span>,
+    hospitals=[<span class="tok-s">"SEOUL-A"</span>],
+    limit=<span class="tok-v">20</span>,
+)
+<span class="tok-k">for</span> s <span class="tok-k">in</span> studies:
+    <span class="tok-k">print</span>(s.uid, s.hospital, s.audit_hash)</div>
+    </div>
+    <div id="tab-postman" class="tab-pane" style="display:none;">
+      <div class="code-block">
+        <button class="code-block__copy"><span class="en">Copy link</span><span class="ko">링크 복사</span></button>
+<span class="tok-c"># Postman collection (v1.2.0)</span>
+https://www.postman.com/radivault/workspace/buyer/collection/v1
+<span class="tok-c"># Includes: search, study-detail, sample-download,
+# audit-log, cohort CRUD endpoints. Pre-request script
+# loads RV_API_KEY from environment.</span></div>
+    </div>
+  </section>
+
+  <!-- ===== Quota gauge (left col) ===== -->
+  <section class="card">
+    <div class="card__head">
+      <div>
+        <div class="card__title"><span class="en">Usage</span><span class="ko">사용량</span></div>
+        <div class="card__sub"><span class="en">Resets daily 00:00 UTC · monthly on 1st</span><span class="ko">매일 00:00 UTC 리셋 · 월별 1일</span></div>
+      </div>
+    </div>
+
+    <div style="font-size:11px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:6px; margin-top:4px;"><span class="en">Today</span><span class="ko">오늘</span></div>
+    <div class="quota-row">
+      <span><span class="en">Sample downloads</span><span class="ko">샘플 다운로드</span></span>
+      <span style="display:flex; align-items:center; gap:10px;">
+        <div class="quota-bar"><div class="quota-bar__fill" style="width:0%"></div></div>
+        <span class="mono">0 / 1</span>
+      </span>
+    </div>
+    <div class="quota-row">
+      <span><span class="en">Search calls</span><span class="ko">검색 호출</span></span>
+      <span style="display:flex; align-items:center; gap:10px;">
+        <div class="quota-bar"><div class="quota-bar__fill" style="width:14%"></div></div>
+        <span class="mono">36 / 250</span>
+      </span>
+    </div>
+
+    <div style="font-size:11px; color:var(--rv-stone-500); text-transform:uppercase; letter-spacing:0.04em; margin:14px 0 6px;"><span class="en">This month</span><span class="ko">이번 달</span></div>
+    <div class="quota-row">
+      <span><span class="en">Sample downloads</span><span class="ko">샘플 다운로드</span></span>
+      <span style="display:flex; align-items:center; gap:10px;">
+        <div class="quota-bar"><div class="quota-bar__fill" style="width:24%"></div></div>
+        <span class="mono">7 / 30</span>
+      </span>
+    </div>
+    <div class="quota-row">
+      <span><span class="en">Cohort drafts</span><span class="ko">코호트 초안</span></span>
+      <span style="display:flex; align-items:center; gap:10px;">
+        <div class="quota-bar"><div class="quota-bar__fill" style="width:60%"></div></div>
+        <span class="mono">3 / 5</span>
+      </span>
+    </div>
+  </section>
+
+  <!-- ===== Audit log preview (right col) ===== -->
+  <section class="card">
+    <div class="card__head">
+      <div>
+        <div class="card__title"><span class="en">Recent activity</span><span class="ko">최근 활동</span></div>
+        <div class="card__sub"><span class="en">5 most recent events · WORM-stored 5y</span><span class="ko">최근 5건 · WORM 5년 보관</span></div>
+      </div>
+      <a href="#" style="font-size:11px;"><span class="en">Full log →</span><span class="ko">전체 로그 →</span></a>
+    </div>
+    <ul class="audit-list">
+      <li>
+        <span class="audit-list__time">12:42:08</span>
+        <span class="audit-list__type audit-list__type--search">SEARCH</span>
+        <span class="audit-list__detail">kcd:I20.9 · 250 hits · 38 ms</span>
+      </li>
+      <li>
+        <span class="audit-list__time">12:38:51</span>
+        <span class="audit-list__type audit-list__type--download">DOWNLOAD</span>
+        <span class="audit-list__detail">1.2.840.HOSP1.7392 · sample · 12 MB</span>
+      </li>
+      <li>
+        <span class="audit-list__time">12:35:14</span>
+        <span class="audit-list__type audit-list__type--search">SEARCH</span>
+        <span class="audit-list__detail">modality:CT,MR · 412 hits · 41 ms</span>
+      </li>
+      <li>
+        <span class="audit-list__time">11:58:02</span>
+        <span class="audit-list__type audit-list__type--key">KEY</span>
+        <span class="audit-list__detail">api key revealed · b_4f2a91e0c8d5</span>
+      </li>
+      <li>
+        <span class="audit-list__time">11:52:30</span>
+        <span class="audit-list__type audit-list__type--search">SEARCH</span>
+        <span class="audit-list__detail">hospitals:SEOUL-A · 142 hits · 33 ms</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ===== Onboarding checklist (full width) ===== -->
+  <section class="card" style="grid-column:1 / -1;">
+    <div class="card__head">
+      <div>
+        <div class="card__title"><span class="en">Onboarding · 5 steps</span><span class="ko">온보딩 · 5단계</span></div>
+        <div class="card__sub">3 / 5 <span class="en">complete · ~5 min remaining</span><span class="ko">완료 · 약 5분 남음</span></div>
+      </div>
+    </div>
+    <ul class="onboard-list">
+      <li class="is-done">
+        <span class="onboard-check">✓</span>
+        <span><span class="en">1. Account created (preview tier)</span><span class="ko">1. 계정 생성 (preview tier)</span></span>
+      </li>
+      <li class="is-done">
+        <span class="onboard-check">✓</span>
+        <span><span class="en">2. Email verified · dana@acme-ai.io</span><span class="ko">2. 이메일 인증 · dana@acme-ai.io</span></span>
+      </li>
+      <li class="is-done">
+        <span class="onboard-check">✓</span>
+        <span><span class="en">3. API key revealed</span><span class="ko">3. API 키 1회 노출 완료</span></span>
+      </li>
+      <li>
+        <span class="onboard-check"></span>
+        <span>
+          <span class="en">4. First sample download — try a CT, MR, or MG study.</span>
+          <span class="ko">4. 첫 샘플 다운로드 — CT, MR, MG study 시도</span>
+          <a href="./search.html" style="margin-left:8px; font-size:12px;"><span class="en">Search →</span><span class="ko">검색 →</span></a>
+        </span>
+      </li>
+      <li>
+        <span class="onboard-check"></span>
+        <span>
+          <span class="en">5. Build your first cohort (≥10 studies) → request contract upgrade.</span>
+          <span class="ko">5. 첫 코호트 빌드 (10 study 이상) → 계약 업그레이드 요청</span>
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ===== Danger zone (full width) ===== -->
+  <section class="danger-zone" style="grid-column:1 / -1;">
+    <h3 class="danger-zone__title" style="font-size:14px; margin-bottom:10px;">
+      <span class="en">Danger zone</span><span class="ko">위험 영역</span>
+    </h3>
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #FCA5A5;">
+      <div>
+        <div style="font-weight:600; color:var(--rv-error-fg); font-size:13px;"><span class="en">Revoke API key</span><span class="ko">API 키 폐기</span></div>
+        <div style="font-size:11.5px; color:var(--rv-stone-600); margin-top:2px;"><span class="en">All clients using this key will start receiving 401 immediately.</span><span class="ko">이 키를 사용 중인 모든 클라이언트가 즉시 401 을 받습니다.</span></div>
+      </div>
+      <button class="btn btn--ghost btn--sm" style="border-color:#DC2626; color:#DC2626;"><span class="en">Revoke</span><span class="ko">폐기</span></button>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0 0;">
+      <div>
+        <div style="font-weight:600; color:var(--rv-error-fg); font-size:13px;"><span class="en">Delete account</span><span class="ko">계정 삭제</span></div>
+        <div style="font-size:11.5px; color:var(--rv-stone-600); margin-top:2px;"><span class="en">Removes profile + cohorts. Audit logs retained 5y per PIPA §28-8.</span><span class="ko">프로필과 코호트가 삭제됩니다. Audit 로그는 PIPA §28-8 에 따라 5년 보관.</span></div>
+      </div>
+      <button class="btn btn--ghost btn--sm" style="border-color:#DC2626; color:#DC2626;"><span class="en">Delete…</span><span class="ko">삭제…</span></button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="compliance-footer">
+  <div class="compliance-footer__row">
+    <div class="compliance-badges">
+      <span class="compliance-pill compliance-pill--pipa"><span class="compliance-pill__dot"></span><span class="en">PIPA §28-8</span><span class="ko">개인정보보호법 §28-8</span></span>
+      <span class="compliance-pill compliance-pill--info"><span class="compliance-pill__dot"></span><span class="en">정통망법 (ICT Network Act)</span><span class="ko">정보통신망법</span></span>
+      <span class="compliance-pill compliance-pill--kcd"><span class="compliance-pill__dot"></span><span>KCD-8</span></span>
+      <span class="compliance-pill compliance-pill--moh"><span class="compliance-pill__dot"></span><span class="en">MoH HIRA aligned</span><span class="ko">보건복지부 정합</span></span>
+    </div>
+    <a href="#" style="color:#A8A29E;"><span class="en">Trust Center ↗</span><span class="ko">Trust Center ↗</span></a>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-set-locale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.setLocale;
+      document.body.dataset.locale = loc;
+      document.documentElement.lang = loc;
+      document.querySelectorAll('[data-set-locale]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+    });
+  });
+
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      const target = t.dataset.tab;
+      document.querySelectorAll('.tab').forEach(x => x.classList.toggle('is-active', x === t));
+      ['curl', 'python', 'postman'].forEach(name => {
+        document.getElementById('tab-' + name).style.display = name === target ? 'block' : 'none';
+      });
+    });
+  });
+
+  // Reveal once
+  let revealed = false;
+  document.getElementById('revealBtn').addEventListener('click', () => {
+    if (revealed) return;
+    document.getElementById('apiKeyValue').textContent = 'rv_live_a8f2e90c4d6b1a3e72c5d809b1e4f3kF8a2';
+    revealed = true;
+    document.getElementById('revealBtn').textContent = 'Revealed (one-time)';
+    document.getElementById('revealBtn').setAttribute('disabled', 'disabled');
+    document.getElementById('revealBtn').style.opacity = '0.5';
+  });
+
+  // Copy buttons (toast simulation)
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0B2545; color:#fff; padding:10px 18px; border-radius:6px; font-size:13px; z-index:300; box-shadow:0 8px 24px rgba(0,0,0,0.18);';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 1800);
+  }
+  document.getElementById('copyKeyBtn').addEventListener('click', () => {
+    navigator.clipboard?.writeText(document.getElementById('apiKeyValue').textContent);
+    showToast('Copied');
+  });
+  document.querySelectorAll('.code-block__copy').forEach(b => {
+    b.addEventListener('click', () => {
+      navigator.clipboard?.writeText(b.parentElement.textContent.replace('Copy', '').trim());
+      showToast('Copied');
+    });
+  });
+</script>
+</body>
+</html>

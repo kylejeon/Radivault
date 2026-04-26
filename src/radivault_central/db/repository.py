@@ -78,6 +78,10 @@ def insert_study_full(
     study_date_shifted: object | None = None,
     patient_sex: str | None = None,
     patient_age_bucket: int | None = None,
+    patient_age: int | None = None,  # v3 FR-V3-DATA-1
+    kcd_code: str | None = None,  # v3 FR-V3-DATA-2
+    kcd_label_ko: str | None = None,
+    kcd_label_en: str | None = None,
     preview_status: str | None = None,
     preview_thumbnail_key: str | None = None,
     raw_dicom_tags: dict | None = None,
@@ -103,6 +107,7 @@ def insert_study_full(
                 pseudo_patient_key=pseudo_patient_key,
                 sex=patient_sex,
                 age_bucket=patient_age_bucket,
+                age=patient_age,
             )
             session.add(pp)
             session.flush()
@@ -112,6 +117,9 @@ def insert_study_full(
                 pp.sex = patient_sex
             if patient_age_bucket is not None and pp.age_bucket is None:
                 pp.age_bucket = patient_age_bucket
+            # v3 — exact age overwrites (gateway is the source of truth).
+            if patient_age is not None:
+                pp.age = patient_age
         patient_pk = pp.patient_pseudo_pk
 
     study = Study(
@@ -130,6 +138,9 @@ def insert_study_full(
         gateway_id=gateway_id,
         ingested_at=datetime.now(tz=UTC),
         raw_dicom_tags=raw_dicom_tags,
+        kcd_code=kcd_code,
+        kcd_label_ko=kcd_label_ko,
+        kcd_label_en=kcd_label_en,
     )
     if preview_status is not None:
         study.preview_status = preview_status
@@ -185,6 +196,10 @@ def upsert_study_v2(
     preview_status: str | None,
     preview_thumbnail_key: str | None,
     raw_dicom_tags: dict | None,
+    patient_age: int | None = None,
+    kcd_code: str | None = None,
+    kcd_label_ko: str | None = None,
+    kcd_label_en: str | None = None,
 ) -> Study:
     """Idempotent UPDATE-or-INSERT for re-ingest / backfill paths.
 
@@ -216,6 +231,10 @@ def upsert_study_v2(
             study_date_shifted=study_date_shifted,
             patient_sex=patient_sex,
             patient_age_bucket=patient_age_bucket,
+            patient_age=patient_age,
+            kcd_code=kcd_code,
+            kcd_label_ko=kcd_label_ko,
+            kcd_label_en=kcd_label_en,
             preview_status=preview_status,
             preview_thumbnail_key=preview_thumbnail_key,
             raw_dicom_tags=raw_dicom_tags,
@@ -233,6 +252,13 @@ def upsert_study_v2(
         existing.modality = modality
     if raw_dicom_tags is not None:
         existing.raw_dicom_tags = raw_dicom_tags
+    # v3 — KCD overwrite (heuristic recompute is cheap; gateway is source).
+    if kcd_code is not None:
+        existing.kcd_code = kcd_code
+    if kcd_label_ko is not None:
+        existing.kcd_label_ko = kcd_label_ko
+    if kcd_label_en is not None:
+        existing.kcd_label_en = kcd_label_en
     if preview_thumbnail_key is not None:
         existing.preview_thumbnail_key = preview_thumbnail_key
     if preview_status is not None and existing.preview_status not in (
@@ -255,6 +281,7 @@ def upsert_study_v2(
                 pseudo_patient_key=pseudo_patient_key,
                 sex=patient_sex,
                 age_bucket=patient_age_bucket,
+                age=patient_age,
             )
             session.add(pp)
             session.flush()
@@ -266,6 +293,9 @@ def upsert_study_v2(
                 pp.sex = patient_sex
             if patient_age_bucket is not None and pp.age_bucket is None:
                 pp.age_bucket = patient_age_bucket
+            # v3 — overwrite exact age (gateway re-extract is authoritative).
+            if patient_age is not None:
+                pp.age = patient_age
     session.flush()
     return existing
 

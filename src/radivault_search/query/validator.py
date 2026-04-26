@@ -115,6 +115,10 @@ def _build_where(req: SearchRequest, *, scope_json: dict | None = None) -> list:
     ``AND study.hospital_pk NOT IN (:excluded)`` clause is appended. The
     buyer cannot set this field via the request body (dev-spec FR-76); it
     comes exclusively from the buyer context attached at auth time.
+
+    v3 (FR-V3-API-1): adds ``kcd_code`` and ``model_name`` filters here. The
+    ``age_min`` / ``age_max`` / ``hospital_region`` filters live on joined
+    tables and are applied by the executor after the join attaches.
     """
     out: list = []
     if req.modality:
@@ -123,11 +127,16 @@ def _build_where(req: SearchRequest, *, scope_json: dict | None = None) -> list:
         out.append(Study.body_part.in_(req.body_part))
     if req.manufacturer:
         out.append(Study.manufacturer.in_(req.manufacturer))
+    if req.model_name:
+        out.append(Study.model_name.in_(req.model_name))
+    if req.kcd_code:
+        out.append(Study.kcd_code.in_(req.kcd_code))
     if req.study_date_shifted is not None:
         out.append(Study.study_date_shifted >= req.study_date_shifted.date_from)
         out.append(Study.study_date_shifted < req.study_date_shifted.date_to)
     excluded = _extract_exclude_hospitals(scope_json)
     if excluded:
         out.append(Study.hospital_pk.notin_(excluded))
-    # age_bucket, sex live on patient_pseudo — filtered via join in executor.
+    # age_bucket, sex, age_min/max, hospital_region live on joined tables —
+    # applied via join in executor.
     return out

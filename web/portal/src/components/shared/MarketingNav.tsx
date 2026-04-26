@@ -70,6 +70,12 @@ export function MarketingNav({ locale }: { locale: Locale }) {
         </nav>
         <div className="flex items-center gap-3">
           <LangToggle locale={locale} />
+          <Link
+            href="/signin"
+            className="inline-flex items-center rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            {dict.nav.signIn}
+          </Link>
         </div>
       </div>
     </header>

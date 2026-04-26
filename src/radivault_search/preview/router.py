@@ -73,9 +73,17 @@ def _study_or_404(session, study_uid: str) -> Study:
     return study
 
 
+_VERIFIED_STATUSES = {"verified", "auto_verified"}
+
+
 def _verified_or_403(study: Study) -> None:
-    """Enforce the PHI verification gate (FR-PREVIEW-3 invariant)."""
-    if study.preview_status != "verified":
+    """Enforce the PHI verification gate (FR-PREVIEW-3 invariant).
+
+    'verified' = manual OCR/operator gate (D-13 hot-storage 5 sample studies).
+    'auto_verified' = ingest-time BurnedInAnnotation=No + de-id chain audit
+    (FR-INGEST-1, dev-spec-metadata-thumbnail-ingest §6). Both are buyer-safe.
+    """
+    if study.preview_status not in _VERIFIED_STATUSES:
         # All non-verified statuses (pending / phi_detected / not_applicable)
         # produce the same 403 — we don't leak the distinction to buyers.
         raise PreviewNotVerified(

@@ -1,4 +1,13 @@
-"""Pydantic request/response models for radivault_search (dev-spec §6.4)."""
+"""Pydantic request/response models for radivault_search (dev-spec §6.4).
+
+v3 (dev-spec-buyer-search-v3 FR-V3-API-1/2/3) extensions:
+- ``SearchRequest``: ``age_min``, ``age_max``, ``kcd_code``, ``model_name``,
+  ``hospital_region`` filters; 9 new sort enums.
+- ``StudyItem``: ``hospital_region_pseudo``, ``kcd_code``, ``kcd_label_ko``,
+  ``kcd_label_en``, ``patient_age``.
+- ``FacetsResponse``: ``hospital_region``, ``kcd_code`` new facets.
+  ``age_bucket`` retained but always empty (dev-spec §4.2 deprecation).
+"""
 
 from __future__ import annotations
 
@@ -6,6 +15,30 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+# v3 sort enum — 2 legacy + 18 new (9 columns × asc/desc).
+SortKey = Literal[
+    "date_desc",
+    "ingested_desc",
+    # v3 — sortable columns from design-spec §8.
+    "hospital_asc",
+    "hospital_desc",
+    "date_asc",
+    "modality_asc",
+    "modality_desc",
+    "body_part_asc",
+    "body_part_desc",
+    "kcd_asc",
+    "kcd_desc",
+    "age_asc",
+    "age_desc",
+    "manufacturer_asc",
+    "manufacturer_desc",
+    "model_asc",
+    "model_desc",
+    "size_asc",
+    "size_desc",
+]
 
 
 class StudyDateRange(BaseModel):
@@ -30,15 +63,38 @@ class SearchRequest(BaseModel):
 
     modality: list[str] | None = Field(None, max_length=10)
     body_part: list[str] | None = Field(None, max_length=10)
-    age_bucket: list[str] | None = Field(None, max_length=10)
+    age_bucket: list[str] | None = Field(
+        None,
+        max_length=10,
+        description="DEPRECATED — use age_min/age_max. Ignored when both are set.",
+    )
+    # v3 FR-V3-API-1 — exact age filter.
+    age_min: int | None = Field(None, ge=0, le=120)
+    age_max: int | None = Field(None, ge=0, le=120)
+    # v3 — KCD-8 code filter (e.g. ["I20.9", "I25.1"]).
+    kcd_code: list[str] | None = Field(None, max_length=20)
+    # v3 — model_name as a filter (facet existed already).
+    model_name: list[str] | None = Field(None, max_length=20)
+    # v3 — hospital region pseudo filter (e.g. ["SEOUL-A"]).
+    hospital_region: list[str] | None = Field(None, max_length=20)
     sex: list[Literal["M", "F", "O"]] | None = None
     study_date_shifted: StudyDateRange | None = None
     manufacturer: list[str] | None = Field(None, max_length=10)
     min_hospitals: int | None = Field(None, ge=1, le=20)
-    sort: Literal["date_desc", "ingested_desc"] = "date_desc"
+    sort: SortKey = "date_desc"
     limit: int = Field(50, ge=1, le=200)
     cursor: str | None = None
     include_facets: bool = True
+
+    @model_validator(mode="after")
+    def _check_age_range(self) -> SearchRequest:
+        if (
+            self.age_min is not None
+            and self.age_max is not None
+            and self.age_min > self.age_max
+        ):
+            raise ValueError("age_min must be <= age_max")
+        return self
 
 
 class StudyItem(BaseModel):
@@ -61,6 +117,12 @@ class StudyItem(BaseModel):
     # older response shapes still validate.
     preview_status: str | None = None
     preview_slice_count: int | None = None
+    # v3 (FR-V3-API-2) — exact patient_age + hospital region pseudo + KCD.
+    patient_age: int | None = None
+    hospital_region_pseudo: str | None = None
+    kcd_code: str | None = None
+    kcd_label_ko: str | None = None
+    kcd_label_en: str | None = None
 
 
 class FacetValue(BaseModel):
@@ -136,6 +198,23 @@ class FacetsResponse(BaseModel):
     model_name: list[FacetValue] = Field(default_factory=list)
     year: list[FacetValue] = Field(default_factory=list)
     contrast_used: list[FacetValue] = Field(default_factory=list)
+    # v3 FR-V3-API-3 — new facets.
+    hospital_region: list[FacetValue] = Field(default_factory=list)
+    kcd_code: list[FacetValue] = Field(default_factory=list)
+    computed_at: datetime
+
+
+class KCDAutocompleteItem(BaseModel):
+    """One row of GET /v1/search/kcd-autocomplete (FR-V3-API-4)."""
+
+    ontology: Literal["KCD-8", "SNOMED", "RadLex"]
+    code: str
+    label_ko: str
+    label_en: str
+
+
+class KCDAutocompleteResponse(BaseModel):
+    items: list[KCDAutocompleteItem]
     computed_at: datetime
 
 
@@ -150,8 +229,19 @@ def canonical_filter_dict(req: SearchRequest) -> dict[str, Any]:
         out["modality"] = sorted(req.modality)
     if req.body_part is not None:
         out["body_part"] = sorted(req.body_part)
-    if req.age_bucket is not None:
+    # v3 — ignore age_bucket when age_min/max present (FR-V3-API-1 deprecation).
+    if req.age_bucket is not None and req.age_min is None and req.age_max is None:
         out["age_bucket"] = sorted(req.age_bucket)
+    if req.age_min is not None:
+        out["age_min"] = req.age_min
+    if req.age_max is not None:
+        out["age_max"] = req.age_max
+    if req.kcd_code is not None:
+        out["kcd_code"] = sorted(req.kcd_code)
+    if req.model_name is not None:
+        out["model_name"] = sorted(req.model_name)
+    if req.hospital_region is not None:
+        out["hospital_region"] = sorted(req.hospital_region)
     if req.sex is not None:
         out["sex"] = sorted(req.sex)
     if req.study_date_shifted is not None:
@@ -174,6 +264,11 @@ def filter_fields_list(req: SearchRequest) -> list[str]:
         "modality",
         "body_part",
         "age_bucket",
+        "age_min",
+        "age_max",
+        "kcd_code",
+        "model_name",
+        "hospital_region",
         "sex",
         "study_date_shifted",
         "manufacturer",

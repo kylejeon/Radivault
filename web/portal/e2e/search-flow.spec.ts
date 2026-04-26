@@ -20,7 +20,11 @@ import { injectBuyerSession } from "./fixtures/session";
  * (FR-INF-8/9), and the federated signal copy.
  */
 
-test.describe("Buyer search flow (3-pane v0.2)", () => {
+// buyer-search-v3 supersedes the v0.2 3-pane shell on /search. The v3 e2e
+// coverage lives in `v3-search-data-density.spec.ts`. The v0.2 specs are
+// preserved for historical reference but skipped — re-enable only after
+// rolling back to SearchApp.tsx.
+test.describe.skip("Buyer search flow (3-pane v0.2 — superseded by v3)", () => {
   test.beforeEach(async ({ page, context }) => {
     await blockRealUpstream(page);
     await mockBuyerSignIn(page);
