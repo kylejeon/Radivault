@@ -200,3 +200,62 @@ K-4 NEXT_PUBLIC_LEGAL_* 실값 (Delaware setup) / K-6 Pretendard self-host vs CD
 ### 다음
 - Kyle K-3/K-4 결정 → @developer P1 (자동 hook) → D-day 운영 SOP 문서화
 - D-day 직전 git remote -v private 재확인
+
+
+## Session 24 (2026-04-26): D-13 데모 데이터 무결성 복구 — series/instance + MG defaults + UI Age fix
+
+### 트리거
+- Kyle 화면 (/studies/2.25.140737488355328.97335100804) 에서 다음 4개 동시 발생:
+  1. Sex/Age/Manufacturer/Model 컬럼 = "—"
+  2. View 클릭 → 500 ERR_INTERNAL
+  3. Study Detail 의 "Age Bucket" 라벨 (v3 는 실 나이 표시해야 함)
+  4. Series Count: 0 + Sample DICOM 비활성 + "Preview unavailable"
+
+### 진단 (메인 세션)
+- (1) View 500 원인: search 컨테이너 로그 `permission denied for table series` — radivault_buyer_ro 사용자가 series/instance 에 SELECT 없음. ALTER DEFAULT PRIVILEGES 가 사전 존재 테이블에 미적용.
+- (4) 모든 250 study 의 series/instance 테이블이 비어있음. 원인: 최초 ingest 가 manifest v1 (no series_entries) 로 study 행만 생성 + backfill_v2_metadata.py 는 의도적으로 series 안 건드림.
+- (1) MG 50건 모두 patient_pseudo_pk/manufacturer/model_name = NULL. Orthanc raw 검증 결과: TCIA CBIS-DDSM 원본 자체가 PatientSex/Age/Manufacturer 태그 비어있음 (게이트웨이 잘못 아님).
+- (3) StudyDetailPanel.tsx 가 v2 잔재로 age_bucket 필드 사용.
+
+### Kyle 결정
+- Track 1 (series/instance backfill): 옵션 A — fallback hash 활성화 (gateway salt + org_root_oid 사용)
+- Track 2 (MG metadata): 옵션 A — 합리적 기본값 시드 (sex='F', age 40-70, mfg=Hologic/GE/Siemens 분포)
+- Track 3 (UI Age 라벨): 즉시 수정
+
+### 작업 (3 트랙 병렬)
+
+#### Track 0 — GRANT 권한 부여 (메인 세션 직접)
+- bootstrap_central_search_grants.sql 에 `GRANT SELECT ON series, instance TO radivault_buyer_ro;` 추가
+- Kyle 이 직접 실행
+
+#### Track 1 — backfill_series_instance.py (planner→developer→developer)
+- planner: dev-spec-backfill-series-instance.md 작성 (270 라인, 4개 K 결정 항목)
+- developer 1차: bdf83ef — 75/250 성공 (state_db.uid_map 의 series 매핑 30%만 존재)
+- developer 2차 (fallback): ebae6d1 — engine.py:310-329 와 byte-for-byte 일치하는 fallback hash 추가, self-test 3 kind 모두 통과 → 250/250 완전 백필 (865 series + 114,341 instances 신규 INSERT)
+
+#### Track 2 — backfill_mg_demo_defaults.py (developer 단독)
+- 148f082 — 50 MG 모두 sex='F' + age 40-70 + 장비 분포 (Hologic 29 / GE 12 / Siemens 9)
+- raw_dicom_tags 에 disclaimer 라벨 ("synthetic — TCIA CBIS-DDSM source lacks tags")
+- idempotent (재실행 시 skipped=50)
+
+#### Track 3 — StudyDetailPanel.tsx UI fix (메인 세션 직접)
+- 380da34 — `age_bucket` → `patient_age` (number), 라벨 "Age Bucket" → "Age"
+- GRANT SQL fix 도 같은 commit
+
+### 검증
+- 250/250 with_series, with_sample, mfg, model 모두 정상
+- MG 50/50 sex='F' + age 40-70
+- Kyle 의 study (97335100804): Siemens / Mammomat Inspiration / 51 / F / 1 series / 2 instances / sample 있음
+- CT 5건 missing age, 15건 missing sex (pre-existing TCIA 결손, 데모 영향 minimal)
+- dev server 재시작 (HTTP 200) — Track 3 검증 가능
+
+### Commits
+- bdf83ef — backfill_series_instance.py 신규 (Track 1 1차, 75/250)
+- 148f082 — backfill_mg_demo_defaults.py 신규 (Track 2)
+- ebae6d1 — backfill_series_instance.py + fallback hash (Track 1 2차, 250/250)
+- 380da34 — bootstrap_central_search_grants.sql GRANT + StudyDetailPanel.tsx age fix (Track 0+3)
+
+### 다음
+- Kyle 직접 검증: /search 에서 Track 3 라벨 + 250 study 모두 데이터 표시 확인
+- @qa Buyer Portal e2e (study-detail 페이지 + sample-download 흐름 회귀)
+- D-13 리허설 v3 재검수
