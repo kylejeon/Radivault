@@ -39,6 +39,7 @@ export type StudyDetail = {
   modality: string | null;
   body_part: string | null;
   age_bucket: string | null;
+  patient_age: number | null;
   sex: string | null;
   study_date_shifted: string | null;
   manufacturer: string | null;
@@ -109,7 +110,7 @@ export function StudyDetailPanel({
           seriesTitle: "SERIES",
           modality: "Modality",
           bodyPart: "Body Part",
-          age: "Age Bucket",
+          age: "Age",
           sex: "Sex",
           manufacturer: "Manufacturer",
           model: "Model",
@@ -293,7 +294,9 @@ export function StudyDetailPanel({
               <BuyerModalityBadge modality={study.modality} />
             </MetaRow>
             <MetaRow label={t.bodyPart}>{study.body_part ?? "—"}</MetaRow>
-            <MetaRow label={t.age}>{study.age_bucket ?? "—"}</MetaRow>
+            <MetaRow label={t.age}>
+              {study.patient_age != null ? String(study.patient_age) : "—"}
+            </MetaRow>
             <MetaRow label={t.sex}>{study.sex ?? "—"}</MetaRow>
             <MetaRow label={t.manufacturer}>
               {study.manufacturer ?? "—"}

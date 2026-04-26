@@ -18,6 +18,11 @@ GRANT SELECT ON study           TO radivault_buyer_ro;
 GRANT SELECT ON hospital        TO radivault_buyer_ro;
 GRANT SELECT ON patient_pseudo  TO radivault_buyer_ro;
 
+-- READ-ONLY: study-detail 페이지의 series/instance 패널 (FR-V3 study detail).
+-- 이 둘은 ALTER DEFAULT PRIVILEGES 보다 먼저 생성되어 있어 explicit GRANT 필요.
+GRANT SELECT ON series          TO radivault_buyer_ro;
+GRANT SELECT ON instance        TO radivault_buyer_ro;
+
 -- READ-ONLY: 감사 체인 노출 시 필요할 수 있는 테이블 (FR-HO-5 audit-chain-status)
 GRANT SELECT ON audit_anchor       TO radivault_buyer_ro;
 GRANT SELECT ON audit_ingest_event TO radivault_buyer_ro;
