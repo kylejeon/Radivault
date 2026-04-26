@@ -16,8 +16,12 @@ so the portal counters reconcile.
 Inputs:
 - Orthanc HTTP API for raw DICOM bytes + tags.
 - Gateway ``state.sqlite3`` ``uid_map`` for original_uid → pseudo_uid
-  (study/series/sop). Per Kyle K-1, all 25 553 mappings already exist; on
-  miss we SKIP the parent study and emit a warning (no fallback hashing).
+  (study/series/sop). Per Kyle K-1 옵션 A, on miss we apply the byte-for-byte
+  identical SHA256 fallback algorithm from
+  ``src/radivault_gateway/deid/engine.py:DeidEngine.pseudo_uid`` and persist
+  the freshly computed mapping back to ``state_db.uid_map`` so subsequent
+  re-runs hit the cache. Salt + org_root are loaded from
+  ``configs/demo_gateway.yaml`` via ``--gateway-config``.
 - Central Postgres for the INSERT/UPDATE.
 
 Idempotent: re-running on the same pseudo_study_uid SELECTs first and
@@ -48,6 +52,97 @@ DEFAULT_DB_DSN = (
     "postgresql+psycopg://central_app:central_app@localhost:5432/central"
 )
 DEFAULT_STATE_DB = "/Users/yonghyuk/Radivault/demo_data/gateway/state.sqlite3"
+DEFAULT_GATEWAY_CONFIG = "/Users/yonghyuk/Radivault/configs/demo_gateway.yaml"
+
+
+# ---------------------------------------------------------------------------
+# Gateway config loader (FR-5 fallback prerequisites: salt + org_root).
+# ---------------------------------------------------------------------------
+
+
+def _load_gateway_secrets(path: str) -> tuple[bytes, str, int]:
+    """Load (salt_bytes, org_root_oid, salt_version) from gateway YAML config.
+
+    Mirrors the way ``DeidEngine.__init__`` consumes config — salt is treated
+    as a UTF-8 string and ``.encode('utf-8')``ed, NOT decoded from hex. This
+    is critical for byte-equivalence with engine.py:321.
+    """
+    import yaml  # PyYAML — already in env (gateway uses it)
+
+    if not Path(path).exists():
+        raise FileNotFoundError(f"gateway config not found at {path}")
+    with open(path, encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh) or {}
+    deid = cfg.get("deid") or {}
+    agent = cfg.get("agent") or {}
+    salt = deid.get("salt")
+    salt_version = deid.get("salt_version")
+    org_root = agent.get("org_root_oid")
+    if not salt or not org_root or salt_version is None:
+        raise ValueError(
+            f"gateway config {path} missing deid.salt / deid.salt_version / "
+            "agent.org_root_oid"
+        )
+    return salt.encode("utf-8"), str(org_root), int(salt_version)
+
+
+def _fallback_pseudo_uid(
+    original_uid: str, *, salt_bytes: bytes, org_root: str
+) -> str:
+    """Recompute pseudo UID identically to gateway DeidEngine.pseudo_uid.
+
+    Source of truth: ``src/radivault_gateway/deid/engine.py:310-329``. Any
+    drift here breaks search/portal cross-references because gateway-issued
+    UIDs and backfill-issued UIDs would diverge.
+    """
+    digest = hashlib.sha256(
+        salt_bytes + str(original_uid).encode("utf-8")
+    ).digest()
+    suffix = str(int.from_bytes(digest[:5], "big"))
+    pseudo = f"{org_root}.{suffix}"
+    if len(pseudo) > 64:
+        pseudo = pseudo[:64]
+    return pseudo
+
+
+def _fallback_self_test(
+    state_conn: sqlite3.Connection,
+    *,
+    salt_bytes: bytes,
+    org_root: str,
+) -> None:
+    """Verify fallback algorithm matches an existing uid_map entry.
+
+    Picks one known mapping (for each kind that has data) from the gateway
+    state DB and recomputes the pseudo UID using the fallback algorithm —
+    on mismatch we abort BEFORE touching central DB to avoid poisoning the
+    cross-reference graph (R-1 in dev-spec §12).
+    """
+    rows = state_conn.execute(
+        "SELECT original_uid, pseudo_uid, uid_kind FROM uid_map "
+        "WHERE uid_kind IN ('study','series','sop') "
+        "GROUP BY uid_kind"
+    ).fetchall()
+    if not rows:
+        raise RuntimeError(
+            "fallback self-test: state_db.uid_map is empty — refusing to run"
+        )
+    for row in rows:
+        computed = _fallback_pseudo_uid(
+            row["original_uid"], salt_bytes=salt_bytes, org_root=org_root
+        )
+        if computed != row["pseudo_uid"]:
+            raise RuntimeError(
+                "fallback self-test FAILED for kind="
+                f"{row['uid_kind']}: salt/org_root mismatch with gateway. "
+                f"original={row['original_uid'][:40]!r} "
+                f"expected={row['pseudo_uid']!r} computed={computed!r}"
+            )
+        log.info(
+            "fallback_self_test OK kind=%s expected=%s",
+            row["uid_kind"],
+            row["pseudo_uid"],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -97,14 +192,67 @@ def _connect_state_db(path: str) -> sqlite3.Connection:
 
 
 def _resolve_pseudo_uid(
-    state_conn: sqlite3.Connection, original_uid: str, kind: str
+    state_conn: sqlite3.Connection,
+    original_uid: str,
+    kind: str,
+    *,
+    salt_bytes: bytes | None = None,
+    org_root: str | None = None,
+    salt_version: int | None = None,
+    fallback_counter: dict[str, int] | None = None,
 ) -> str | None:
-    """Look up pseudo_uid from gateway state_db. None on miss."""
+    """Look up pseudo_uid from gateway state_db with fallback hash.
+
+    Lookup order:
+      1) state_db.uid_map (gateway-issued mapping). Authoritative when
+         present.
+      2) If salt_bytes/org_root are provided and the row is missing, compute
+         the pseudo UID via the same SHA256 algorithm DeidEngine uses, persist
+         it back to uid_map (so subsequent runs short-circuit), and return.
+      3) When fallback args are absent and the row is missing, return None
+         (caller decides SKIP semantics — preserves the original behaviour).
+    """
     row = state_conn.execute(
         "SELECT pseudo_uid FROM uid_map WHERE original_uid = ? AND uid_kind = ?",
         (original_uid, kind),
     ).fetchone()
-    return row["pseudo_uid"] if row else None
+    if row:
+        return row["pseudo_uid"]
+    if salt_bytes is None or org_root is None or salt_version is None:
+        return None
+    pseudo = _fallback_pseudo_uid(
+        original_uid, salt_bytes=salt_bytes, org_root=org_root
+    )
+    # Persist back so re-runs hit the cache (uses INSERT OR IGNORE semantics
+    # to be safe under any concurrent gateway writer).
+    try:
+        state_conn.execute(
+            "INSERT OR IGNORE INTO uid_map "
+            "(original_uid, pseudo_uid, uid_kind, salt_version, created_at) "
+            "VALUES (?, ?, ?, ?, datetime('now'))",
+            (original_uid, pseudo, kind, salt_version),
+        )
+        state_conn.commit()
+    except sqlite3.IntegrityError as exc:
+        # Pseudo UID collision against a different original_uid would be a
+        # gateway-level invariant violation — surface loudly.
+        log.error(
+            "fallback uid_map insert failed kind=%s original=%s pseudo=%s: %s",
+            kind,
+            original_uid[:40],
+            pseudo,
+            exc,
+        )
+        raise
+    if fallback_counter is not None:
+        fallback_counter[kind] = fallback_counter.get(kind, 0) + 1
+    log.debug(
+        "pseudo_uid_fallback kind=%s original=%s pseudo=%s",
+        kind,
+        original_uid[:40],
+        pseudo,
+    )
+    return pseudo
 
 
 # ---------------------------------------------------------------------------
@@ -183,20 +331,34 @@ def process_one(
     state_conn: sqlite3.Connection,
     session_factory,
     orthanc_study_id: str,
+    salt_bytes: bytes,
+    org_root: str,
+    salt_version: int,
+    fallback_counter: dict[str, int],
 ) -> tuple[bool, str]:
     """Backfill series + instance rows + study counters for one Orthanc study."""
     from sqlalchemy import select
 
     from radivault_central.db.models import Instance, Series, Study
 
-    # 1. Resolve pseudo_study_uid (FR-2).
+    # 1. Resolve pseudo_study_uid (FR-2). Study-kind mappings are 100% present
+    # per Kyle K-1 audit, but we still pass fallback args defensively so a
+    # late-discovered Orthanc study with no uid_map row is handled deterministically.
     study_meta = _orthanc_get_json(args, f"/studies/{orthanc_study_id}")
     main_tags = study_meta.get("MainDicomTags", {}) or {}
     original_study_uid = main_tags.get("StudyInstanceUID") or ""
     if not original_study_uid:
         return False, f"orthanc study {orthanc_study_id} missing StudyInstanceUID"
 
-    pseudo_study_uid = _resolve_pseudo_uid(state_conn, original_study_uid, "study")
+    pseudo_study_uid = _resolve_pseudo_uid(
+        state_conn,
+        original_study_uid,
+        "study",
+        salt_bytes=salt_bytes,
+        org_root=org_root,
+        salt_version=salt_version,
+        fallback_counter=fallback_counter,
+    )
     if not pseudo_study_uid:
         return False, f"no uid_map entry for study {original_study_uid[:40]}"
 
@@ -228,7 +390,13 @@ def process_one(
             )
             continue
         pseudo_series_uid = _resolve_pseudo_uid(
-            state_conn, original_series_uid, "series"
+            state_conn,
+            original_series_uid,
+            "series",
+            salt_bytes=salt_bytes,
+            org_root=org_root,
+            salt_version=salt_version,
+            fallback_counter=fallback_counter,
         )
         if not pseudo_series_uid:
             return (
@@ -265,7 +433,13 @@ def process_one(
                 )
                 continue
             pseudo_sop_uid = _resolve_pseudo_uid(
-                state_conn, original_sop_uid, "sop"
+                state_conn,
+                original_sop_uid,
+                "sop",
+                salt_bytes=salt_bytes,
+                org_root=org_root,
+                salt_version=salt_version,
+                fallback_counter=fallback_counter,
             )
             if not pseudo_sop_uid:
                 return (
@@ -494,6 +668,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--orthanc-password", default=DEFAULT_ORTHANC_PASS)
     parser.add_argument("--db-dsn", default=DEFAULT_DB_DSN)
     parser.add_argument("--state-db", default=DEFAULT_STATE_DB)
+    parser.add_argument(
+        "--gateway-config",
+        default=DEFAULT_GATEWAY_CONFIG,
+        help="Path to gateway YAML config; supplies deid.salt + "
+        "deid.salt_version + agent.org_root_oid for the fallback hash "
+        "(K-1 옵션 A). Required because most series/sop UIDs are absent "
+        "from state_db.uid_map under Flow A metadata-only ingest.",
+    )
     # FR-16 compatibility: accept (and ignore) the --bucket arg so operators
     # can copy/paste their backfill_v2_metadata.py invocation.
     parser.add_argument("--bucket", default=None, help="(unused; compat only)")
@@ -523,6 +705,21 @@ def main(argv: list[str] | None = None) -> int:
     state_conn = _connect_state_db(args.state_db)
     session_factory = _make_session(args.db_dsn)
 
+    # Load gateway secrets and run the self-test BEFORE we touch central DB —
+    # mismatched salt/org_root would silently poison search/portal cross-refs
+    # (R-1 in dev-spec §12). Self-test compares fallback output against a
+    # known gateway-issued mapping.
+    salt_bytes, org_root, salt_version = _load_gateway_secrets(args.gateway_config)
+    log.info(
+        "gateway_secrets_loaded org_root=%s salt_version=%d salt_len=%d",
+        org_root,
+        salt_version,
+        len(salt_bytes),
+    )
+    _fallback_self_test(
+        state_conn, salt_bytes=salt_bytes, org_root=org_root
+    )
+
     try:
         studies = _list_orthanc_studies(args)
     except Exception as exc:  # noqa: BLE001
@@ -536,6 +733,7 @@ def main(argv: list[str] | None = None) -> int:
     successes = 0
     failures = 0
     fail_reasons: dict[str, int] = {}
+    fallback_counter: dict[str, int] = {}
     started = time.time()
 
     for i, oid in enumerate(studies, 1):
@@ -545,6 +743,10 @@ def main(argv: list[str] | None = None) -> int:
                 state_conn=state_conn,
                 session_factory=session_factory,
                 orthanc_study_id=oid,
+                salt_bytes=salt_bytes,
+                org_root=org_root,
+                salt_version=salt_version,
+                fallback_counter=fallback_counter,
             )
         except Exception as exc:  # noqa: BLE001
             log.exception("study failed %s", oid)
@@ -566,6 +768,8 @@ def main(argv: list[str] | None = None) -> int:
         failures,
         duration,
     )
+    if fallback_counter:
+        log.info("backfill_fallback_counts %s", fallback_counter)
     if fail_reasons:
         log.info("backfill_fail_reasons %s", fail_reasons)
     return 0 if failures == 0 else 1
