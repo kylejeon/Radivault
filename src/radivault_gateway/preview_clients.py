@@ -240,10 +240,20 @@ class PgAuditWriter:
 
 class PgFrameWriter:
     """SQLAlchemy-backed ``FrameWriter``. One row per generated JPG
-    (FR-PREVIEW-13). UPSERT-light semantics: re-runs of the same series
-    fail on the unique ``(pseudo_series_uid, frame_idx)`` constraint —
-    that's intentional, the pipeline is meant to be invoked once per
-    series.
+    (FR-PREVIEW-13).
+
+    Idempotency (FR-PREVIEW-12): emits a dialect-specific
+    ``INSERT ... ON CONFLICT (pseudo_series_uid, frame_idx) DO NOTHING``
+    so retries against the unique ``uq_dpf_series_frame`` constraint are
+    silently absorbed instead of crashing the pipeline. This was the
+    root cause of HOSP-002 ``preview_status='pending'`` after a partial
+    first run (manifest-stamping 403 left rows in place; the retry then
+    tripped UniqueViolation and aborted ``_record_series`` before the
+    audit row could land).
+
+    The frame set is deterministic for a given series (instance count
+    drives ``frame_idx`` 0..N-1) so swallowing duplicate frames is
+    safe — we never lose a frame that wasn't already persisted.
     """
 
     def __init__(self, *, session_factory: Any) -> None:
@@ -260,23 +270,63 @@ class PgFrameWriter:
             return
         from radivault_central.db.models import DicomPreviewFrame
 
+        rows = [
+            {
+                "pseudo_study_uid": pseudo_study_uid,
+                "pseudo_series_uid": pseudo_series_uid,
+                "frame_idx": f.frame_idx,
+                "minio_key": f.minio_key,
+                "width": f.width,
+                "height": f.height,
+                "byte_size": f.byte_size,
+                "sha256": f.sha256,
+                "phi_scrub_method": f.phi_scrub_method,
+                "source_instance_uid_pseudo": f.source_instance_uid_pseudo,
+            }
+            for f in frames
+        ]
+
         with self._sf() as session:
-            for f in frames:
-                session.add(
-                    DicomPreviewFrame(
-                        pseudo_study_uid=pseudo_study_uid,
-                        pseudo_series_uid=pseudo_series_uid,
-                        frame_idx=f.frame_idx,
-                        minio_key=f.minio_key,
-                        width=f.width,
-                        height=f.height,
-                        byte_size=f.byte_size,
-                        sha256=f.sha256,
-                        phi_scrub_method=f.phi_scrub_method,
-                        source_instance_uid_pseudo=f.source_instance_uid_pseudo,
-                    )
-                )
+            stmt = _frame_insert_on_conflict_do_nothing(
+                session, DicomPreviewFrame.__table__, rows
+            )
+            session.execute(stmt)
             session.commit()
+
+
+def _frame_insert_on_conflict_do_nothing(
+    session: Any, table: Any, rows: list[dict[str, Any]]
+) -> Any:
+    """Build a dialect-specific INSERT...ON CONFLICT DO NOTHING for the
+    ``dicom_preview_frame`` table.
+
+    Postgres (prod) and SQLite (unit tests) both support
+    ``ON CONFLICT (cols) DO NOTHING``. SQLAlchemy exposes that via the
+    dialect-specific ``insert()`` constructor — generic Core ``insert``
+    has no portable conflict clause. We branch on the bind dialect's
+    name. Other dialects (mysql, mssql, oracle) fall back to the
+    plain Core insert which preserves the prior raise-on-duplicate
+    behaviour — the pipeline targets PG only in production.
+    """
+    dialect_name = session.bind.dialect.name if session.bind is not None else ""
+    if dialect_name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        return pg_insert(table).values(rows).on_conflict_do_nothing(
+            index_elements=["pseudo_series_uid", "frame_idx"]
+        )
+    if dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sl_insert
+
+        return sl_insert(table).values(rows).on_conflict_do_nothing(
+            index_elements=["pseudo_series_uid", "frame_idx"]
+        )
+    # Unknown dialect — fall back to plain Core insert. This preserves
+    # existing behaviour for any non-PG/SQLite bind a future test rig
+    # might point at; production is PG-only.
+    from sqlalchemy import insert as core_insert
+
+    return core_insert(table).values(rows)
 
 
 # ---------------------------------------------------------------------------
