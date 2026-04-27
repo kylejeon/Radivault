@@ -28,7 +28,9 @@ pacs:
     username: "orthanc"
     password: "orthanc"
   max_concurrency: 2
-  poll_interval_seconds: 60
+  # Demo cadence — tight loop so live STOW uploads surface in seconds,
+  # not minutes. Production default is 60s+; revert before pilot.
+  poll_interval_seconds: 30
   query:
     # MG added for CBIS-DDSM (mammography); PT for potential PET data.
     modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
