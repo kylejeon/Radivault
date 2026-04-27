@@ -6,6 +6,21 @@
 #
 # Secrets live in ./secrets (chmod 0600 recommended); real deployment should
 # use systemd `LoadCredential=` and mount /run/credentials instead.
+#
+# Network topology (jpg-preview-defacing AC-21):
+#   - default          : the implicit compose bridge that gateway-agent
+#                        uses to reach mock-central / orthanc / orthanc-b.
+#   - deface-net       : INTERNAL-ONLY (no upstream gateway, no public
+#                        egress). Both gateway-agent and deface-sidecar
+#                        attach so the gateway can POST /deface but the
+#                        sidecar cannot reach the public internet — see
+#                        docker/afni-refacer/NETWORKING.md for verification.
+
+networks:
+  default: {}
+  deface-net:
+    driver: bridge
+    internal: true
 
 services:
   gateway-agent:
@@ -28,6 +43,9 @@ services:
       # until Kyle flips it during D-13 sync. process_study() short-circuits
       # to PreviewBatchResult(skipped=True, reason="flag_off") when false.
       PREVIEW_PIPELINE_ENABLED: "false"
+    networks:
+      - default      # mock-central / orthanc / orthanc-b reachable via this
+      - deface-net   # AC-21: gateway is the ONLY peer of the sidecar
     volumes:
       - ./configs/gateway.docker.yaml:/etc/radivault/gateway.yml:ro
       - ./secrets:/run/credentials:ro
@@ -52,6 +70,11 @@ services:
     restart: unless-stopped
     mem_limit: 4g
     memswap_limit: 4g  # disable swap (Kyle Q6 default)
+    # AC-21: pin to the internal-only network so apt-get / pip / curl-out
+    # all fail at runtime. The gateway-agent is also attached to deface-net
+    # so POST /deface still works.
+    networks:
+      - deface-net
     environment:
       SIDECAR_IMAGE_TAG: "radivault/deface-sidecar:0.1.0"
       LOG_LEVEL: "INFO"
