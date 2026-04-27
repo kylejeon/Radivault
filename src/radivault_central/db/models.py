@@ -179,6 +179,14 @@ class Study(Base):
     kcd_label_ko: Mapped[str | None] = mapped_column(String(200))
     kcd_label_en: Mapped[str | None] = mapped_column(String(200))
 
+    # text-search-description Phase 1.5 (FR-TS15-6) — scrubbed free-text
+    # description fields. NULL allowed for two distinct semantics:
+    #   - feature flag off / pre-Phase-1.5 ingest -> NULL
+    #   - description scrubbed but all tokens stripped -> "" (empty string)
+    # Search executor's tsvector treats both via coalesce(...,'').
+    study_description: Mapped[str | None] = mapped_column(String(200))
+    protocol_name: Mapped[str | None] = mapped_column(String(200))
+
     # dev-spec-buyer-browse-preview FR-DATA-1: PHI verification gate +
     # preview cache pointers + sample download SOPInstanceUID.
     #
@@ -245,6 +253,9 @@ class Series(Base):
     series_number: Mapped[int | None] = mapped_column(Integer)
     n_instances: Mapped[int] = mapped_column(Integer, nullable=False)
     raw_dicom_tags: Mapped[dict | None] = mapped_column(_json_type())
+    # text-search-description Phase 1.5 (FR-TS15-6) — per-series scrubbed
+    # description. Mirrors study.study_description NULL semantics.
+    series_description: Mapped[str | None] = mapped_column(String(200))
 
 
 class Instance(Base):

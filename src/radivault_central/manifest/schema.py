@@ -43,7 +43,14 @@ class AuditRef(BaseModel):
 
 
 class SeriesEntryV2(BaseModel):
-    """v2 series array entry (FR-META-1)."""
+    """v2 series array entry (FR-META-1).
+
+    text-search-description Phase 1.5 (FR-TS15-5) — adds optional
+    ``series_description`` field (scrubbed by gateway, stored in
+    ``series.series_description`` central column). The legacy
+    ``series_description_clean`` field is retained for backward
+    compatibility with the metadata-thumbnail-ingest contract.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -52,6 +59,7 @@ class SeriesEntryV2(BaseModel):
     n_instances: int = Field(ge=0)
     body_part: str | None = None
     series_description_clean: str | None = None
+    series_description: str | None = Field(default=None, max_length=200)
     slice_thickness_mm: float | None = None
     kvp: float | None = None
 
@@ -113,6 +121,12 @@ class Manifest(BaseModel):
     n_series: int | None = None  # derived; None on v1
     series: list[SeriesEntryV2] = Field(default_factory=list)
     thumbnail: ThumbnailV2 | None = None
+
+    # text-search-description Phase 1.5 (FR-TS15-5) — manifest v2.1 additive.
+    # All Optional so v2.0 manifests remain valid (NFR-TS15-COMPAT-1).
+    study_description: str | None = Field(default=None, max_length=200)
+    protocol_name: str | None = Field(default=None, max_length=200)
+    description_scrub_metadata: dict | None = None
 
     @field_validator("anonymization_flag")
     @classmethod
