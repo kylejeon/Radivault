@@ -220,8 +220,14 @@ class PgAuditWriter:
                 deface_decision=deface_decision,
                 deface_decision_reason=deface_decision_reason[:255],
                 phi_scrub_method=phi_scrub_method,
-                sidecar_image_tag=sidecar_image_tag,
-                afni_version=afni_version,
+                # Match central's bound enforcement
+                # (radivault_central.routers.ingest line 303 truncates to [:32]).
+                # Without this the AFNI binary description string
+                # (~64 chars: "Precompiled binary linux_ubuntu_16_64...") trips
+                # phi_scrub_audit.afni_version VARCHAR(32) and fails the
+                # series-level audit write, leaving series.preview_status='pending'.
+                sidecar_image_tag=(sidecar_image_tag[:64] if sidecar_image_tag else None),
+                afni_version=(afni_version[:32] if afni_version else None),
                 duration_ms=duration_ms,
                 outcome=outcome,
                 error_code=error_code,

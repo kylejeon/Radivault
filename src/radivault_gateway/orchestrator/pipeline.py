@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from typing import Any
+
 from radivault_gateway.audit import AuditLogger
 from radivault_gateway.config import GatewayConfig
 from radivault_gateway.deid import DeidEngine, QuarantineRequired
@@ -28,6 +30,11 @@ from radivault_gateway.deid.pixel import (
     PixelQuarantineRequired,
 )
 from radivault_gateway.pacs import DicomWebPacsClient, PacsError, StudySummary
+from radivault_gateway.preview_pipeline import (
+    SeriesInput,
+    is_pipeline_enabled as is_preview_pipeline_enabled,
+    process_study as run_preview_process_study,
+)
 from radivault_gateway.staging import StagingManager
 from radivault_gateway.state import StateDB, StudyState
 from radivault_gateway.upload import UploadClient, UploadError
@@ -456,6 +463,42 @@ class Pipeline:
                 study_metadata = None
                 thumb = None
 
+            # jpg-preview-defacing FR-PREVIEW-1 / FR-PREVIEW-2 / FR-PREVIEW-3:
+            # run the per-series preview pipeline against the just-staged
+            # DICOM tree. Sits between staging.written and upload.started so
+            # the per-series ``preview_status`` / ``preview_frame_count``
+            # land in the manifest the same RPC carries (central's ingest
+            # router persists them via ``_persist_preview_batch``).
+            #
+            # FR-DEFACE-9 invariant: a preview failure NEVER aborts ingest.
+            # The whole block is wrapped so any boto3 / DB / sidecar error
+            # is logged + swallowed; the manifest just ships without a
+            # ``preview`` key (legacy backward-compat). FR-NEWONLY-2: this
+            # touches only the in-flight study — no backfill of existing
+            # rows.
+            preview_block: dict[str, Any] | None = None
+            if is_preview_pipeline_enabled() and study_metadata is not None:
+                try:
+                    preview_block = self._run_preview_pipeline(
+                        pseudo_study_uid=pseudo_uid,
+                        final_staging=final_staging,
+                        study_metadata=study_metadata,
+                    )
+                except Exception as exc:  # noqa: BLE001 — preview never blocks ingest
+                    log.warning(
+                        "preview_pipeline_swallowed",
+                        extra={
+                            "event": "preview.pipeline.error",
+                            "pseudo_study_uid": pseudo_uid,
+                            "error": str(exc)[:200],
+                        },
+                    )
+                    self._audit.append(
+                        "preview.failed",
+                        target={"pseudo_study_uid": pseudo_uid},
+                        meta={"error": str(exc)[:200]},
+                    )
+
             # Upload
             manifest = self._upload.build_manifest(
                 gateway_id=self._cfg.agent.gateway_id,
@@ -469,6 +512,11 @@ class Pipeline:
                 study_metadata=study_metadata,
                 thumbnail=thumb,
             )
+            # Manifest is a plain dict — central's ``Manifest`` pydantic
+            # model has ``extra="allow"`` so the additive ``preview`` key
+            # passes validation and is read by ``_persist_preview_batch``.
+            if preview_block is not None:
+                manifest["preview"] = preview_block
             self._audit.append(
                 "upload.started",
                 target={"pseudo_study_uid": pseudo_uid},
@@ -758,6 +806,123 @@ class Pipeline:
             },
         )
         return None
+
+
+    # ---- jpg-preview-defacing wiring (FR-PREVIEW-1 / FR-PREVIEW-2) ----
+
+    def _run_preview_pipeline(
+        self,
+        *,
+        pseudo_study_uid: str,
+        final_staging: Path,
+        study_metadata: Any,
+    ) -> dict[str, Any] | None:
+        """Run ``preview_pipeline.process_study`` for the current study and
+        return a JSON-friendly dict ready for ``manifest['preview']``.
+
+        Design notes
+        ------------
+        - Series inputs are derived from :class:`StudyMetadata.series` (the
+          12-facet extract already walked the staged tree). Each series
+          maps to a dir at ``{final_staging}/{pseudo_series_uid}``.
+        - We construct :class:`PreviewClients` lazily and dispose of the
+          SQLAlchemy engine + boto3 session at the end of this call so a
+          failure here cannot leak resources back into the orchestrator.
+        - Any exception bubbles up to the caller, which logs+swallows it
+          (FR-DEFACE-9). We do **not** swallow inside this helper because
+          the caller is the canonical fail-soft boundary and tests can
+          assert behaviour by patching this method.
+        """
+        # Lazy import — preview_clients pulls in boto3 / sqlalchemy. Keeps
+        # the pipeline module importable in environments without those
+        # extras (e.g. unit tests that don't exercise the preview path).
+        from radivault_gateway.preview_clients import PreviewClients
+
+        series_inputs: list[SeriesInput] = []
+        series_meta: list[dict] = list(getattr(study_metadata, "series", []) or [])
+        for idx, series in enumerate(series_meta, start=1):
+            pseudo_series_uid = series.get("pseudo_series_uid")
+            if not pseudo_series_uid:
+                continue
+            series_dir = final_staging / pseudo_series_uid
+            if not series_dir.exists() or not series_dir.is_dir():
+                # Defensive — extract.py and the on-disk staging layout
+                # should agree, but skip silently rather than raise.
+                log.debug(
+                    "preview_series_dir_missing",
+                    extra={
+                        "event": "preview.series.miss",
+                        "pseudo_series_uid": pseudo_series_uid,
+                        "series_dir": str(series_dir),
+                    },
+                )
+                continue
+            series_inputs.append(
+                SeriesInput(
+                    pseudo_series_uid=pseudo_series_uid,
+                    series_num=idx,
+                    series_dir=series_dir,
+                    modality=series.get("modality"),
+                    body_part=series.get("body_part"),
+                    series_description=series.get("series_description_clean"),
+                    protocol_name=None,
+                )
+            )
+
+        if not series_inputs:
+            log.info(
+                "preview_pipeline_no_series",
+                extra={
+                    "event": "preview.pipeline.no_series",
+                    "pseudo_study_uid": pseudo_study_uid,
+                },
+            )
+            return None
+
+        study_description = getattr(study_metadata, "study_description", None)
+
+        with PreviewClients.from_env() as clients:
+            batch = run_preview_process_study(
+                pseudo_study_uid=pseudo_study_uid,
+                series_inputs=series_inputs,
+                study_description=study_description,
+                minio_client=clients.minio,
+                audit_writer=clients.audit,
+                frame_writer=clients.frames,
+            )
+
+        # Convert dataclasses → JSON-friendly dict matching
+        # ``radivault_central.manifest.schema.PreviewBatch`` (extra=allow).
+        # Reuses the same shape the CLI/runner path emits (transfer/runner.py
+        # ``_preview_to_dict``) so central's ``_persist_preview_batch`` sees
+        # identical payloads from both code paths.
+        from radivault_gateway.transfer.runner import (
+            _preview_to_dict as _preview_batch_to_dict,
+        )
+
+        preview_dict = _preview_batch_to_dict(batch)
+        log.info(
+            "preview_pipeline_done",
+            extra={
+                "event": "preview.completed"
+                if not batch.skipped
+                else "preview.skipped",
+                "pseudo_study_uid": pseudo_study_uid,
+                "n_series": len(batch.series),
+                "n_frames": sum(s.frame_count for s in batch.series),
+                "skipped_reason": batch.reason if batch.skipped else None,
+            },
+        )
+        self._audit.append(
+            "preview.completed" if not batch.skipped else "preview.skipped",
+            target={"pseudo_study_uid": pseudo_study_uid},
+            meta={
+                "n_series": len(batch.series),
+                "n_frames": sum(s.frame_count for s in batch.series),
+                "skipped_reason": batch.reason if batch.skipped else None,
+            },
+        )
+        return preview_dict
 
 
     # ---- metadata-only (Flow A) QIDO-only fast-path ----
