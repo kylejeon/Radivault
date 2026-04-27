@@ -23,11 +23,59 @@ export type HighlightedTextProps = {
   html: string | null | undefined;
   /** Plain-text fallback rendered when ``html`` is null/empty. */
   fallback: string | null | undefined;
+  /**
+   * User's raw search query. When set, highlights only the *typed prefix*
+   * inside each matching word ("bra" → BRA in <mark>BRA</mark>IN), instead
+   * of letting Postgres ts_headline wrap the entire matched lexeme. Takes
+   * precedence over ``html``.
+   */
+  query?: string | null;
   /** Optional truncation length (default 200). */
   maxLength?: number;
   className?: string;
   style?: CSSProperties;
 };
+
+const TOKEN_RE = /[a-zA-Z0-9]+/g;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Wrap typed prefixes inside ``text`` with ``<mark>`` tags. Sanitised via
+ * ``escapeHtml`` first so the only HTML in the output is the literal mark
+ * pair. Matches are case-insensitive prefix-anywhere — "bra" hits "BRAIN",
+ * "ABRASION", but not in the middle of a longer token's body. Multiple
+ * tokens unify into one alternation with longest-first ordering so "brain"
+ * wins over "br" inside the same word.
+ */
+function buildPrefixHighlight(text: string, query: string): string {
+  const tokens = (query.match(TOKEN_RE) ?? []).filter((t) => t.length > 0);
+  if (tokens.length === 0) return escapeHtml(text);
+  // Longest first → matches "brain" over "br" if user typed both.
+  const ordered = [...new Set(tokens.map((t) => t.toLowerCase()))].sort(
+    (a, b) => b.length - a.length,
+  );
+  const pattern = new RegExp(
+    `(${ordered.map(escapeRegExp).join("|")})[a-zA-Z0-9]*`,
+    "gi",
+  );
+  // Walk matches and rebuild with escaped text + <mark> for prefix only.
+  let out = "";
+  let last = 0;
+  for (const m of text.matchAll(pattern)) {
+    const start = m.index ?? 0;
+    const matched = m[0];
+    const prefix = m[1];
+    out += escapeHtml(text.slice(last, start));
+    out += `<mark>${escapeHtml(prefix)}</mark>`;
+    out += escapeHtml(matched.slice(prefix.length));
+    last = start + matched.length;
+  }
+  out += escapeHtml(text.slice(last));
+  return out;
+}
 
 const MARK_OPEN = /<mark>/gi;
 const MARK_CLOSE = /<\/mark>/gi;
@@ -72,11 +120,30 @@ function sanitiseMarkOnly(raw: string): string {
 export function HighlightedText({
   html,
   fallback,
+  query,
   maxLength = 200,
   className,
   style,
 }: HighlightedTextProps): JSX.Element {
   const fallbackText = fallback ?? "";
+
+  // Client-side prefix highlight wins over server snippet when query present.
+  // This satisfies Kyle's UX rule: "bra" must highlight BRA inside BRAIN, not
+  // the full word — Postgres ts_headline only wraps at lexeme boundaries.
+  if (query && query.trim().length > 0) {
+    const truncated = truncate(fallbackText, maxLength);
+    const safe = buildPrefixHighlight(truncated, query.trim());
+    return (
+      <span
+        className={className}
+        style={style}
+        // ``buildPrefixHighlight`` escapes everything and only emits literal
+        // <mark>...</mark> wrappers — no other tags or attributes possible.
+        dangerouslySetInnerHTML={{ __html: safe }}
+      />
+    );
+  }
+
   if (!html) {
     return (
       <span className={className} style={style}>

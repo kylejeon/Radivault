@@ -80,6 +80,12 @@ export type ResultTableProps = {
    * QA HIGH-2 / BL-1 wiring.
    */
   visibleColumns?: string[];
+  /**
+   * Active free-text query string (raw, pre-tsquery). Drives <HighlightedText>
+   * so prefix matches like "bra" mark BRA inside BRAIN — see HighlightedText
+   * docstring + Kyle's UX rule.
+   */
+  query?: string | null;
 };
 
 function L(locale: "ko" | "en", ko: string, en: string): string {
@@ -141,6 +147,7 @@ export function ResultTable({
   onToggleRow,
   locale = "en",
   visibleColumns,
+  query,
 }: ResultTableProps) {
   // `hospital` always rendered (matches ColumnToggle "always" hint).
   const isCol = (key: string): boolean => {
@@ -279,10 +286,11 @@ export function ResultTable({
             )}
             {isCol("bodypart") && (
               <div className="rv-col" style={{ textTransform: "uppercase", fontWeight: 500, fontSize: 12 }}>
-                {it.highlight_snippet ? (
+                {query ? (
                   <HighlightedText
                     html={it.highlight_snippet}
                     fallback={it.body_part ?? "—"}
+                    query={query}
                     maxLength={32}
                   />
                 ) : (
@@ -296,7 +304,7 @@ export function ResultTable({
                   <>
                     <span className="rv-kcd-chip">{it.kcd_code}</span>
                     <span className="rv-kcd-label">
-                      {it.highlight_snippet ? (
+                      {query ? (
                         <HighlightedText
                           html={it.highlight_snippet}
                           fallback={
@@ -304,6 +312,7 @@ export function ResultTable({
                               ? it.kcd_label_ko ?? ""
                               : it.kcd_label_en ?? ""
                           }
+                          query={query}
                           maxLength={64}
                         />
                       ) : locale === "ko" ? (

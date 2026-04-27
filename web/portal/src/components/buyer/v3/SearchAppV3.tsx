@@ -547,6 +547,7 @@ function SearchAppV3Inner() {
               onToggleRow={toggleRow}
               locale={lc}
               visibleColumns={visibleColumns}
+              query={qApplied}
             />
           )}
 
