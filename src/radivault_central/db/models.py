@@ -243,6 +243,7 @@ class Series(Base):
     __table_args__ = (
         Index("idx_series_study", "study_pk"),
         Index("idx_series_modality", "modality"),
+        Index("ix_series_preview_status", "preview_status"),
     )
 
     series_pk: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
@@ -256,6 +257,94 @@ class Series(Base):
     # text-search-description Phase 1.5 (FR-TS15-6) — per-series scrubbed
     # description. Mirrors study.study_description NULL semantics.
     series_description: Mapped[str | None] = mapped_column(String(200))
+
+    # jpg-preview-defacing FR-PREVIEW-12 (alembic 0010). New ingestions only:
+    # legacy series rows keep ``preview_status='pending'`` and are auto-404'd
+    # by the buyer BFF (FR-NEWONLY-2). The dev-spec uses logical name
+    # ``dicom_series`` for this table; the actual table name is ``series``.
+    preview_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    preview_frame_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    preview_deface_decision: Mapped[str | None] = mapped_column(String(40))
+    preview_deface_method: Mapped[str | None] = mapped_column(String(40))
+    preview_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    preview_pipeline_version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="0.1.0", server_default="0.1.0"
+    )
+
+
+class DicomPreviewFrame(Base):
+    """Per-frame preview metadata (jpg-preview-defacing FR-PREVIEW-13).
+
+    One row per generated JPG frame. Holds the MinIO key, sha256 (for
+    integrity audit FR-PREVIEW-8), and the per-frame ``phi_scrub_method``
+    so the BFF manifest endpoint can answer ``preview_status / frame_count``
+    in a single SELECT against this table.
+    """
+
+    __tablename__ = "dicom_preview_frame"
+    __table_args__ = (
+        UniqueConstraint(
+            "pseudo_series_uid", "frame_idx", name="uq_dpf_series_frame"
+        ),
+        Index("ix_dpf_study", "pseudo_study_uid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    pseudo_series_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    pseudo_study_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    frame_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    minio_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    phi_scrub_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_instance_uid_pseudo: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class PhiScrubAudit(Base):
+    """Series-level audit row of every defacing pipeline invocation
+    (jpg-preview-defacing FR-AUDIT-1 / FR-AUDIT-2).
+
+    ``error_detail`` is varchar(2000) but MUST NOT contain PHI
+    (FR-AUDIT-3 / AC-19). The pipeline only writes scrubbed sidecar
+    error codes / version strings here.
+    """
+
+    __tablename__ = "phi_scrub_audit"
+    __table_args__ = (
+        Index("ix_psa_study", "pseudo_study_uid"),
+        Index("ix_psa_series", "pseudo_series_uid"),
+        Index("ix_psa_outcome", "outcome"),
+    )
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    pseudo_study_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    pseudo_series_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    modality: Mapped[str] = mapped_column(String(8), nullable=False)
+    body_part: Mapped[str | None] = mapped_column(String(32))
+    deface_decision: Mapped[str] = mapped_column(String(40), nullable=False)
+    deface_decision_reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    phi_scrub_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    sidecar_image_tag: Mapped[str | None] = mapped_column(String(64))
+    afni_version: Mapped[str | None] = mapped_column(String(32))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(40))
+    error_detail: Mapped[str | None] = mapped_column(String(2000))
+    pipeline_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class Instance(Base):
