@@ -932,16 +932,16 @@ dev-spec §10 의 AC-11..AC-19 (BFF + UI 영역) 을 시각 관점으로 재기�
 
 ## 15. 오픈 질문 / Kyle 결정 필요
 
-K 시리즈 번호 = portal-redesign 의 K-1..K-12 이어서.
+K 시리즈 번호 = portal-redesign 의 K-1..K-12 이어서. **K-13..K-18 모두 Kyle 결정 완료 (2026-04-27).**
 
-| # | 항목 | designer 기본값 | Kyle 결정 필요 이유 |
-|---|------|-----------------|----------------------|
-| **K-13** | viewport 우측 strip vs 하단 strip | 우측 (1280px 기본 타깃) | 실 buyer 사용성 — Segmed 는 좌측 OHIF style. RadiVault 는 좌측 facet 이 search 에서 사용되어 viewer 진입 후 우측 strip 으로 시각 변화 의도. 데모 후 buyer 피드백 수집 필요. |
-| **K-14** | KCD 진단명 영문 표기 (Pneumonia, unspecified) | KCD 한국어 진단명 + ICD-10 영문 매핑 사용 | KCD-7 표준에 영문 진단명 미수록 — ICD-10 매핑으로 영문 표시 OK 한지 법무·임상자문 확인. |
-| **K-15** | hint overlay localStorage TTL | 영구 (한 번 본 buyer 는 다시 안 봄) | 기본 OK 인지 / 30일 후 재노출이 onboarding 측면에서 더 좋은지. |
-| **K-16** | DeIdChainStamp click 동작 | 별도 modal 로 8-layer 상세 + audit_log 링크 | modal 콘텐츠 구체 디자인은 v0.2 작업으로 deferred. Phase 1 click 무반응 vs modal 둘 중 선택. |
-| **K-17** | 3D 토글 버튼 자체 표시 여부 | 표시 + disabled (의도성 강조) | 대안: 아예 미렌더 (시각 단순). 의료 buyer 는 "왜 없지?" 의문 가질 가능성 → 표시 + 이유 명시 권고. |
-| **K-18** | quarantined_partial study 의 strip dot 가독성 | 850 슬라이스 → 5 줄 wrap | 200 슬라이스 이상 series 의 dot 시인성. 대안: 줄바꿈 없이 가로 스크롤? Phase 1 = wrap 권고. |
+| # | 항목 | Kyle 결정 | 적용 |
+|---|------|-----------|------|
+| **K-13** | viewport 우측 strip vs 하단 strip | **우측 OK** | §4 ViewerArea 명세 그대로 유지 |
+| **K-14** | KCD 진단명 영문 표기 | **designer 추천 (Phase 2 deferred)** | Phase 1.5 에 별도 dev-spec (`dev-spec-text-search-description-phase15.md`) 으로 locale-aware ICD-10/KCD-8 라벨링 처리. 본 Phase 1 = KCD 한글 + ICD-10 영문 매핑. |
+| **K-15** | hint overlay localStorage TTL | **hint overlay 자체 제거** | viewport 하단 SliceCounter ("Slice 142 / 850") 가 이미 명확하므로 1초 hint 불필요. `<NavigationHint>` 컴포넌트 § 6.x 에서 삭제. SliceCounter 만 유지. |
+| **K-16** | DeIdChainStamp click 동작 | **DeIdChainStamp 자체 제거** | Kyle: "De-ID 는 무조건 되어야 하는 것 — 왜 알려줘야 하는가?" PHI 정제 = baseline 보장 사항이라 시각 노출 불필요. § 6.5 컴포넌트 삭제, § 4 ViewerArea 우상단 overlay 에서 제거. (PhiScrubIndicator 도 동일 논리지만 PHI 검증 *상태* 표시는 demo trust signal 로 유지 — Kyle 미언급) |
+| **K-17** | 3D 토글 버튼 표시 여부 | **버튼 자체 미표시 (Phase 2 활성화 시 추가)** | "추후 진행, 현재는 오버스펙". § 4 viewport toolbar 에서 3D 토글 미렌더. L8 viewer 측 3D 차단 가드는 백엔드만 유지 (응답 헤더 `X-RadiVault-Preview-3D: disabled`). |
+| **K-18** | quarantined_partial strip dot 가독성 | **dot grid 제거, SliceCounter 만 사용** | K-15 와 동일 — 영상 위 표시되는 slice number indicator 면 충분. 850 dot 5 줄 wrap 디자인 자체 제거. PhiScrubIndicator 의 8-layer dots 도 동일 정책 → 단순 텍스트 라벨 ("8/8 layers passed") 로 단순화. |
 
 ---
 
@@ -950,6 +950,7 @@ K 시리즈 번호 = portal-redesign 의 K-1..K-12 이어서.
 | 버전 | 날짜 | 작성자 | 변경 |
 |------|------|--------|------|
 | 0.1 | 2026-04-26 | @designer (Claude Opus 4.7 [1M]) | 최초 작성. dev-spec FR-FSP-12 + Kyle 7 결정 반영. ViewerArea 1 화면 (S-1), 컴포넌트 7 개 신규 + 1 재사용. 신규 토큰 4 개. mockup 1 HTML. K-13..K-18 신규 6 flag. |
+| 0.2 | 2026-04-27 | main (Claude Opus 4.7 [1M]) | Kyle K-13..K-18 결정 반영. 컴포넌트 7 → 4 개 (DeIdChainStamp + NavigationHint + 3D 토글 버튼 제거; PhiScrubIndicator 단순화). 신규 토큰 4 → 3 개 (`--phi-scrub-success/warn/quarantine` 단순 텍스트 라벨로 변경). K-14 Locale 라벨링은 Phase 1.5 dev-spec 으로 분리. |
 
 ---
 
@@ -961,11 +962,11 @@ K 시리즈 번호 = portal-redesign 의 K-1..K-12 이어서.
   - `@developer` — `claude` 브랜치에서 6 주 일정 (W1 Alembic migration → W2 windowing/scrub → W3 Central endpoint + MinIO → W4 BFF + Cornerstone3D loader → W5 viewport UI + 컴포넌트 7 → W6 backfill CLI + e2e). 본 design-spec §6 컴포넌트 inventory 와 §13 계층 트리를 React 파일 분할 가이드로 사용.
   - `@qa` — Cornerstone3D viewport 키보드 navigation 전수 (DA-7), PHI badge 표시 정확도 (DA-3 / DA-9 / DA-10), 3D 가드 시각 (DA-5 / DA-6), feature flag fallback (DA-12), 모바일 fallback (DA-13).
 - **UI_GUIDE.md 갱신 제안**:
-  - 신규 토큰 4 개 (`--phi-scrub-success` / `--phi-scrub-warn` / `--phi-scrub-quarantine` / `--viewport-bg`) 를 portal-redesign §4 토큰과 함께 UI_GUIDE 정식 편입 시 "PHI status semantic alias" + "Viewer surface" 그룹으로 추가.
-  - 신규 컴포넌트 7 개 (`{#full-slice-preview-viewport-v1}` ~ `{#quarantine-banner-v1}`) 카탈로그 등재 권고. portal-redesign §11 컴포넌트 7 + 본 명세 7 = 총 14 개 buyer portal 컴포넌트.
+  - 신규 토큰 3 개 (`--phi-scrub-success` / `--phi-scrub-warn` / `--viewport-bg`) 를 portal-redesign §4 토큰과 함께 UI_GUIDE 정식 편입 시 "PHI status semantic alias" + "Viewer surface" 그룹으로 추가. (v0.2: K-18 결정으로 quarantine 토큰 단순화)
+  - 신규 컴포넌트 4 개 (`<FullSlicePreviewViewport>`, `<SeriesThumbnailStrip>`, `<SliceCounter>`, `<PhiScrubIndicator>`) 카탈로그 등재 권고. (v0.2: K-15/K-16/K-17 결정으로 7 → 4)
 - **추가 디자인 필요**:
   - **v0.2 (Phase 1.1)** — manual W/L 슬라이더 UI (현 ModalityPresetToggle 의 dropdown 활성화).
   - **v0.3 (Phase 2)** — Cine animation viewer (모바일/lite-tier fallback 슬롯).
   - **별도 slug** — admin manual review queue UI (`/admin/preview-quarantine`, dev-spec FR-FSP-16 Phase 2).
-  - **별도 slug** — DeIdChainStamp click → 8-layer 상세 modal (K-16 결정 필요).
-- **Kyle 결정 필요 사항**: K-13 (strip 위치), K-14 (KCD 영문 매핑), K-15 (hint TTL), K-16 (DeIdChainStamp click), K-17 (3D 버튼 표시 여부), K-18 (200+ slice dot 가독).
+  - **별도 slug** — 3D 토글 활성화 (K-17 Phase 2 — `dev-spec-3d-volume-rendering.md`).
+- **Kyle 결정 완료**: K-13 (우측 OK) / K-14 (Phase 1.5 locale 분리) / K-15 (hint 제거) / K-16 (DeIdChainStamp 제거) / K-17 (3D 버튼 미표시) / K-18 (dot grid 단순화). 본 design-spec v0.2 에 모두 반영.
