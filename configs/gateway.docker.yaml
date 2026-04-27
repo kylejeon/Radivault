@@ -1,20 +1,52 @@
+# RadiVault Gateway Agent — docker-compose container configuration.
+#
+# Multi-PACS sync (dev-spec-multi-pacs-sync.md FR-MPS-7): single gateway
+# container iterates Orthanc-A + Orthanc-B sequentially. Each endpoint's
+# study lands in central with the right hospital_id (HOSP-001 / HOSP-002)
+# via the per-hospital upload_tokens map (FR-MPS-6 / K-MPS-6).
+#
+# Tokens are resolved via ${env:...} in container mode so secrets stay
+# out of the image. Operators set HOSP_001_TOKEN / HOSP_002_TOKEN in the
+# container env (e.g. compose `env_file:` directive). Falls back to the
+# legacy upload_token if the per-hospital map misses.
+
 version: 1
 
 agent:
   gateway_id: "gw_dev_local"
-  hospital_id: "hosp_dev"
+  hospital_id: "HOSP-001"
   org_root_oid: "2.25.140737488355328"
 
 pacs:
-  base_url: "http://orthanc:8042/dicom-web"
-  auth:
-    type: "bearer"
-    token: "dev-placeholder-token"
-  max_concurrency: 2
-  poll_interval_seconds: 60
-  query:
-    modalities: ["CR", "CT", "MR", "DX"]
-    lookback_days: 30
+  - id: "orthanc-a"
+    hospital_id: "HOSP-001"
+    base_url: "http://orthanc:8042/dicom-web"
+    auth:
+      type: "basic"
+      username: "orthanc"
+      password: "orthanc"
+    max_concurrency: 2
+    poll_interval_seconds: 60
+    priority: 10
+    enabled: true
+    query:
+      modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
+      lookback_days: 30
+
+  - id: "orthanc-b"
+    hospital_id: "HOSP-002"
+    base_url: "http://orthanc-b:8042/dicom-web"
+    auth:
+      type: "basic"
+      username: "orthanc"
+      password: "orthanc"
+    max_concurrency: 2
+    poll_interval_seconds: 60
+    priority: 20
+    enabled: true
+    query:
+      modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
+      lookback_days: 30
 
 deid:
   ruleset_version: "v0.1.0"
@@ -45,6 +77,11 @@ audit:
 
 central:
   base_url: "http://mock-central:8080"
+  # Per-hospital tokens — populated from container env.
+  upload_tokens:
+    HOSP-001: "${env:HOSP_001_TOKEN}"
+    HOSP-002: "${env:HOSP_002_TOKEN}"
+  # Legacy fallback for any hospital_id not in upload_tokens.
   upload_token: "mock-upload-token"
   upload_timeout_seconds: 120
   max_upload_retries: 3

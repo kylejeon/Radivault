@@ -20,6 +20,12 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Multi-PACS upload tokens (FR-MPS-7 / K-MPS-8). Operators drop credential
+# files under secrets/HOSP_*_TOKEN; only the README + .gitkeep are tracked.
+secrets/*
+!secrets/README.md
+!secrets/.gitkeep
+
 # Logs
 *.log
 

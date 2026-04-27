@@ -1,48 +1,79 @@
 # RadiVault Gateway Agent — demo / CEO rehearsal configuration.
 #
 # Target: host-mode execution against docker-compose services on localhost.
-# PACS     = radivault-orthanc-1 (AUTHENTICATION_ENABLED=false)
-# Central  = radivault-central-1 (port 8000)
-# Hospital = HOSP-001 (seeded by install-guide §6)
+# PACS-A   = radivault-orthanc-1   (8042, HOSP-001 / SEOUL-A "본병원")
+# PACS-B   = radivault-orthanc-b-1 (8043, HOSP-002 / BUSAN-B "튼튼병원")
+# Central  = radivault-central-1   (port 8000)
 #
-# Salt and upload_token are demo-grade. Rotate for pilot. Long-term the
-# `${file:...}` substitution pattern + issued per-gateway credentials
-# (dev-spec FR-20..FR-22) is expected.
+# Multi-PACS sync (dev-spec-multi-pacs-sync.md):
+#   - One gateway process iterates BOTH Orthanc-A and Orthanc-B sequentially.
+#   - Each endpoint carries its own hospital_id and gets its own central
+#     bearer via central.upload_tokens map (FR-MPS-6 / K-MPS-6).
+#   - Legacy single-dict pacs: blocks still parse (regression 0); see
+#     §13 backward-compat note in the dev-spec.
 #
-# Created 2026-04-24 Session 16 after inject_all.sh STEP 3 surfaced the
-# `gateway-admin` CLI name gap. Paired with inject_all.sh fix.
+# Salt and upload_tokens are demo-grade. Rotate for pilot. Long-term path is
+# `${file:/run/credentials/...}` substitution + per-gateway issued credentials.
+#
+# Provenance:
+# - 2026-04-24 Session 16  initial single-PACS config
+# - 2026-04-27 Session 26  migrated to multi-PACS list shape (FR-MPS-7)
 
 version: 1
 
 agent:
   gateway_id: "gw_demo_local"
+  # Default hospital_id for endpoints that don't override (FR-MPS-4).
   hospital_id: "HOSP-001"
   org_root_oid: "2.25.140737488355328"
 
+# Multi-PACS list — single gateway process, sequential sync (FR-MPS-1).
+# Each endpoint may override hospital_id / priority / enabled.
 pacs:
-  base_url: "http://localhost:8042/dicom-web"
-  auth:
-    type: "basic"
-    # Orthanc auth disabled in docker-compose.yml; schema still requires
-    # the block. Any credentials pass.
-    username: "orthanc"
-    password: "orthanc"
-  max_concurrency: 2
-  # Demo cadence — tight loop so live STOW uploads surface in seconds,
-  # not minutes. Production default is 60s+; revert before pilot.
-  poll_interval_seconds: 30
-  query:
-    # MG added for CBIS-DDSM (mammography); PT for potential PET data.
-    modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
-    # Schema max 365. TCIA data is historic (2000+), so inject_all.sh
-    # passes `--since 2000-01-01` on sync-once to override via CLI.
-    lookback_days: 365
+  - id: "orthanc-a"
+    hospital_id: "HOSP-001"
+    base_url: "http://localhost:8042/dicom-web"
+    auth:
+      type: "basic"
+      # Orthanc auth disabled in docker-compose.yml; schema still requires
+      # the block. Any credentials pass.
+      username: "orthanc"
+      password: "orthanc"
+    max_concurrency: 2
+    poll_interval_seconds: 30
+    priority: 10
+    enabled: true
+    query:
+      modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
+      lookback_days: 365
+
+  - id: "orthanc-b"
+    hospital_id: "HOSP-002"
+    base_url: "http://localhost:8043/dicom-web"
+    auth:
+      type: "basic"
+      # orthanc-b ships with default basic auth even though
+      # ORTHANC__AUTHENTICATION_ENABLED=false; default creds work.
+      username: "orthanc"
+      password: "orthanc"
+    max_concurrency: 2
+    poll_interval_seconds: 30
+    priority: 20
+    enabled: true
+    query:
+      modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
+      lookback_days: 365
 
 deid:
   ruleset_version: "v0.1.0"
   # 64 hex chars = 32 bytes. Demo-only literal; production path is per-
   # hospital salt issued by central + stored in a runtime credentials
   # directory (${file:/run/credentials/salt}).
+  #
+  # NOTE — when the gateway sync covers multiple hospitals (HOSP-001 +
+  # HOSP-002 in this demo) the same salt is used for both. dev-spec §14.1
+  # tracks this as a follow-up: per-hospital salts will need a per-endpoint
+  # `salt:` override in v0.2 along with cross-PACS PHI-leak hardening.
   salt: "d19e2c47a0f38b95e5c11a7e6f4b8273e9a04d1c3f7b26580d9e4c8a1b3f5d72"
   salt_version: 1
   burnin_quarantine_modalities: ["SC", "US", "OT"]
@@ -73,9 +104,30 @@ central:
   # Demo/local-only: central runs on plain HTTP inside docker-compose.
   # Production must use TLS; this override is for localhost dev.
   allow_insecure: true
-  # Reuses HOSP-001 bearer issued 2026-04-24. If rotated, regenerate via
-  # `docker exec radivault-central-1 ingest-admin token issue ...`
+
+  # Per-hospital upload bearer map (FR-MPS-6 / K-MPS-6).
+  # Each entry is a literal token issued via:
+  #   docker exec radivault-central-1 ingest-admin token issue \
+  #     --hospital-id <HOSP-XXX>
+  #
+  # Operator alternatives (resolve at load via config.loader._SECRET_RE):
+  #   "${env:HOSP_001_TOKEN}"            # read from environment variable
+  #   "${file:/path/to/token-file}"      # read from a chmod 0600 file
+  #
+  # K-MPS-8: HOSP-002 token ${env:HOSP_002_TOKEN} or ${file:secrets/HOSP_002_TOKEN}
+  # is the recommended path; the literal value below mirrors the value
+  # already in configs/demo_gateway_b.yaml so the demo continues to boot
+  # without operator-side env setup.
+  upload_tokens:
+    HOSP-001: "rvct_1a8fe44e.dEiQrif9moLY69D5XY7SJtGusAvNe-P7YIpBRodyh1UhJtjv"
+    HOSP-002: "rvct_e3959f1e.DuvLU8Ne5v5lEjmNFrlfd2h1DHKlioA9UgXKtay3vVBS7K6r"
+
+  # Legacy single-token fallback. Resolved by token_for_hospital() when
+  # the upload_tokens map has no entry for a given hospital_id. Kept here
+  # for regression compatibility with single-PACS configs that haven't
+  # migrated yet; remove after pilot.
   upload_token: "rvct_1a8fe44e.dEiQrif9moLY69D5XY7SJtGusAvNe-P7YIpBRodyh1UhJtjv"
+
   upload_timeout_seconds: 600
   max_upload_retries: 3
 
