@@ -131,7 +131,13 @@ async def deface(
         nii_in = nii_files[0]
 
         # Step 2 — AFNI @afni_refacer_run -mode_deface.
-        prefix = out_dir / "defaced"
+        # MAJOR-1 fix: include the .nii.gz suffix in -prefix so AFNI emits
+        # a deterministic filename (defaced.deface.nii.gz / defaced.nii.gz)
+        # that _resolve_afni_output's exact-match branch (1/3) catches. This
+        # prevents the parent.glob("*.nii.gz") fallback from accidentally
+        # selecting a non-defaced side-output (e.g. defaced.face.nii.gz —
+        # the *face mask* — which would expose a non-defaced volume).
+        prefix = out_dir / "defaced.nii.gz"
         try:
             _run(
                 [
@@ -227,18 +233,44 @@ def _afni_version() -> str | None:
 def _resolve_afni_output(prefix: Path) -> Path | None:
     """AFNI emits ``<prefix>.deface.nii.gz`` or ``<prefix>+orig.HEAD/BRIK``.
     We only consume the .nii.gz form.
+
+    The caller may pass the prefix either with or without a trailing
+    ``.nii.gz`` suffix (we standardise on *with* per the MAJOR-1 fix so
+    that AFNI emits a deterministic filename). We normalise to a bare
+    stem first so the probe order — (1) ``<stem>.deface.nii.gz`` first,
+    then (3) ``<stem>.nii.gz`` — stays exactly what callers and tests
+    have always relied on.
     """
+    prefix_str = str(prefix)
+    stem_str = (
+        prefix_str[: -len(".nii.gz")]
+        if prefix_str.endswith(".nii.gz")
+        else prefix_str
+    )
     for cand in (
-        prefix.with_suffix(".deface.nii.gz"),
-        Path(str(prefix) + ".deface.nii.gz"),
-        Path(str(prefix) + ".nii.gz"),
+        Path(stem_str + ".deface.nii.gz"),
+        Path(stem_str + ".deface.nii.gz"),
+        Path(stem_str + ".nii.gz"),
     ):
         if cand.exists():
             return cand
-    # Fallback: scan parent for any .nii.gz
+    # Fallback: scan parent for any .nii.gz, EXCLUDING AFNI side outputs.
+    # ``@afni_refacer_run`` may emit auxiliary volumes like
+    # ``*.face.nii.gz`` (the face mask — i.e. the *region to be zeroed*),
+    # ``*.skullstrip.nii.gz``, and ``*.mask.nii.gz``. None of these are the
+    # defaced volume; selecting one here would silently expose an
+    # un-defaced or wholly-wrong NIfTI to the gateway. With the .nii.gz
+    # suffix on -prefix the exact-match branches above always win, but we
+    # keep this defence-in-depth in case the prefix convention regresses.
     parent = prefix.parent
     if parent.exists():
-        candidates = sorted(parent.glob("*.nii.gz"))
+        candidates = sorted(
+            p
+            for p in parent.glob("*.nii.gz")
+            if not p.name.endswith(
+                (".face.nii.gz", ".skullstrip.nii.gz", ".mask.nii.gz")
+            )
+        )
         if candidates:
             return candidates[0]
     return None
