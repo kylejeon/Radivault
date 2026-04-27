@@ -85,6 +85,18 @@ class SearchRequest(BaseModel):
     limit: int = Field(50, ge=1, le=200)
     cursor: str | None = None
     include_facets: bool = True
+    # text-search-description FR-TS-2 — free-text search query, parsed by
+    # ``websearch_to_tsquery('english', :q)`` against the GENERATED tsvector.
+    # ``None`` and empty/whitespace-only strings both fall through to the
+    # facet-only path so legacy clients are 100% backwards compatible.
+    q: str | None = Field(
+        None,
+        max_length=200,
+        description=(
+            "Free-text search query; parsed via Postgres "
+            "websearch_to_tsquery against study.search_text."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_age_range(self) -> SearchRequest:
@@ -94,6 +106,14 @@ class SearchRequest(BaseModel):
             and self.age_min > self.age_max
         ):
             raise ValueError("age_min must be <= age_max")
+        return self
+
+    @model_validator(mode="after")
+    def _coerce_blank_q_to_none(self) -> SearchRequest:
+        # FR-TS-2 — treat ``""`` / whitespace-only as ``None`` so the executor
+        # never branches on a blank string.
+        if self.q is not None and not self.q.strip():
+            object.__setattr__(self, "q", None)
         return self
 
 
@@ -123,6 +143,10 @@ class StudyItem(BaseModel):
     kcd_code: str | None = None
     kcd_label_ko: str | None = None
     kcd_label_en: str | None = None
+    # text-search-description FR-TS-9 — server-rendered ts_headline snippet
+    # (e.g. ``BRAIN <mark>MR</mark>``) when ``q`` is supplied. Always ``None``
+    # in the facet-only response shape, so the regression contract holds.
+    highlight_snippet: str | None = None
 
 
 class FacetValue(BaseModel):
@@ -146,6 +170,13 @@ class Meta(BaseModel):
     buyer_tier: str | None = None
     facets_suppressed: bool = False
     response_truncated: bool = False
+    # text-search-description FR-TS-2 / AC-TS-API-1. ``True`` only when ``q``
+    # was non-empty and actually wired into the WHERE/ORDER BY of this query.
+    text_search_applied: bool = False
+    # FR-TS-10 — pattern names that fired during PHI scrub of ``q``. Empty
+    # list when ``q`` is None or contained no PHI; allows the portal UI to
+    # mount ``<MaskedQueryBadge>`` without a second round-trip.
+    phi_flagged_patterns: list[str] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
@@ -218,6 +249,24 @@ class KCDAutocompleteResponse(BaseModel):
     computed_at: datetime
 
 
+class AutocompleteSuggestion(BaseModel):
+    """One suggestion row returned by GET /v1/search/autocomplete (FR-TS-8).
+
+    ``field`` lets the dropdown render a small badge ("body_part", "modality",
+    etc.). ``score`` is the pg_trgm ``word_similarity`` value, kept for
+    debugging — clients render but should not depend on a particular range.
+    """
+
+    text: str
+    field: str
+    score: float
+
+
+class AutocompleteResponse(BaseModel):
+    suggestions: list[AutocompleteSuggestion]
+    computed_at: datetime
+
+
 def canonical_filter_dict(req: SearchRequest) -> dict[str, Any]:
     """Return a canonical ``{filter_field: value}`` dict used for sha256 binding.
 
@@ -253,12 +302,20 @@ def canonical_filter_dict(req: SearchRequest) -> dict[str, Any]:
         out["manufacturer"] = sorted(req.manufacturer)
     if req.min_hospitals is not None:
         out["min_hospitals"] = req.min_hospitals
+    # text-search-description FR-TS-2 — bind q into the cursor sha so a buyer
+    # cannot reuse a page-1 cursor against a different ``q`` on page 2.
+    if getattr(req, "q", None) is not None:
+        out["q"] = req.q
     out["sort"] = req.sort
     return out
 
 
 def filter_fields_list(req: SearchRequest) -> list[str]:
-    """Return the list of filter field names present (for JSON log FR-47)."""
+    """Return the list of filter field names present (for JSON log FR-47).
+
+    text-search-description FR-TS-2 / NFR-TS-AUDIT-2: ``q`` is treated as a
+    filter field for the purposes of audit grouping when it is non-empty.
+    """
     fields: list[str] = []
     for name in (
         "modality",
@@ -273,6 +330,7 @@ def filter_fields_list(req: SearchRequest) -> list[str]:
         "study_date_shifted",
         "manufacturer",
         "min_hospitals",
+        "q",
     ):
         if getattr(req, name, None) is not None:
             fields.append(name)

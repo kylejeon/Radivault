@@ -86,7 +86,31 @@ def insert_search_audit(
     latency_ms: int,
     request_id: str,
     cursor_presence: bool,
+    raw_query: str | None = None,
+    masked_query: str | None = None,
+    phi_flagged_patterns: list[str] | None = None,
 ) -> SearchAudit:
+    """Append-only insert into ``search_audit``.
+
+    Text-search additions (FR-TS-10): ``raw_query`` is the verbatim buyer
+    input (30-day retention via cron), ``masked_query`` is the PHI-scrubbed
+    copy (indefinite retention), and ``phi_flagged_patterns`` is a list of
+    pattern names that fired during scrub. On Postgres ``phi_flagged_patterns``
+    is stored as ``TEXT[]``; on SQLite (tests) it is JSON-encoded text.
+    """
+    flagged_for_db: list[str] | str | None
+    if phi_flagged_patterns is None:
+        flagged_for_db = None
+    else:
+        dialect = session.bind.dialect.name if session.bind is not None else "sqlite"
+        if dialect == "postgresql":
+            flagged_for_db = list(phi_flagged_patterns)
+        else:
+            # SQLite — encode as JSON text so the round-trip is loss-free.
+            import json as _json
+
+            flagged_for_db = _json.dumps(list(phi_flagged_patterns))
+
     row = SearchAudit(
         buyer_pk=buyer_pk,
         kid=kid,
@@ -100,6 +124,9 @@ def insert_search_audit(
         latency_ms=latency_ms,
         request_id=request_id,
         cursor_presence=cursor_presence,
+        raw_query=raw_query,
+        masked_query=masked_query,
+        phi_flagged_patterns=flagged_for_db,
     )
     session.add(row)
     session.commit()

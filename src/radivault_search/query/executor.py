@@ -14,10 +14,11 @@ v3 (dev-spec-buyer-search-v3 FR-V3-API-2/5):
 from __future__ import annotations
 
 import hashlib
+import os
 import time
 from dataclasses import dataclass
 
-from sqlalchemy import and_, asc, desc, func, or_, select
+from sqlalchemy import and_, asc, desc, func, literal_column, or_, select, text
 from sqlalchemy.orm import Session
 
 from radivault_central.db.models import Hospital, PatientPseudo, Study
@@ -41,6 +42,17 @@ from radivault_search.query.schema import (
     canonical_filter_dict,
 )
 from radivault_search.query.validator import _build_where
+
+
+def text_search_enabled() -> bool:
+    """text-search-description FR-TS-14 — env-driven kill switch.
+
+    ``TEXT_SEARCH_ENABLED=false`` (case-insensitive) makes the executor
+    silently ignore ``req.q`` so a runtime issue can be rolled back in
+    < 30 s without redeploying. Default is ``true``.
+    """
+    raw = os.environ.get("TEXT_SEARCH_ENABLED", "true").strip().lower()
+    return raw not in ("0", "false", "no", "off")
 
 
 @dataclass
@@ -154,6 +166,12 @@ def run_search(
     filter_dict = canonical_filter_dict(req)
     expected_sig = compute_filter_sig(filter_dict, req.sort)
 
+    # text-search-description FR-TS-2 / FR-TS-14 — resolve effective q.
+    # Empty / blank q is coerced to None by the schema validator.
+    flag_on = text_search_enabled()
+    effective_q: str | None = req.q if (req.q and flag_on) else None
+    dialect_name = session.bind.dialect.name if session.bind is not None else "sqlite"
+
     # Cursor decode + sha check (FR-26/27).
     cursor_d: str | None = None
     cursor_p: int | None = None
@@ -174,6 +192,37 @@ def run_search(
         cursor_p = cur.p
 
     where_clauses = _build_where(req, scope_json=scope_json)
+
+    # FR-TS-3 / FR-TS-13 — append the FTS predicate to the WHERE list so the
+    # cost estimator (which calls ``_build_where`` directly) is unaware of
+    # text search, while the executor + count both honour the same predicate.
+    if effective_q is not None:
+        if dialect_name == "postgresql":
+            where_clauses = list(where_clauses) + [
+                text(
+                    "study.search_text @@ websearch_to_tsquery('english', :q_text)"
+                ).bindparams(q_text=effective_q)
+            ]
+        else:
+            # SQLite test fallback — ILIKE across the same fields the tsvector
+            # weights (body_part / kcd_label_*) so unit tests can still exercise
+            # the q wiring end-to-end. Each whitespace-split token must match
+            # to mimic websearch_to_tsquery's AND semantics.
+            from sqlalchemy import or_ as _or
+
+            tokens = [t for t in effective_q.split() if t]
+            for tok in tokens:
+                like = f"%{tok}%"
+                where_clauses = list(where_clauses) + [
+                    _or(
+                        Study.body_part.ilike(like),
+                        Study.kcd_label_en.ilike(like),
+                        Study.kcd_label_ko.ilike(like),
+                        Study.modality.ilike(like),
+                        Study.manufacturer.ilike(like),
+                        Study.model_name.ilike(like),
+                    )
+                ]
 
     # Main page query.
     stmt = select(Study).where(*where_clauses)
@@ -204,11 +253,55 @@ def run_search(
 
     # Stable secondary sort on study_pk so ties are deterministic.
     secondary = desc(Study.study_pk) if sort_dir is desc else asc(Study.study_pk)
-    stmt = stmt.order_by(sort_dir(sort_col), secondary).limit(req.limit + 1)
+
+    # FR-TS-7 — when q is active, ts_rank_cd dominates. The user's existing
+    # sort key drops to secondary so ties at equal rank stay deterministic.
+    if effective_q is not None and dialect_name == "postgresql":
+        rank_expr = text(
+            "ts_rank_cd(study.search_text, websearch_to_tsquery('english', :q_rank)) DESC"
+        ).bindparams(q_rank=effective_q)
+        stmt = stmt.order_by(rank_expr, sort_dir(sort_col), secondary).limit(req.limit + 1)
+    else:
+        stmt = stmt.order_by(sort_dir(sort_col), secondary).limit(req.limit + 1)
 
     rows = list(session.scalars(stmt).all())
     has_more = len(rows) > req.limit
     page_rows = rows[: req.limit]
+
+    # FR-TS-9 — server-rendered ts_headline snippet, only on Postgres + q.
+    # We compute snippets in a separate trivial query keyed by study_pk so
+    # the main keyset stays type-safe (SQLAlchemy ORM scalar load).
+    snippet_by_pk: dict[int, str] = {}
+    if effective_q is not None and dialect_name == "postgresql" and page_rows:
+        pk_list = [r.study_pk for r in page_rows]
+        # ``ts_headline`` operates on plain text; we feed it the same
+        # concatenation the trigram index covers so the highlight surfaces
+        # match what the ranking saw. ``StartSel``/``StopSel`` constrain the
+        # injected HTML to a single tag pair (XSS guarded by
+        # PostgreSQL-native escape of any other markup; portal also passes
+        # the result through DOMPurify before render — FR-TS-9).
+        snippet_sql = text(
+            """
+            SELECT study_pk,
+                   ts_headline(
+                     'english',
+                     coalesce(body_part,'') || ' ' ||
+                       coalesce(kcd_label_en,'') || ' ' ||
+                       coalesce(kcd_label_ko,'') || ' ' ||
+                       coalesce(modality,''),
+                     websearch_to_tsquery('english', :q_hl),
+                     'MaxFragments=1, MaxWords=12, MinWords=3, '
+                     'StartSel=<mark>, StopSel=</mark>'
+                   ) AS snippet
+              FROM study
+             WHERE study_pk = ANY(:pk_list)
+            """
+        ).bindparams(q_hl=effective_q, pk_list=pk_list)
+        try:
+            for row in session.execute(snippet_sql).all():
+                snippet_by_pk[int(row.study_pk)] = row.snippet
+        except Exception:  # pragma: no cover — defensive: never fail the page.
+            snippet_by_pk = {}
 
     items = []
     for r in page_rows:
@@ -247,6 +340,8 @@ def run_search(
                 kcd_code=getattr(r, "kcd_code", None),
                 kcd_label_ko=getattr(r, "kcd_label_ko", None),
                 kcd_label_en=getattr(r, "kcd_label_en", None),
+                # FR-TS-9 — populated only on Postgres when q is active.
+                highlight_snippet=snippet_by_pk.get(r.study_pk),
             )
         )
 
@@ -294,6 +389,19 @@ def run_search(
     hint_str: str | None = None
     if facets_suppressed and want_facets:
         hint_str = "facets suppressed: cohort too large"
+    # FR-TS-10 — scrub q for the audit copy. The router will pick the patterns
+    # off the response (via ``response.__dict__["_text_search_audit"]``) and
+    # forward them into the background ``write_audit`` task. This keeps the
+    # router shielded from importing ``phi_scrub`` directly.
+    phi_patterns: list[str] = []
+    masked_q: str | None = None
+    if effective_q is not None:
+        from radivault_search.audit.phi_scrub import scrub_query as _scrub
+
+        scrub_res = _scrub(effective_q)
+        masked_q = scrub_res.masked
+        phi_patterns = list(scrub_res.patterns)
+
     meta = Meta(
         total_hint=total_count,
         total_count_exact=True,
@@ -303,6 +411,8 @@ def run_search(
         buyer_tier=buyer_tier,
         facets_suppressed=facets_suppressed,
         response_truncated=False,
+        text_search_applied=effective_q is not None,
+        phi_flagged_patterns=phi_patterns,
     )
     response = SearchResponse(
         items=items,
@@ -319,6 +429,12 @@ def run_search(
     )
     # attach cursor_presence for audit
     response.__dict__["_cursor_presence"] = cursor_presence
+    # FR-TS-10 — attach scrub artefacts for the router's background audit task.
+    response.__dict__["_text_search_audit"] = {
+        "raw_query": effective_q,
+        "masked_query": masked_q,
+        "phi_flagged_patterns": phi_patterns,
+    }
 
     return ExecutorResult(
         response=response,

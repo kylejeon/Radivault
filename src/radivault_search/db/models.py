@@ -23,9 +23,11 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -123,6 +125,19 @@ class SearchAudit(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     request_id: Mapped[str] = mapped_column(String, nullable=False)
     cursor_presence: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # text-search-description FR-TS-10 — search-bar query auditing with PHI scrub.
+    # ``raw_query``         — verbatim buyer input, NULL'd by 30-day cron.
+    # ``masked_query``      — PHI-scrubbed copy, retained indefinitely.
+    # ``phi_flagged_patterns`` — pattern names that matched (no raw values).
+    # On Postgres ``phi_flagged_patterns`` is TEXT[]; on SQLite tests it is a
+    # plain Text column (JSON-encoded list when written via the repository
+    # helper). The variant keeps a single ORM mapping that round-trips on both.
+    raw_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    masked_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phi_flagged_patterns: Mapped[list[str] | str | None] = mapped_column(
+        PG_ARRAY(Text).with_variant(Text(), "sqlite"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

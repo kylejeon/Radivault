@@ -35,6 +35,7 @@ from radivault_search.ratelimit.middleware import RateLimitMiddleware, TierLimit
 from radivault_search.preview import preview_router
 from radivault_search.preview.storage import LocalPreviewStore, S3PreviewStore
 from radivault_search.routers import (
+    autocomplete_router,
     facets_router,
     hospitals_router,
     kcd_autocomplete_router,
@@ -184,6 +185,7 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
     app.include_router(facets_router)
     app.include_router(hospitals_router)
     app.include_router(kcd_autocomplete_router)
+    app.include_router(autocomplete_router)
     app.include_router(preview_router)
 
     @app.get("/metrics", include_in_schema=False)

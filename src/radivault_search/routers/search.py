@@ -110,6 +110,14 @@ async def search_studies(
 
     payload = result.response.model_dump(mode="json")
 
+    # text-search-description FR-TS-10 — pull the scrub artefacts the executor
+    # stashed onto the response. The dict shape is {raw_query, masked_query,
+    # phi_flagged_patterns}; all values None when q was not used.
+    ts_audit = getattr(result.response, "__dict__", {}).get(
+        "_text_search_audit",
+        {"raw_query": None, "masked_query": None, "phi_flagged_patterns": []},
+    )
+
     duration_ms = int((time.perf_counter() - start) * 1000)
     SEARCH_DURATION.labels(
         tier=tier,
@@ -154,6 +162,9 @@ async def search_studies(
         latency_ms=duration_ms,
         request_id=request.state.request_id,
         cursor_presence=bool(body.cursor),
+        raw_query=ts_audit.get("raw_query"),
+        masked_query=ts_audit.get("masked_query"),
+        phi_flagged_patterns=ts_audit.get("phi_flagged_patterns") or None,
     )
 
     return JSONResponse(status_code=200, content=payload)

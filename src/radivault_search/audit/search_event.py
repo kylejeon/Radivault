@@ -30,11 +30,18 @@ def write_audit(
     latency_ms: int,
     request_id: str,
     cursor_presence: bool,
+    raw_query: str | None = None,
+    masked_query: str | None = None,
+    phi_flagged_patterns: list[str] | None = None,
 ) -> None:
     """Insert one row into ``search_audit`` in its own session.
 
     Errors are logged but never propagated — the audit writer is best-effort
     and must never fail a successful search response.
+
+    text-search-description FR-TS-10 additions: ``raw_query`` /
+    ``masked_query`` / ``phi_flagged_patterns`` are forwarded to the
+    repository when the buyer used the free-text search bar.
     """
     try:
         with session_factory() as session:
@@ -52,6 +59,9 @@ def write_audit(
                 latency_ms=latency_ms,
                 request_id=request_id,
                 cursor_presence=cursor_presence,
+                raw_query=raw_query,
+                masked_query=masked_query,
+                phi_flagged_patterns=phi_flagged_patterns,
             )
     except Exception:  # pragma: no cover — defensive
         log.exception(
