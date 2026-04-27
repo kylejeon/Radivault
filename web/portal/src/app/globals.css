@@ -239,7 +239,8 @@ html[lang="ko"] body,
      15% so the highlight reads on both white rows and the alternating
      #f8fafc stripe in the dense result table. Pair with font-weight 600 on
      <mark> so the cue does not depend on color alone (color-blind a11y). */
-  --mark-highlight-bg: rgba(13, 148, 136, 0.15);
+  --mark-highlight-bg: #ffeb3b;            /* bright yellow — Google/Wikipedia search standard */
+  --mark-highlight-border: #fbc02d;        /* amber outline for stripe-on-stripe contrast */
 
   /* Layout */
   --rv-sidebar-w: 320px;
@@ -497,9 +498,10 @@ html[lang="ko"] body,
 mark {
   background: var(--mark-highlight-bg);
   color: #020617;
-  font-weight: 600;
-  padding: 0 2px;
-  border-radius: 2px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--mark-highlight-border);
 }
 
 /* Sidebar accordion. */
