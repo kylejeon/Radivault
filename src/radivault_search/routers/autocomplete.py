@@ -42,13 +42,36 @@ router = APIRouter()
 
 
 # Fields scanned for trigram matches. Order is also the badge fallback order.
+#
+# text-search-description Phase 1.5 (FR-TS15-7) — adds study_description +
+# protocol_name. These render with STUDY DESC / PROTOCOL badges in the
+# dropdown (design-spec §11.1). description fields are skipped when the
+# description-extraction feature flag is OFF (no point fetching empties).
 _AUTOCOMPLETE_FIELDS: tuple[str, ...] = (
+    "study_description",
+    "protocol_name",
     "body_part",
     "modality",
     "kcd_label_en",
     "kcd_label_ko",
     "manufacturer",
 )
+
+
+def _description_extraction_enabled() -> bool:
+    raw = os.environ.get("DESCRIPTION_EXTRACTION_ENABLED", "true").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def _autocomplete_fields_for_request() -> tuple[str, ...]:
+    if _description_extraction_enabled():
+        return _AUTOCOMPLETE_FIELDS
+    # Drop description fields when the flag is off so the dropdown stays
+    # backward-compatible with Phase 1.0 contract.
+    return tuple(
+        f for f in _AUTOCOMPLETE_FIELDS
+        if f not in ("study_description", "protocol_name")
+    )
 
 # Trigram word_similarity threshold — recall-first per research §3.2.
 _TRGM_THRESHOLD: float = 0.25
@@ -113,7 +136,7 @@ async def search_autocomplete(
             # We probe each field with the same threshold and merge results,
             # rather than stitching the columns into a single concatenation,
             # so the ``field`` badge stays accurate.
-            for field_name in _AUTOCOMPLETE_FIELDS:
+            for field_name in _autocomplete_fields_for_request():
                 sql = text(
                     f"""
                     SELECT DISTINCT
@@ -153,7 +176,7 @@ async def search_autocomplete(
             from sqlalchemy import func, select
 
             like = f"%{q_clean}%"
-            for field_name in _AUTOCOMPLETE_FIELDS:
+            for field_name in _autocomplete_fields_for_request():
                 col = getattr(Study, field_name, None)
                 if col is None:
                     continue

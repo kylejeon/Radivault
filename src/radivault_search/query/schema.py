@@ -147,6 +147,11 @@ class StudyItem(BaseModel):
     # (e.g. ``BRAIN <mark>MR</mark>``) when ``q`` is supplied. Always ``None``
     # in the facet-only response shape, so the regression contract holds.
     highlight_snippet: str | None = None
+    # text-search-description Phase 1.5 (FR-TS15-6, AC-TS15-3) — scrubbed
+    # description text. NULL when feature flag is off OR the gateway version
+    # is pre-Phase-1.5; "" when scrubbed but all tokens were stripped.
+    study_description: str | None = None
+    protocol_name: str | None = None
 
 
 class FacetValue(BaseModel):

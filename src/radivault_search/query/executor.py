@@ -235,8 +235,13 @@ def run_search(
             tokens = [t for t in effective_q.split() if t]
             for tok in tokens:
                 like = f"%{tok}%"
+                # text-search-description Phase 1.5 (FR-TS15-7) — extend the
+                # SQLite ILIKE fallback to cover the new description fields
+                # so unit tests can exercise the description-match path.
                 where_clauses = list(where_clauses) + [
                     _or(
+                        Study.study_description.ilike(like),
+                        Study.protocol_name.ilike(like),
                         Study.body_part.ilike(like),
                         Study.kcd_label_en.ilike(like),
                         Study.kcd_label_ko.ilike(like),
@@ -307,12 +312,17 @@ def run_search(
         # injected HTML to a single tag pair (XSS guarded by
         # PostgreSQL-native escape of any other markup; portal also passes
         # the result through DOMPurify before render — FR-TS-9).
+        # text-search-description Phase 1.5 (FR-TS15-19) — widen ts_headline
+        # source columns to include study_description / protocol_name so the
+        # <mark> highlight surfaces description hits too.
         snippet_sql = text(
             """
             SELECT study_pk,
                    ts_headline(
                      'english',
-                     coalesce(body_part,'') || ' ' ||
+                     coalesce(study_description,'') || ' ' ||
+                       coalesce(protocol_name,'') || ' ' ||
+                       coalesce(body_part,'') || ' ' ||
                        coalesce(kcd_label_en,'') || ' ' ||
                        coalesce(kcd_label_ko,'') || ' ' ||
                        coalesce(modality,''),
@@ -369,6 +379,9 @@ def run_search(
                 kcd_label_en=getattr(r, "kcd_label_en", None),
                 # FR-TS-9 — populated only on Postgres when q is active.
                 highlight_snippet=snippet_by_pk.get(r.study_pk),
+                # text-search-description Phase 1.5 (FR-TS15-6, AC-TS15-3).
+                study_description=getattr(r, "study_description", None),
+                protocol_name=getattr(r, "protocol_name", None),
             )
         )
 
@@ -552,4 +565,7 @@ def load_study_detail(
         kcd_code=getattr(study, "kcd_code", None),
         kcd_label_ko=getattr(study, "kcd_label_ko", None),
         kcd_label_en=getattr(study, "kcd_label_en", None),
+        # text-search-description Phase 1.5 (FR-TS15-6).
+        study_description=getattr(study, "study_description", None),
+        protocol_name=getattr(study, "protocol_name", None),
     )

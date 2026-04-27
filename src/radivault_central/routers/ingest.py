@@ -99,6 +99,75 @@ def _parse_iso_date(val: str | None):
         return None
 
 
+def _record_quarantine(session, *, study_pk: int, scrub_meta: dict) -> None:
+    """text-search-description Phase 1.5 FR-TS15-10 — append quarantine audit.
+
+    Inserts one row into ``study_phi_quarantine_audit`` with the scrub
+    metadata reported by the gateway. Pure SQL via session.execute so this
+    works on both Postgres (text[] columns) and SQLite (text fallback).
+    """
+    from sqlalchemy import text as _sql_text
+
+    bind = session.get_bind()
+    is_pg = bind.dialect.name == "postgresql" if bind is not None else False
+
+    blacklist = list(scrub_meta.get("blacklist_matched") or [])
+    whitelist = list(scrub_meta.get("whitelist_matched") or [])
+    suspicious = int(scrub_meta.get("suspicious_token_count") or 0)
+    scrub_version = str(scrub_meta.get("scrub_version") or "unknown")
+    before_hash = str(scrub_meta.get("before_hash") or "")
+    after_hash = str(scrub_meta.get("after_hash") or "")
+
+    if is_pg:
+        session.execute(
+            _sql_text(
+                """
+                INSERT INTO study_phi_quarantine_audit
+                  (study_pk, scrub_version, blacklist_matched,
+                   whitelist_matched, suspicious_token_count,
+                   before_hash, after_hash)
+                VALUES
+                  (:study_pk, :sv, CAST(:bl AS text[]), CAST(:wl AS text[]),
+                   :stc, :bh, :ah)
+                """
+            ),
+            {
+                "study_pk": study_pk,
+                "sv": scrub_version,
+                "bl": "{" + ",".join(f'"{b}"' for b in blacklist) + "}",
+                "wl": "{" + ",".join(f'"{w}"' for w in whitelist) + "}",
+                "stc": suspicious,
+                "bh": before_hash,
+                "ah": after_hash,
+            },
+        )
+    else:
+        # SQLite test fallback — TEXT columns, JSON-encoded arrays.
+        import json as _json
+
+        session.execute(
+            _sql_text(
+                """
+                INSERT INTO study_phi_quarantine_audit
+                  (study_pk, scrub_version, blacklist_matched,
+                   whitelist_matched, suspicious_token_count,
+                   before_hash, after_hash)
+                VALUES
+                  (:study_pk, :sv, :bl, :wl, :stc, :bh, :ah)
+                """
+            ),
+            {
+                "study_pk": study_pk,
+                "sv": scrub_version,
+                "bl": _json.dumps(blacklist),
+                "wl": _json.dumps(whitelist),
+                "stc": suspicious,
+                "bh": before_hash,
+                "ah": after_hash,
+            },
+        )
+
+
 def _peek_pseudo_study_uid(raw_manifest: bytes | None) -> str | None:
     """Best-effort pseudo_study_uid extraction (already PHI-safe by construction)."""
     if not raw_manifest:
@@ -257,6 +326,13 @@ async def post_ingest(request: Request) -> dict:
     v2_study_date = _parse_iso_date(getattr(manifest, "study_date_shifted", None))
     v2_thumbnail = getattr(manifest, "thumbnail", None)
     v2_series = list(getattr(manifest, "series", []) or [])
+    # text-search-description Phase 1.5 (FR-TS15-6) — manifest v2.1 fields.
+    # All Optional; absent on pre-Phase-1.5 manifest. Empty string is valid
+    # ("scrubbed but all tokens stripped") and is preserved verbatim.
+    v21_study_description = getattr(manifest, "study_description", None)
+    v21_protocol_name = getattr(manifest, "protocol_name", None)
+    v21_scrub_meta = getattr(manifest, "description_scrub_metadata", None) or {}
+    v21_quarantine = bool(v21_scrub_meta.get("quarantine"))
     # Stable per-study patient pseudo key: hash(pseudo_study_uid). We don't
     # have a real cross-study pseudo_patient_id over the wire (v0.1.5 work),
     # so per-study keys are good enough to populate the patient_pseudo row
@@ -350,6 +426,8 @@ async def post_ingest(request: Request) -> dict:
                         "body_part": body_part,
                         "series_number": s_idx + 1,
                         "instances": instances,
+                        # text-search-description Phase 1.5 — per-series desc.
+                        "series_description": getattr(s, "series_description", None),
                     }
                 )
             # Any leftover files (manifest series counts misaligned) → trailing series.
@@ -403,7 +481,14 @@ async def post_ingest(request: Request) -> dict:
         n_series = (
             int(getattr(manifest, "n_series", None) or len(series_entries) or 1)
         )
-        insert_study_full(
+        # text-search-description Phase 1.5 (FR-TS15-10) — quarantine wins over
+        # other preview_status values: a study with PHI-suspect description must
+        # be hidden from buyer search regardless of thumbnail status.
+        effective_preview_status = preview_status
+        if v21_quarantine:
+            effective_preview_status = "phi_detected"
+
+        created_study = insert_study_full(
             session,
             hospital=hospital,
             pseudo_study_uid=manifest.pseudo_study_uid,
@@ -422,7 +507,7 @@ async def post_ingest(request: Request) -> dict:
             patient_sex=v2_sex,
             patient_age_bucket=v2_age_bucket,
             patient_age=v2_patient_age,
-            preview_status=preview_status,
+            preview_status=effective_preview_status,
             preview_thumbnail_key=preview_thumbnail_key,
             raw_dicom_tags={
                 "manifest_version": manifest.manifest_version,
@@ -433,7 +518,25 @@ async def post_ingest(request: Request) -> dict:
                     else None
                 ),
             },
+            study_description=v21_study_description,
+            protocol_name=v21_protocol_name,
         )
+
+        # FR-TS15-10 — record quarantine audit row when scrub flagged the study.
+        if v21_quarantine:
+            try:
+                _record_quarantine(
+                    session,
+                    study_pk=created_study.study_pk,
+                    scrub_meta=v21_scrub_meta,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Audit failure must NOT block ingest; log + continue.
+                log.warning(
+                    "phi_quarantine_audit_insert_fail study_pk=%s err=%s",
+                    created_study.study_pk,
+                    str(exc)[:200],
+                )
         duration_ms = int((time.time() - started) * 1000)
         record_ingest_event(
             session,

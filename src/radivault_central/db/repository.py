@@ -85,6 +85,11 @@ def insert_study_full(
     preview_status: str | None = None,
     preview_thumbnail_key: str | None = None,
     raw_dicom_tags: dict | None = None,
+    # text-search-description Phase 1.5 (FR-TS15-6) — additive description
+    # fields. Both columns are NULL-allowed; "" semantics = "scrubbed but
+    # all tokens stripped" so search executor coalesces it correctly.
+    study_description: str | None = None,
+    protocol_name: str | None = None,
 ) -> Study:
     """Create or upsert Study + Series + Instance rows inside the caller's transaction.
 
@@ -141,6 +146,8 @@ def insert_study_full(
         kcd_code=kcd_code,
         kcd_label_ko=kcd_label_ko,
         kcd_label_en=kcd_label_en,
+        study_description=study_description,
+        protocol_name=protocol_name,
     )
     if preview_status is not None:
         study.preview_status = preview_status
@@ -157,6 +164,8 @@ def insert_study_full(
             body_part=s.get("body_part"),
             series_number=s.get("series_number"),
             n_instances=len(s["instances"]),
+            # text-search-description Phase 1.5 — per-series scrubbed text.
+            series_description=s.get("series_description"),
         )
         session.add(series_row)
         session.flush()
