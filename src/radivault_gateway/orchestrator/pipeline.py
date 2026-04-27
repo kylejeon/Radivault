@@ -99,6 +99,26 @@ class Pipeline:
         self._pacs_id = pacs_id
         self._hospital_id = hospital_id
 
+    def _effective_hospital_id(self) -> str:
+        """Return the hospital_id that should appear on outbound manifests.
+
+        FR-MPS-2 manifest stamping fix — when the Pipeline is constructed
+        per-endpoint by :func:`run_multi_pacs_once`, ``self._hospital_id``
+        carries the resolved per-PACS scope (``endpoint.hospital_id`` with
+        ``agent.hospital_id`` fallback). When constructed by the legacy
+        single-PACS daemon path or by older unit tests that omit the
+        ``hospital_id`` kwarg, fall back to ``cfg.agent.hospital_id`` so
+        the manifest still stamps a valid scope (zero regression on
+        single-PACS configs).
+
+        Without this, ``build_manifest`` was reading ``cfg.agent.hospital_id``
+        directly and stamping the agent default on every PACS — Central
+        rejected the second hospital's uploads with ``ERR_AUTH_MISMATCH``
+        because the bearer token's hospital scope (per-PACS) disagreed
+        with the manifest field (always agent default).
+        """
+        return self._hospital_id or self._cfg.agent.hospital_id
+
     def _emit_audit(
         self,
         event: str,
@@ -540,7 +560,10 @@ class Pipeline:
             # Upload
             manifest = self._upload.build_manifest(
                 gateway_id=self._cfg.agent.gateway_id,
-                hospital_id=self._cfg.agent.hospital_id,
+                # FR-MPS-2 — per-PACS hospital scope, falling back to
+                # ``cfg.agent.hospital_id`` for legacy single-PACS callers.
+                # See ``_effective_hospital_id`` for the rationale.
+                hospital_id=self._effective_hospital_id(),
                 pseudo_study_uid=pseudo_uid,
                 modalities=study.modalities_in_study,
                 ruleset_version=self._cfg.deid.ruleset_version,
@@ -1110,7 +1133,11 @@ class Pipeline:
 
         manifest = self._upload.build_metadata_only_manifest(
             gateway_id=self._cfg.agent.gateway_id,
-            hospital_id=self._cfg.agent.hospital_id,
+            # FR-MPS-2 — same per-PACS scope as the full-payload Flow B
+            # manifest above; metadata-only Flow A would otherwise stamp
+            # the agent default and trigger ERR_AUTH_MISMATCH for any
+            # secondary hospital.
+            hospital_id=self._effective_hospital_id(),
             pseudo_study_uid=pseudo_uid,
             modalities=modalities,
             ruleset_version=self._cfg.deid.ruleset_version,
