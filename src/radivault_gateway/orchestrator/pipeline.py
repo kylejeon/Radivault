@@ -79,6 +79,8 @@ class Pipeline:
         pacs: DicomWebPacsClient,
         upload: UploadClient,
         pixel: PixelDeidEngine | None = None,
+        pacs_id: str | None = None,
+        hospital_id: str | None = None,
     ) -> None:
         self._cfg = config
         self._db = state_db
@@ -89,6 +91,42 @@ class Pipeline:
         self._upload = upload
         # v0.2 de-id-pixel: opt-in, None when cfg.deid.pixel.enabled=false.
         self._pixel = pixel
+        # FR-MPS-3 audit pacs_id meta: when constructed for a specific
+        # endpoint these tags every audit event. ``None`` means the legacy
+        # single-PACS Pipeline (backward compat — events still emit, just
+        # without the pacs_id field — so existing audit logs continue to
+        # parse and verify_chain stays PASS).
+        self._pacs_id = pacs_id
+        self._hospital_id = hospital_id
+
+    def _emit_audit(
+        self,
+        event: str,
+        *,
+        target: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
+        ts: str | None = None,
+    ) -> Any:
+        """Append an audit event, injecting ``pacs_id`` / ``hospital_id`` meta.
+
+        FR-MPS-3 / K-MPS-4 — single unified chain with pacs_id meta on every
+        PACS-scoped event. Resolution order:
+
+        - ``meta`` already supplies ``pacs_id`` → preserved (caller wins).
+        - else ``self._pacs_id`` is set → injected.
+        - else (legacy single-PACS Pipeline constructed without pacs_id)
+          → no pacs_id field is added, preserving the existing wire shape.
+
+        Same logic for ``hospital_id``. The chain hash naturally covers the
+        meta dict's canonical JSON, so verify.py PASS is preserved as long
+        as the writer and reader agree on the dict contents at flush time.
+        """
+        merged = dict(meta or {})
+        if self._pacs_id is not None:
+            merged.setdefault("pacs_id", self._pacs_id)
+        if self._hospital_id is not None:
+            merged.setdefault("hospital_id", self._hospital_id)
+        return self._audit.append(event, target=target, meta=merged, ts=ts)
 
     def run_once(
         self,
@@ -117,7 +155,7 @@ class Pipeline:
                 "staging backpressure active; skipping fetch",
                 extra={"usage_pct": round(self._staging.disk_usage_pct(), 1)},
             )
-            self._audit.append(
+            self._emit_audit(
                 "staging.backpressure",
                 meta={"usage_pct": round(self._staging.disk_usage_pct(), 1)},
             )
@@ -129,7 +167,7 @@ class Pipeline:
         if since is None:
             since = today - timedelta(days=self._cfg.pacs.query.lookback_days)
 
-        self._audit.append(
+        self._emit_audit(
             "pacs.query",
             meta={
                 "since": since.isoformat(),
@@ -142,7 +180,7 @@ class Pipeline:
                 since, until, modalities=self._cfg.pacs.query.modalities
             )
         except PacsError as exc:
-            self._audit.append(
+            self._emit_audit(
                 "pacs.query.failed",
                 meta={"error": str(exc), "status_code": exc.status_code},
             )
@@ -202,7 +240,7 @@ class Pipeline:
         # (Flow B) because both transitions write ``original_study_uid_hash``
         # on the UPLOADED mark_state.
         if self._db.is_study_uploaded(original_uid):
-            self._audit.append(
+            self._emit_audit(
                 "sync.skipped",
                 target={"original_study_uid_hash": _short_hash(original_uid)},
                 meta={"reason": "already_uploaded"},
@@ -235,7 +273,7 @@ class Pipeline:
                 # fast-path short-circuited above.
                 fetch = self._pacs.fetch_study(original_uid, fetch_dir)
             except PacsError as exc:
-                self._audit.append(
+                self._emit_audit(
                     "pacs.fetch.failed",
                     meta={"error": str(exc), "status_code": exc.status_code},
                     target={"original_study_uid_hash": _short_hash(original_uid)},
@@ -248,7 +286,7 @@ class Pipeline:
                     duration_ms=_elapsed_ms(started),
                 )
             fetch_ms = _elapsed_ms(fetch_started)
-            self._audit.append(
+            self._emit_audit(
                 "pacs.fetch.completed",
                 target={"original_study_uid_hash": _short_hash(original_uid)},
                 meta={
@@ -260,7 +298,7 @@ class Pipeline:
 
             # De-ID
             staging_dir = Path(tempfile.mkdtemp(prefix="radivault_deid_"))
-            self._audit.append(
+            self._emit_audit(
                 "deid.started",
                 target={"original_study_uid_hash": _short_hash(original_uid)},
                 meta={"n_instances": len(fetch.instance_paths)},
@@ -287,7 +325,7 @@ class Pipeline:
                     reason=f"burned_in_annotation:{exc.reason}",
                     payload_path=str(quarantine_path),
                 )
-                self._audit.append(
+                self._emit_audit(
                     "quarantine.flagged",
                     meta={
                         "reason": exc.reason,
@@ -312,7 +350,7 @@ class Pipeline:
                     fetch_ms=fetch_ms,
                 )
             except Exception as exc:
-                self._audit.append(
+                self._emit_audit(
                     "deid.failed",
                     meta={"error": str(exc)},
                 )
@@ -328,7 +366,7 @@ class Pipeline:
                 )
             deid_ms = _elapsed_ms(deid_started)
             pseudo_uid = deid_result.pseudo_study_uid
-            self._audit.append(
+            self._emit_audit(
                 "deid.completed",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={
@@ -346,7 +384,7 @@ class Pipeline:
                 # the quarantine directory (not staging) so operators can review
                 # what slipped past the Annex E rules without deleting evidence.
                 quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
-                self._audit.append(
+                self._emit_audit(
                     "deid.reverify_failed",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={
@@ -408,7 +446,7 @@ class Pipeline:
                 shutil.move(str(path), str(target))
             shutil.rmtree(staging_dir, ignore_errors=True)
             staged_files = sorted(final_staging.rglob("*.dcm"))
-            self._audit.append(
+            self._emit_audit(
                 "staging.written",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={"n_files": len(staged_files)},
@@ -423,7 +461,7 @@ class Pipeline:
             self._db.mark_state(pseudo_uid, StudyState.DEIDED)
 
             if dry_run:
-                self._audit.append(
+                self._emit_audit(
                     "upload.skipped",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={"reason": "dry_run"},
@@ -493,7 +531,7 @@ class Pipeline:
                             "error": str(exc)[:200],
                         },
                     )
-                    self._audit.append(
+                    self._emit_audit(
                         "preview.failed",
                         target={"pseudo_study_uid": pseudo_uid},
                         meta={"error": str(exc)[:200]},
@@ -517,7 +555,7 @@ class Pipeline:
             # passes validation and is read by ``_persist_preview_batch``.
             if preview_block is not None:
                 manifest["preview"] = preview_block
-            self._audit.append(
+            self._emit_audit(
                 "upload.started",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={"n_files": len(staged_files), "bytes": manifest["total_bytes"]},
@@ -527,7 +565,7 @@ class Pipeline:
             try:
                 result = self._upload.upload_study(manifest, staged_files)
             except UploadError as exc:
-                self._audit.append(
+                self._emit_audit(
                     "upload.failed",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={"error": str(exc), "status_code": exc.status_code},
@@ -547,7 +585,7 @@ class Pipeline:
                     deid_ms=deid_ms,
                 )
             upload_ms = _elapsed_ms(upload_started)
-            self._audit.append(
+            self._emit_audit(
                 "upload.completed",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={
@@ -574,13 +612,13 @@ class Pipeline:
 
             # Cleanup staging (FR-15)
             if self._staging.cleanup_study(pseudo_uid):
-                self._audit.append(
+                self._emit_audit(
                     "staging.cleanup",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={},
                 )
             else:
-                self._audit.append(
+                self._emit_audit(
                     "staging.cleanup_failed",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={},
@@ -634,7 +672,7 @@ class Pipeline:
             # can cross-reference the pixel_audit_event row via ``audit_seq``
             # (AC-21). ``AuditLogger.append`` returns an ``AuditRecord`` with
             # the assigned seq.
-            record = self._audit.append(
+            record = self._emit_audit(
                 "pixel.quarantined",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={
@@ -683,7 +721,7 @@ class Pipeline:
             log.exception("pixel engine failed")
             if self._cfg.deid.pixel.quarantine_on_failure:
                 quarantine_path = self._staging.move_to_quarantine(staging_dir, pseudo_uid)
-                record = self._audit.append(
+                record = self._emit_audit(
                     "pixel.quarantined",
                     target={"pseudo_study_uid": pseudo_uid},
                     meta={
@@ -721,7 +759,7 @@ class Pipeline:
             raise
 
         pixel_duration_ms = _elapsed_ms(pixel_started)
-        completed_record = self._audit.append(
+        completed_record = self._emit_audit(
             "pixel.completed",
             target={"pseudo_study_uid": pseudo_uid},
             meta={
@@ -772,7 +810,7 @@ class Pipeline:
         # the WARN app log — which is not tamper-evident and not visible to
         # ``audit verify``.
         if result.fallback_used:
-            fallback_record = self._audit.append(
+            fallback_record = self._emit_audit(
                 "pixel.deface.fallback_used",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={
@@ -913,7 +951,7 @@ class Pipeline:
                 "skipped_reason": batch.reason if batch.skipped else None,
             },
         )
-        self._audit.append(
+        self._emit_audit(
             "preview.completed" if not batch.skipped else "preview.skipped",
             target={"pseudo_study_uid": pseudo_study_uid},
             meta={
@@ -956,7 +994,7 @@ class Pipeline:
             pseudo_uid = self._deid.pseudo_uid(original_uid, "study")
         except Exception as exc:  # pragma: no cover — salt / db failure
             log.exception("flow_a: pseudo uid derivation failed")
-            self._audit.append(
+            self._emit_audit(
                 "pacs.fetch.failed",
                 meta={"error": str(exc), "mode": "metadata_only"},
                 target={"original_study_uid_hash": _short_hash(original_uid)},
@@ -974,7 +1012,7 @@ class Pipeline:
         try:
             summary = self._pacs.fetch_study_qido_summary(original_uid)
         except PacsError as exc:
-            self._audit.append(
+            self._emit_audit(
                 "pacs.fetch.failed",
                 meta={
                     "error": str(exc),
@@ -991,7 +1029,7 @@ class Pipeline:
                 duration_ms=_elapsed_ms(started),
             )
         fetch_ms = summary.duration_ms
-        self._audit.append(
+        self._emit_audit(
             "pacs.fetch.completed",
             target={"original_study_uid_hash": _short_hash(original_uid)},
             meta={
@@ -1018,7 +1056,7 @@ class Pipeline:
         try:
             method_codes = resolve_flow_a_method_codes(self._cfg.deid.ruleset_version)
         except ValueError as exc:
-            self._audit.append(
+            self._emit_audit(
                 "deid.failed",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={"error": str(exc), "mode": "metadata_only"},
@@ -1045,7 +1083,7 @@ class Pipeline:
             n_bytes=0,
         )
         self._db.mark_state(pseudo_uid, StudyState.DEIDED)
-        self._audit.append(
+        self._emit_audit(
             "staging.skipped",
             target={"pseudo_study_uid": pseudo_uid},
             meta={
@@ -1056,7 +1094,7 @@ class Pipeline:
         )
 
         if dry_run:
-            self._audit.append(
+            self._emit_audit(
                 "upload.skipped",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={"reason": "dry_run", "mode": "metadata_only"},
@@ -1081,7 +1119,7 @@ class Pipeline:
             n_instances=summary.n_instances,
             total_bytes=0,
         )
-        self._audit.append(
+        self._emit_audit(
             "upload.started",
             target={"pseudo_study_uid": pseudo_uid},
             meta={
@@ -1096,7 +1134,7 @@ class Pipeline:
         try:
             result = self._upload.upload_study_metadata_only(manifest)
         except UploadError as exc:
-            self._audit.append(
+            self._emit_audit(
                 "upload.failed",
                 target={"pseudo_study_uid": pseudo_uid},
                 meta={
@@ -1119,7 +1157,7 @@ class Pipeline:
                 fetch_ms=fetch_ms,
             )
         upload_ms = _elapsed_ms(upload_started)
-        self._audit.append(
+        self._emit_audit(
             "upload.completed",
             target={"pseudo_study_uid": pseudo_uid},
             meta={
