@@ -91,9 +91,11 @@ export const V3_COLUMN_DEFS: ColumnDef[] = [
   },
 ];
 
-/** Default visible set = every "always" + every untagged toggleable column. */
+/** Default visible set = every "always" + every untagged toggleable column,
+ *  minus 'uid' (Kyle: pseudo UID is meaningless to buyers — keep it
+ *  available via ColumnToggle for power users / debugging). */
 export const V3_DEFAULT_VISIBLE: string[] = V3_COLUMN_DEFS
-  .filter((c) => c.hint !== "v0.1.5" && c.hint !== "v0.2")
+  .filter((c) => c.hint !== "v0.1.5" && c.hint !== "v0.2" && c.key !== "uid")
   .map((c) => c.key);
 
 export function ColumnToggle({

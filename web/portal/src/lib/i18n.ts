@@ -287,10 +287,10 @@ const en = {
     // text-search-description Phase 1.0 — 11 keys for the search bar surface.
     searchBar: {
       placeholder:
-        "Search by body part, modality, KCD code, or description... (e.g. 'MR brain', 'knee scanogram', 'I20.9')",
+        "Search by body part, modality, ICD-10 code, or description... (e.g. 'MR brain', 'knee scanogram', 'I20.9')",
       placeholderShort: "Search studies",
       ariaLabel:
-        "Search studies by body part, modality, KCD code, or description",
+        "Search studies by body part, modality, ICD-10 code, or description",
       clearAria: "Clear search",
       submitButton: "Search",
       noSuggestions: "No suggestions",

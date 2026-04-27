@@ -121,17 +121,20 @@ const TRACK_BY_COL: Record<string, string> = {
   examdate: "90px",
   modality: "72px",
   bodypart: "96px",
-  kcd: "minmax(140px, 1fr)",
-  sex: "32px",
-  age: "40px",
-  mfg: "96px",
-  model: "110px",
-  series: "72px",
-  size: "64px",
-  uid: "56px",
+  // KCD column — wider min so "ICD-10 Z00.0 Generic..." doesn't ellipsis
+  // immediately, and fr factor so it absorbs leftover horizontal space.
+  kcd: "minmax(200px, 1.6fr)",
+  sex: "36px",
+  age: "44px",
+  mfg: "110px",
+  model: "120px",
+  series: "76px",
+  size: "72px",
+  uid: "60px",
   // text-search-description Phase 1.5 (design-spec §8.1) — DESCRIPTION column
-  // sits between size + uid, max 320px / min 200px ellipsis.
-  description: "minmax(200px, 320px)",
+  // promoted to fr so it co-absorbs slack with KCD, eliminating the right-side
+  // gap Kyle flagged on 1700px monitors.
+  description: "minmax(200px, 1.4fr)",
   // trailing action column — width 64px
 };
 
@@ -250,7 +253,7 @@ export function ResultTable({
         {isCol("examdate") && header("examdate", "촬영일", "Exam Date")}
         {isCol("modality") && header("modality", "모달리티", "Modality")}
         {isCol("bodypart") && header("bodypart", "부위", "BodyPart")}
-        {isCol("kcd") && header("kcd", "KCD", "KCD")}
+        {isCol("kcd") && header("kcd", "KCD-8", "ICD-10")}
         {isCol("sex") && staticHead("성별", "Sex")}
         {isCol("age") && header("age", "나이", "Age")}
         {isCol("mfg") && header("mfg", "제조사", "Manufacturer")}
