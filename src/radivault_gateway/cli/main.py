@@ -426,6 +426,26 @@ def _print_diff(ds_orig: object, ds_after: object) -> None:
         "메타만 업로드(픽셀 제외). Flow A 모드."
     ),
 )
+@click.option(
+    "--pacs",
+    "pacs_filter",
+    type=str,
+    default=None,
+    help=(
+        "Run only the named PACS endpoint id (multi-PACS sync). "
+        "/ 특정 PACS 만 실행 (FR-MPS-5)."
+    ),
+)
+@click.option(
+    "--list-pacs",
+    "list_pacs",
+    is_flag=True,
+    default=False,
+    help=(
+        "List configured PACS endpoints and exit (no sync). "
+        "/ 등록된 PACS 목록만 출력하고 종료 (FR-MPS-5)."
+    ),
+)
 @click.pass_context
 def sync_once(
     ctx: click.Context,
@@ -434,37 +454,111 @@ def sync_once(
     dry_run: bool,
     limit: int | None,
     metadata_only: bool,
+    pacs_filter: str | None,
+    list_pacs: bool,
 ) -> None:
     cfg = _load_or_exit(ctx.obj["config_path"])
     configure_logging(
         level=ctx.obj.get("log_level") or cfg.logging.level,
         json_output=cfg.logging.json_output,
     )
-    pipeline = _build_pipeline(cfg)
-    summary = pipeline.run_once(
-        since=since.date() if since else None,
-        until=until.date() if until else None,
-        dry_run=dry_run,
-        limit=limit,
-        metadata_only=metadata_only,
-    )
-    for i, outcome in enumerate(summary.outcomes, 1):
-        pseudo = outcome.pseudo_study_uid or "?"
-        # gateway-sync-skip-uploaded: surface the skip reason so operators can
-        # distinguish a true-UPLOADED cycle (first-time ingest) from a skipped
-        # one (already uploaded, fetch/de-id short-circuited).
-        state_label = outcome.state.value.upper()
-        if outcome.reason == "already_uploaded":
-            state_label = "SKIPPED (already_uploaded)"
+
+    # FR-MPS-5: --list-pacs prints the endpoint table and exits without
+    # touching PACS / central. Useful for operators verifying config
+    # before triggering a sync.
+    if list_pacs:
         click.echo(
-            f"[{i}/{summary.total}] {pseudo}  fetch {outcome.fetch_ms}ms  "
-            f"deid {outcome.deid_ms}ms  upload {outcome.upload_ms}ms  {state_label}"
+            f"{'PACS_ID':<14}{'HOSPITAL':<14}{'PRIORITY':<10}"
+            f"{'ENABLED':<10}{'BASE_URL'}"
         )
-    click.echo(
-        f"Summary  uploaded={summary.uploaded}  skipped={summary.skipped}  "
-        f"quarantined={summary.quarantined}  failed={summary.failed}"
+        for endpoint in cfg.pacs_endpoints:
+            hosp = cfg.hospital_id_for(endpoint)
+            click.echo(
+                f"{endpoint.id:<14}{hosp:<14}{endpoint.priority:<10}"
+                f"{'yes' if endpoint.enabled else 'no':<10}{endpoint.base_url}"
+            )
+        sys.exit(0)
+
+    # FR-MPS-2: route through the multi-PACS orchestrator. When the config
+    # is single-PACS (legacy dict shape) the orchestrator iterates a
+    # single-element list — bit-equivalent to the previous single-PACS
+    # path with pacs_id=<endpoint id> tags on every audit event.
+    from radivault_gateway.orchestrator import run_multi_pacs_once
+
+    state_db, audit_logger, staging, deid, pixel_engine = _build_shared_components(
+        cfg
     )
-    if summary.failed:
+    try:
+        summary = run_multi_pacs_once(
+            cfg,
+            state_db=state_db,
+            audit_logger=audit_logger,
+            staging=staging,
+            deid=deid,
+            pixel=pixel_engine,
+            pacs_filter=pacs_filter,
+            since=since.date() if since else None,
+            until=until.date() if until else None,
+            dry_run=dry_run,
+            limit=limit,
+            metadata_only=metadata_only,
+        )
+    except ValueError as exc:
+        # Unknown --pacs id, no enabled endpoints, etc.
+        click.echo(f"[ERR_MPS_002] {exc}", err=True)
+        sys.exit(64)
+
+    # Per-PACS run table.
+    total_uploaded = 0
+    total_skipped = 0
+    total_quarantined = 0
+    total_failed_studies = 0
+    for run in summary.runs:
+        if run.ok and run.summary is not None:
+            rs = run.summary
+            total_uploaded += rs.uploaded
+            total_skipped += rs.skipped
+            total_quarantined += rs.quarantined
+            total_failed_studies += rs.failed
+            click.echo(
+                f"[{run.pacs_id}] hospital={run.hospital_id}  "
+                f"uploaded={rs.uploaded}  skipped={rs.skipped}  "
+                f"quarantined={rs.quarantined}  failed={rs.failed}"
+            )
+            for i, outcome in enumerate(rs.outcomes, 1):
+                pseudo = outcome.pseudo_study_uid or "?"
+                state_label = outcome.state.value.upper()
+                if outcome.reason == "already_uploaded":
+                    state_label = "SKIPPED (already_uploaded)"
+                click.echo(
+                    f"  [{run.pacs_id}][{i}/{rs.total}] {pseudo}  "
+                    f"fetch {outcome.fetch_ms}ms  deid {outcome.deid_ms}ms  "
+                    f"upload {outcome.upload_ms}ms  {state_label}"
+                )
+        else:
+            click.echo(
+                f"[{run.pacs_id}] hospital={run.hospital_id}  FAILED: "
+                f"{run.error or 'unknown error'}"
+            )
+
+    click.echo(
+        f"Run summary  pacs_ok={summary.successes}/{len(summary.runs)}  "
+        f"uploaded={total_uploaded}  skipped={total_skipped}  "
+        f"quarantined={total_quarantined}  failed={total_failed_studies}"
+    )
+
+    # Exit code mapping (FR-MPS-2):
+    #   0 — every endpoint completed without orchestrator-level failure.
+    #       Per-study failures inside an endpoint are surfaced via the
+    #       Run summary line but follow the legacy exit=1 convention if
+    #       sufficiently severe (preserves existing demo CI scripts).
+    #   1 — single-endpoint legacy semantics: pipeline-level study
+    #       failures occurred (matches the previous sync-once contract).
+    #   2 — at least one endpoint failed at the orchestrator level
+    #       (network down, auth fail, no token, etc.).
+    if summary.exit_code() == 2:
+        sys.exit(2)
+    if total_failed_studies:
         sys.exit(1)
     sys.exit(0)
 
@@ -824,14 +918,20 @@ def _render_pixel_status(pixel_data: dict) -> None:
     )
 
 
-def _build_pipeline(cfg: GatewayConfig):
+def _build_shared_components(cfg: GatewayConfig):
+    """Build state DB / audit / staging / deid / pixel shared by all
+    endpoints in a multi-PACS sync (FR-MPS-2).
+
+    Returns a 5-tuple ``(state_db, audit_logger, staging, deid, pixel)``.
+    These are gateway-scoped (not PACS-scoped) so the multi-PACS
+    orchestrator constructs them once and passes the same instances into
+    each per-endpoint Pipeline. State DB dedup, audit chain, and staging
+    quotas continue to work as a single shared resource per the dev-spec.
+    """
     from radivault_gateway.deid import DeidEngine
     from radivault_gateway.deid.pixel import build_pixel_deid_engine
-    from radivault_gateway.orchestrator import Pipeline
-    from radivault_gateway.pacs import DicomWebPacsClient
     from radivault_gateway.staging import StagingManager
     from radivault_gateway.state import StateDB
-    from radivault_gateway.upload import UploadClient
 
     db = StateDB(cfg.state.db_path)
     db.set_agent_identity(
@@ -858,21 +958,6 @@ def _build_pipeline(cfg: GatewayConfig):
         pixel_enabled=cfg.deid.pixel.enabled,
         pixel_ocr_modalities=cfg.deid.pixel.ocr.modality_allowlist,
     )
-    pacs = DicomWebPacsClient(
-        cfg.pacs.base_url,
-        auth_type=cfg.pacs.auth.type,
-        token=cfg.pacs.auth.token,
-        username=cfg.pacs.auth.username,
-        password=cfg.pacs.auth.password,
-        ca_bundle=cfg.pacs.ca_bundle,
-    )
-    upload = UploadClient(
-        cfg.central.base_url,
-        upload_token=cfg.central.upload_token,
-        timeout_seconds=cfg.central.upload_timeout_seconds,
-        max_retries=cfg.central.max_upload_retries,
-        allow_insecure=cfg.central.allow_insecure,
-    )
     try:
         pixel_engine = build_pixel_deid_engine(cfg.deid.pixel)
     except Exception as exc:
@@ -888,6 +973,49 @@ def _build_pipeline(cfg: GatewayConfig):
             click.echo(format_cli_error(exc.code, error=exc.message), err=True)
             sys.exit(64)
         raise
+    return db, audit_logger, staging, deid, pixel_engine
+
+
+def _build_pipeline(cfg: GatewayConfig):
+    """Build the legacy single-PACS Pipeline used by ``start`` (daemon).
+
+    Multi-PACS daemon mode is v0.2 (dev-spec §3.2 + K-MPS-7); for D-13 the
+    daemon iterates one PACS — specifically ``cfg.pacs`` (first endpoint
+    by priority). The CLI ``start`` command continues to call this helper.
+    """
+    from radivault_gateway.orchestrator import Pipeline
+    from radivault_gateway.pacs import DicomWebPacsClient
+    from radivault_gateway.upload import UploadClient
+
+    db, audit_logger, staging, deid, pixel_engine = _build_shared_components(cfg)
+
+    primary = cfg.pacs
+    hospital_id = cfg.hospital_id_for(primary)
+    try:
+        upload_token = cfg.central.token_for_hospital(hospital_id)
+    except KeyError as exc:
+        click.echo(
+            f"[ERR_MPS_001] no central upload token for hospital "
+            f"'{hospital_id}': {exc}",
+            err=True,
+        )
+        sys.exit(64)
+
+    pacs = DicomWebPacsClient(
+        primary.base_url,
+        auth_type=primary.auth.type,
+        token=primary.auth.token,
+        username=primary.auth.username,
+        password=primary.auth.password,
+        ca_bundle=primary.ca_bundle,
+    )
+    upload = UploadClient(
+        cfg.central.base_url,
+        upload_token=upload_token,
+        timeout_seconds=cfg.central.upload_timeout_seconds,
+        max_retries=cfg.central.max_upload_retries,
+        allow_insecure=cfg.central.allow_insecure,
+    )
     return Pipeline(
         cfg,
         state_db=db,
@@ -897,6 +1025,12 @@ def _build_pipeline(cfg: GatewayConfig):
         pacs=pacs,
         upload=upload,
         pixel=pixel_engine,
+        # FR-MPS-3 — even the legacy daemon path tags audit events with
+        # the primary endpoint id when the config is in multi-PACS shape.
+        # In the single-PACS legacy shape pacs.id defaults to "default"
+        # and the audit chain remains structurally compatible.
+        pacs_id=primary.id,
+        hospital_id=hospital_id,
     )
 
 

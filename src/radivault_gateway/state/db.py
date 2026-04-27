@@ -184,6 +184,22 @@ class StateDB:
                 "CREATE INDEX IF NOT EXISTS idx_study_job_original_hash "
                 "ON study_job(original_study_uid_hash)"
             )
+            # FR-MPS-9 — multi-PACS provenance tracking. Adds NULL-allowed
+            # ``pacs_id`` to ``uid_map`` so legacy rows (single-PACS,
+            # pre-MPS) stay valid while new ingests record the source
+            # endpoint id. Migration is idempotent: re-opens of the DB
+            # are no-ops once the column exists. Backfill is intentionally
+            # skipped — old rows were ingested before the multi-PACS world
+            # existed, so attributing them after the fact would be a lie.
+            uid_map_cols = {
+                row["name"]
+                for row in self._conn.execute("PRAGMA table_info('uid_map')").fetchall()
+            }
+            if "pacs_id" not in uid_map_cols:
+                self._conn.execute("ALTER TABLE uid_map ADD COLUMN pacs_id TEXT")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_uid_map_pacs ON uid_map(pacs_id)"
+            )
 
     def close(self) -> None:
         with self._lock:
@@ -221,16 +237,32 @@ class StateDB:
     # ---- uid map ----
 
     def upsert_uid_map(
-        self, original_uid: str, pseudo_uid: str, *, kind: str, salt_version: int
+        self,
+        original_uid: str,
+        pseudo_uid: str,
+        *,
+        kind: str,
+        salt_version: int,
+        pacs_id: str | None = None,
     ) -> None:
+        """Insert (or no-op) a uid_map row.
+
+        FR-MPS-9 — when ``pacs_id`` is supplied (multi-PACS sync) the source
+        endpoint id is recorded for forensic traceability. ``pacs_id``
+        defaults to NULL for legacy callers (single-PACS Pipeline,
+        pre-MPS code paths) so the migration stays compatible. The
+        original_uid PK keeps "first write wins" — a study fetched from
+        two PACS in sequence retains the first endpoint's pacs_id, which
+        matches K-MPS-2 (first-write-wins for cross-PACS collisions).
+        """
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO uid_map (original_uid, pseudo_uid, uid_kind, salt_version, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO uid_map (original_uid, pseudo_uid, uid_kind, salt_version, created_at, pacs_id)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(original_uid) DO NOTHING
                 """,
-                (original_uid, pseudo_uid, kind, salt_version, _utcnow()),
+                (original_uid, pseudo_uid, kind, salt_version, _utcnow(), pacs_id),
             )
 
     def lookup_pseudo_uid(self, original_uid: str) -> str | None:

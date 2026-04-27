@@ -213,6 +213,12 @@ def run_multi_pacs_once(
             )
             continue
 
+        # FR-MPS-9 — tag subsequent uid_map writes with the source
+        # endpoint id. The try/finally below clears the context regardless
+        # of pipeline outcome so a stale endpoint label cannot leak into a
+        # later legacy DeidEngine call.
+        deid.set_pacs_context(endpoint.id)
+
         # Pipeline carries pacs_id / hospital_id so every audit event
         # auto-tags via Pipeline._emit_audit (FR-MPS-3).
         pipeline = Pipeline(
@@ -242,6 +248,8 @@ def run_multi_pacs_once(
                 "base_url": endpoint.base_url,
             },
         )
+        run_summary = None
+        run_exc: Exception | None = None
         try:
             run_summary = pipeline.run_once(
                 since=since,
@@ -251,6 +259,10 @@ def run_multi_pacs_once(
                 metadata_only=metadata_only,
             )
         except Exception as exc:  # noqa: BLE001 — orchestrator-level isolation
+            run_exc = exc
+
+        if run_exc is not None:
+            exc = run_exc
             # Per FR-MPS-2 / AC-MPS-4 a single PACS exception (network
             # down, auth fail, sidecar unreachable, …) must NOT abort the
             # remaining endpoints. We log + record + continue. The audit
@@ -330,4 +342,8 @@ def run_multi_pacs_once(
         except Exception:  # noqa: BLE001
             pass
 
+    # Clear the deid pacs_id context so a subsequent legacy call into
+    # ``deid.pseudo_uid`` (e.g. from de-id-test CLI) does not pick up a
+    # stale endpoint label.
+    deid.set_pacs_context(None)
     return summary

@@ -208,6 +208,27 @@ class DeidEngine:
         # legacy quarantine behaviour untouched.
         self._pixel_enabled = bool(pixel_enabled)
         self._pixel_ocr_modalities = {m.upper() for m in pixel_ocr_modalities}
+        # FR-MPS-9 — when set, ``pseudo_uid`` records the source endpoint
+        # id alongside each new uid_map row. Multi-PACS orchestrator sets
+        # this per-endpoint via :meth:`set_pacs_context`. ``None`` keeps
+        # legacy single-PACS behaviour (NULL pacs_id).
+        self._current_pacs_id: str | None = None
+
+    def set_pacs_context(self, pacs_id: str | None) -> None:
+        """Tag subsequent uid_map writes with the given source endpoint id.
+
+        Called by :func:`run_multi_pacs_once` before iterating each
+        endpoint's studies. ``None`` clears the context (legacy mode).
+        Passing the same id repeatedly is a no-op.
+
+        The context is intentionally not thread-local; the v0.1 pipeline
+        is single-threaded per gateway and the multi-PACS orchestrator
+        runs endpoints sequentially (D-13 K-MPS-7 — concurrent sync is
+        v0.2). When concurrency lands the context will move to a
+        ``contextvars.ContextVar`` so per-endpoint coroutines stay
+        isolated; documenting now to avoid surprises later.
+        """
+        self._current_pacs_id = pacs_id
 
     # ---- public API ----
 
@@ -325,7 +346,13 @@ class DeidEngine:
         # DICOM UID max 64 characters.
         if len(pseudo) > 64:
             pseudo = pseudo[:64]
-        self._db.upsert_uid_map(str(original), pseudo, kind=kind, salt_version=self._salt_version)
+        self._db.upsert_uid_map(
+            str(original),
+            pseudo,
+            kind=kind,
+            salt_version=self._salt_version,
+            pacs_id=self._current_pacs_id,
+        )
         return pseudo
 
     def _ensure_patient_offset(self, ds: Dataset) -> int:
