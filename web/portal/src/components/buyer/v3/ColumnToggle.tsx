@@ -72,6 +72,9 @@ export const V3_COLUMN_DEFS: ColumnDef[] = [
   { key: "series", labelKo: "시리즈·인스턴스", labelEn: "Sr · Inst" },
   { key: "size", labelKo: "용량", labelEn: "Size" },
   { key: "uid", labelKo: "UID", labelEn: "UID" },
+  // text-search-description Phase 1.5 (FR-TS15-25 / design-spec §8.4) —
+  // toggleable Description column, default ON.
+  { key: "description", labelKo: "검사 설명", labelEn: "Description" },
   {
     key: "slice_thickness",
     labelKo: "슬라이스 두께",

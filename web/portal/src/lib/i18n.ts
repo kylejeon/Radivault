@@ -287,10 +287,10 @@ const en = {
     // text-search-description Phase 1.0 — 11 keys for the search bar surface.
     searchBar: {
       placeholder:
-        "Search by body part, modality, KCD code... (e.g. 'MR brain', 'CT chest', 'I20.9')",
+        "Search by body part, modality, KCD code, or description... (e.g. 'MR brain', 'knee scanogram', 'I20.9')",
       placeholderShort: "Search studies",
       ariaLabel:
-        "Search studies by body part, modality, or KCD code",
+        "Search studies by body part, modality, KCD code, or description",
       clearAria: "Clear search",
       submitButton: "Search",
       noSuggestions: "No suggestions",
@@ -301,6 +301,26 @@ const en = {
       emptyResultTitle: 'No studies match "{q}"',
       emptyResultHint: "Try removing filters or different keywords:",
       emptyResultClear: "Clear search",
+      // text-search-description Phase 1.5 (FR-TS15-15) — autocomplete badges.
+      autocompleteBadgeStudyDesc: "STUDY DESC",
+      autocompleteBadgeProtocol: "PROTOCOL",
+    },
+    // text-search-description Phase 1.5 (FR-TS15-11/12/14, design-spec §6.6).
+    kcd: {
+      chipLabelPrefix: "ICD-10",
+      chipAriaLabel: "Diagnosis code {code}, ICD-10 standard",
+      tooltip: "Korean coded as KCD-8 (95% identical to WHO ICD-10)",
+      footerNote:
+        "Provenance: Korean Standard Classification of Diseases v8 (KCD-8)",
+    },
+    // text-search-description Phase 1.5 (FR-TS15-14, design-spec §7-§9).
+    description: {
+      columnTitle: "Description",
+      columnToggleLabel: "Description",
+      phiPendingCell: "pending",
+      phiPendingCellTooltip: "Excluded for de-identification review",
+      phiPendingDetail: "PHI verification pending",
+      phiPendingAuditChainBadge: "description pending",
     },
   },
   study: {
@@ -321,6 +341,10 @@ const en = {
       instances: "Instance count",
       seriesCount: "Series count",
       ingested: "Ingested at",
+      // text-search-description Phase 1.5 (FR-TS15-14, design-spec §9.1).
+      studyDescription: "Study Description",
+      protocolName: "Protocol Name",
+      seriesDescriptions: "Series Descriptions",
     },
     viewerStubTitle: "DICOM viewer not included in v0.1.",
     viewerStubBody: "Pixel data available after order fulfillment.",
@@ -843,6 +867,22 @@ export type Dict = {
       emptyResultTitle: string;
       emptyResultHint: string;
       emptyResultClear: string;
+      autocompleteBadgeStudyDesc: string;
+      autocompleteBadgeProtocol: string;
+    };
+    kcd: {
+      chipLabelPrefix: string;
+      chipAriaLabel: string;
+      tooltip: string;
+      footerNote: string;
+    };
+    description: {
+      columnTitle: string;
+      columnToggleLabel: string;
+      phiPendingCell: string;
+      phiPendingCellTooltip: string;
+      phiPendingDetail: string;
+      phiPendingAuditChainBadge: string;
     };
   };
   study: {
@@ -863,6 +903,9 @@ export type Dict = {
       instances: string;
       seriesCount: string;
       ingested: string;
+      studyDescription: string;
+      protocolName: string;
+      seriesDescriptions: string;
     };
     viewerStubTitle: string;
     viewerStubBody: string;
@@ -1440,9 +1483,9 @@ const ko: Dict = {
     recentSearches: "최근 검색",
     searchBar: {
       placeholder:
-        "부위·모달리티·KCD 코드로 검색 (예: 'MR brain', 'CT chest', 'I20.9')",
+        "신체부위, 모달리티, KCD 코드 또는 검사명 검색 (예: 'MR brain', '슬관절 검사', 'I20.9')",
       placeholderShort: "검색",
-      ariaLabel: "검색어 입력 — 부위·모달리티·KCD 코드",
+      ariaLabel: "검색어 입력 — 부위·모달리티·KCD 코드·검사명",
       clearAria: "검색어 지우기",
       submitButton: "검색",
       noSuggestions: "추천 검색어 없음",
@@ -1453,6 +1496,23 @@ const ko: Dict = {
       emptyResultTitle: '"{q}" 와 일치하는 study 없음',
       emptyResultHint: "필터를 제거하거나 다른 키워드를 시도해 보세요:",
       emptyResultClear: "검색어 지우기",
+      autocompleteBadgeStudyDesc: "검사 설명",
+      autocompleteBadgeProtocol: "프로토콜",
+    },
+    // text-search-description Phase 1.5 (FR-TS15-11/12/14).
+    kcd: {
+      chipLabelPrefix: "KCD-8",
+      chipAriaLabel: "진단 코드 {code}, KCD-8 기준",
+      tooltip: "WHO ICD-10 호환 (95% 동일)",
+      footerNote: "출처: 한국표준질병사인분류 8차 (KCD-8)",
+    },
+    description: {
+      columnTitle: "검사 설명",
+      columnToggleLabel: "검사 설명",
+      phiPendingCell: "검토 대기",
+      phiPendingCellTooltip: "비식별화 검토 대기 중",
+      phiPendingDetail: "PHI 검증 대기 중",
+      phiPendingAuditChainBadge: "검사 설명 검토 중",
     },
   },
   study: {
@@ -1473,6 +1533,10 @@ const ko: Dict = {
       instances: "인스턴스 수",
       seriesCount: "시리즈 수",
       ingested: "수집 시각",
+      // text-search-description Phase 1.5 (FR-TS15-14).
+      studyDescription: "검사 설명",
+      protocolName: "프로토콜 명",
+      seriesDescriptions: "시리즈 설명",
     },
     viewerStubTitle: "DICOM 뷰어 — v0.1 미포함",
     viewerStubBody: "픽셀 데이터는 주문 처리 후 제공됩니다.",

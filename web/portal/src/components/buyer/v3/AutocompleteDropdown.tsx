@@ -38,10 +38,22 @@ const FIELD_BADGE_BG: Record<string, { bg: string; fg: string }> = {
   kcd_label_ko: { bg: "#ccfbf1", fg: "#0f766e" },
   manufacturer: { bg: "#f8fafc", fg: "#64748b" },
   model_name: { bg: "#f8fafc", fg: "#64748b" },
+  // text-search-description Phase 1.5 (design-spec §11.1) — STUDY DESC uses
+  // the lighter teal-50 to differentiate from KCD's teal-100; PROTOCOL is
+  // neutral (slate, same family as body_part).
+  study_description: { bg: "#f0fdfa", fg: "#0f766e" },
+  protocol_name: { bg: "#f8fafc", fg: "#64748b" },
 };
 
-function fieldLabel(field: string): string {
-  // Compact label rendered inside the right-side badge.
+function fieldLabel(field: string, locale: "en" | "ko"): string {
+  // Compact label rendered inside the right-side badge. UPPERCASE for new
+  // Phase 1.5 badges per Kyle decision; legacy badges keep lowercase.
+  if (field === "study_description") {
+    return locale === "ko" ? "검사 설명" : "STUDY DESC";
+  }
+  if (field === "protocol_name") {
+    return locale === "ko" ? "프로토콜" : "PROTOCOL";
+  }
   switch (field) {
     case "body_part":
       return "body part";
@@ -198,11 +210,16 @@ export function AutocompleteDropdown({
                 background: badge.bg,
                 color: badge.fg,
                 borderRadius: 999,
-                textTransform: "lowercase",
+                // Phase 1.5: STUDY DESC / PROTOCOL keep UPPERCASE (Kyle).
+                // Legacy lowercase still applied to body_part / modality.
+                textTransform:
+                  s.field === "study_description" || s.field === "protocol_name"
+                    ? "none"
+                    : "lowercase",
               }}
               aria-label={`Match field: ${s.field}`}
             >
-              {fieldLabel(s.field)}
+              {fieldLabel(s.field, locale === "ko" ? "ko" : "en")}
             </span>
           </li>
         );

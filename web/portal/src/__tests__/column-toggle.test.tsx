@@ -109,7 +109,8 @@ describe("v3 — ColumnToggle", () => {
     render(
       <ColumnToggle
         columns={V3_COLUMN_DEFS}
-        // Drop sex + uid → 9 / 11 toggleable.
+        // Drop sex + uid → 10 / 12 toggleable (text-search-description
+        // Phase 1.5 added the Description column).
         visibleKeys={V3_DEFAULT_VISIBLE.filter(
           (k) => k !== "sex" && k !== "uid",
         )}
@@ -119,8 +120,8 @@ describe("v3 — ColumnToggle", () => {
     );
     fireEvent.click(screen.getByTestId("v3-column-toggle-btn"));
     const menu = screen.getByTestId("v3-column-toggle-menu");
-    // 11 toggleable (12 total - hospital always-on).
-    expect(menu).toHaveTextContent("Visible columns (9/11)");
+    // 12 toggleable (13 total - hospital always-on).
+    expect(menu).toHaveTextContent("Visible columns (10/12)");
   });
 
   it("outside click closes the menu", () => {

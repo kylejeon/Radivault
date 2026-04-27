@@ -17,7 +17,11 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { HighlightedText } from "./HighlightedText";
 import { HospitalBadge } from "./HospitalBadge";
+import { KCDChip } from "./KCDChip";
 import { ModalityDot } from "./ModalityDot";
+import { PhiPendingBadge } from "./PhiPendingBadge";
+import type { Locale } from "@/lib/i18n";
+import { getDict } from "@/lib/i18n";
 
 export type ResultTableItem = {
   pseudo_study_uid: string;
@@ -40,6 +44,11 @@ export type ResultTableItem = {
   // text-search-description FR-TS-9 — server ts_headline result, null when
   // q is unused (legacy facet-only path).
   highlight_snippet?: string | null;
+  // text-search-description Phase 1.5 (FR-TS15-6) — scrubbed description
+  // text. NULL when feature flag off or pre-Phase-1.5 ingest; "" when
+  // scrubbed-but-empty (PhiPendingBadge fallback).
+  study_description?: string | null;
+  protocol_name?: string | null;
 };
 
 export type SortDir = "asc" | "desc";
@@ -120,6 +129,9 @@ const TRACK_BY_COL: Record<string, string> = {
   series: "72px",
   size: "64px",
   uid: "56px",
+  // text-search-description Phase 1.5 (design-spec §8.1) — DESCRIPTION column
+  // sits between size + uid, max 320px / min 200px ellipsis.
+  description: "minmax(200px, 320px)",
   // trailing action column — width 64px
 };
 
@@ -135,6 +147,7 @@ const ALL_COL_ORDER: string[] = [
   "model",
   "series",
   "size",
+  "description",
   "uid",
 ];
 
@@ -244,6 +257,7 @@ export function ResultTable({
         {isCol("model") && header("model", "모델", "Model")}
         {isCol("series") && staticHead("Sr·Inst", "Sr · Inst")}
         {isCol("size") && header("size", "용량", "Size")}
+        {isCol("description") && staticHead("검사 설명", "Description")}
         {isCol("uid") && staticHead("UID", "UID")}
         <div className="rv-col" />
       </div>
@@ -301,27 +315,14 @@ export function ResultTable({
             {isCol("kcd") && (
               <div className="rv-col rv-col-kcd">
                 {it.kcd_code ? (
-                  <>
-                    <span className="rv-kcd-chip">{it.kcd_code}</span>
-                    <span className="rv-kcd-label">
-                      {query ? (
-                        <HighlightedText
-                          html={it.highlight_snippet}
-                          fallback={
-                            locale === "ko"
-                              ? it.kcd_label_ko ?? ""
-                              : it.kcd_label_en ?? ""
-                          }
-                          query={query}
-                          maxLength={64}
-                        />
-                      ) : locale === "ko" ? (
-                        it.kcd_label_ko ?? ""
-                      ) : (
-                        it.kcd_label_en ?? ""
-                      )}
-                    </span>
-                  </>
+                  <KCDChip
+                    code={it.kcd_code}
+                    labelKo={it.kcd_label_ko}
+                    labelEn={it.kcd_label_en}
+                    locale={locale}
+                    variant="inline"
+                    size="md"
+                  />
                 ) : (
                   <span style={{ color: "var(--rv-stone-400)" }}>—</span>
                 )}
@@ -363,6 +364,47 @@ export function ResultTable({
             {isCol("size") && (
               <div className="rv-col" style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: 11.5 }}>
                 {fmtBytes(it.total_bytes)}
+              </div>
+            )}
+            {isCol("description") && (
+              <div
+                className="rv-col"
+                data-testid="v3-row-description"
+                style={{
+                  fontSize: 12,
+                  color: "#0f172a",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+                title={
+                  it.study_description && it.study_description.length > 0
+                    ? it.study_description
+                    : undefined
+                }
+              >
+                {(() => {
+                  // text-search-description Phase 1.5 — 4-state cell render:
+                  //   - undefined / null  → flag-off or pre-Phase-1.5 → "—"
+                  //   - ""                → scrubbed but all stripped → PhiPendingBadge
+                  //   - "..."             → normal text (highlight if q present)
+                  if (it.study_description == null) {
+                    return <span style={{ color: "var(--rv-stone-400)" }}>—</span>;
+                  }
+                  if (it.study_description === "") {
+                    return <PhiPendingBadge variant="cell" locale={locale} />;
+                  }
+                  return query ? (
+                    <HighlightedText
+                      html={it.highlight_snippet}
+                      fallback={it.study_description}
+                      query={query}
+                      maxLength={48}
+                    />
+                  ) : (
+                    it.study_description
+                  );
+                })()}
               </div>
             )}
             {isCol("uid") && (
