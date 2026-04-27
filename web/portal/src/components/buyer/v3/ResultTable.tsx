@@ -271,7 +271,7 @@ export function ResultTable({
             </div>
             {isCol("hospital") && (
               <div className="rv-col">
-                <HospitalBadge regionPseudo={region} />
+                <HospitalBadge regionPseudo={region} query={query} />
               </div>
             )}
             {isCol("examdate") && (
@@ -281,7 +281,7 @@ export function ResultTable({
             )}
             {isCol("modality") && (
               <div className="rv-col" style={{ display: "flex", alignItems: "center" }}>
-                <ModalityDot modality={it.modality} />
+                <ModalityDot modality={it.modality} query={query} />
               </div>
             )}
             {isCol("bodypart") && (
@@ -339,12 +339,20 @@ export function ResultTable({
             )}
             {isCol("mfg") && (
               <div className="rv-col" style={{ textTransform: "uppercase", fontSize: 11, fontWeight: 600 }}>
-                {it.manufacturer ?? "—"}
+                {query ? (
+                  <HighlightedText html={null} fallback={it.manufacturer ?? "—"} query={query} maxLength={32} />
+                ) : (
+                  it.manufacturer ?? "—"
+                )}
               </div>
             )}
             {isCol("model") && (
               <div className="rv-col" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>
-                {it.model_name ?? "—"}
+                {query ? (
+                  <HighlightedText html={null} fallback={it.model_name ?? "—"} query={query} maxLength={32} />
+                ) : (
+                  it.model_name ?? "—"
+                )}
               </div>
             )}
             {isCol("series") && (

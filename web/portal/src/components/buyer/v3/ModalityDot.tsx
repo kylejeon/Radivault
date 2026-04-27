@@ -18,12 +18,16 @@ export type ModalityKey =
   | null
   | undefined;
 
+import { HighlightedText } from "./HighlightedText";
+
 export function ModalityDot({
   modality,
   showLabel = true,
+  query,
 }: {
   modality: ModalityKey;
   showLabel?: boolean;
+  query?: string | null;
 }) {
   const m = (modality ?? "").toString().toUpperCase();
   const known = ["CT", "MR", "MG", "CR", "DR", "DX", "US", "PT"];
@@ -34,7 +38,13 @@ export function ModalityDot({
       style={{ display: "inline-flex", alignItems: "center" }}
     >
       <span aria-hidden className={`rv-mod-dot rv-mod-dot--${cls}`} />
-      {showLabel ? <span>{m || "—"}</span> : null}
+      {showLabel ? (
+        query ? (
+          <HighlightedText html={null} fallback={m || "—"} query={query} />
+        ) : (
+          <span>{m || "—"}</span>
+        )
+      ) : null}
     </span>
   );
 }

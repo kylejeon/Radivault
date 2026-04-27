@@ -6,11 +6,14 @@
  * for the result-table left edge).
  */
 
+import { HighlightedText } from "./HighlightedText";
+
 export type HospitalBadgeVariant = "badge" | "dot";
 
 export type HospitalBadgeProps = {
   regionPseudo: string | null | undefined;
   variant?: HospitalBadgeVariant;
+  query?: string | null;
 };
 
 function regionKey(regionPseudo: string | null | undefined): string {
@@ -22,6 +25,7 @@ function regionKey(regionPseudo: string | null | undefined): string {
 export function HospitalBadge({
   regionPseudo,
   variant = "badge",
+  query,
 }: HospitalBadgeProps) {
   const key = regionKey(regionPseudo);
   if (variant === "dot") {
@@ -40,7 +44,11 @@ export function HospitalBadge({
       className={`rv-hospital-badge rv-hospital-badge--${key}`}
     >
       <span className="rv-hospital-badge__dot" />
-      <span>{regionPseudo ?? "—"}</span>
+      {query ? (
+        <HighlightedText html={null} fallback={regionPseudo ?? "—"} query={query} />
+      ) : (
+        <span>{regionPseudo ?? "—"}</span>
+      )}
     </span>
   );
 }
