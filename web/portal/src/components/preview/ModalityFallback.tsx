@@ -15,7 +15,14 @@ export type ModalityFallbackVariant =
   | "unavailable-pending"
   | "unavailable-phi"
   | "unavailable-modality"
-  | "single-frame";
+  | "single-frame"
+  // jpg-preview-defacing design-spec §11.2 / §11.3 — new variants for
+  // the all-quarantined / all-skipped / no-preview-modality study
+  // states surfaced by FrameSliderViewer when the manifest entries
+  // are non-generated.
+  | "unavailable-quarantined"
+  | "unavailable-skipped"
+  | "no-preview-modality";
 
 export type ModalityFallbackProps = {
   variant: ModalityFallbackVariant;
@@ -29,6 +36,9 @@ const ICON_FOR_VARIANT: Record<ModalityFallbackVariant, string> = {
   "unavailable-phi": "⚠",
   "unavailable-modality": "▢",
   "single-frame": "▤",
+  "unavailable-quarantined": "⚠",
+  "unavailable-skipped": "⚠",
+  "no-preview-modality": "▢",
 };
 
 export function ModalityFallback({
@@ -42,7 +52,13 @@ export function ModalityFallback({
       ? dict.preview.unavailablePhi
       : variant === "unavailable-modality"
         ? dict.preview.unavailableModality
-        : dict.preview.unavailableShort;
+        : variant === "unavailable-quarantined"
+          ? dict.frameSlider.unavailableQuarantinedTitle
+          : variant === "unavailable-skipped"
+            ? dict.frameSlider.unavailableSkippedTitle
+            : variant === "no-preview-modality"
+              ? dict.preview.unavailableModality
+              : dict.preview.unavailableShort;
   const body =
     variant === "unavailable-pending"
       ? dict.preview.unavailablePending
@@ -50,7 +66,13 @@ export function ModalityFallback({
         ? dict.preview.unavailablePhi
         : variant === "single-frame"
           ? ""
-          : dict.preview.unavailableModality;
+          : variant === "unavailable-quarantined"
+            ? dict.frameSlider.unavailableQuarantinedBody
+            : variant === "unavailable-skipped"
+              ? dict.frameSlider.unavailableSkippedBody
+              : variant === "no-preview-modality"
+                ? dict.preview.unavailableModality
+                : dict.preview.unavailableModality;
   const icon = ICON_FOR_VARIANT[variant];
 
   return (

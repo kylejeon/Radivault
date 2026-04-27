@@ -6,6 +6,10 @@ import { BuyerModalityBadge } from "./ModalityBadge";
 import { SliceViewerOrFallback } from "@/components/SliceViewer";
 import { SampleDownloadButton } from "@/components/preview/SampleDownloadButton";
 import {
+  FrameSliderViewer,
+  type PreviewManifest,
+} from "@/components/preview/FrameSliderViewer";
+import {
   QuotaIndicator,
   type QuotaState,
 } from "@/components/preview/QuotaIndicator";
@@ -156,6 +160,47 @@ export function StudyDetailPanel({
     };
   }, []);
 
+  // jpg-preview-defacing FR-API-2 — fetch preview manifest in parallel
+  // with the study fetch (already done by parent client). 404 means the
+  // study predates the new pipeline (FR-NEWONLY-2 silent coexistence)
+  // so we fall back to the existing SliceViewerOrFallback.
+  // ``previewManifest === null`` => still loading.
+  // ``previewManifest === undefined`` => 404 / unavailable, fall back.
+  const [previewManifest, setPreviewManifest] = useState<
+    PreviewManifest | null | undefined
+  >(null);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/studies/${encodeURIComponent(
+            study.pseudo_study_uid,
+          )}/preview-manifest`,
+        );
+        if (!active) return;
+        if (res.status === 404) {
+          setPreviewManifest(undefined);
+          return;
+        }
+        if (!res.ok) {
+          // Other failures: treat as legacy / fall back. Keeps the
+          // page resilient when search service has the new endpoint
+          // disabled.
+          setPreviewManifest(undefined);
+          return;
+        }
+        const body = (await res.json()) as PreviewManifest;
+        setPreviewManifest(body);
+      } catch {
+        if (active) setPreviewManifest(undefined);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [study.pseudo_study_uid]);
+
   return (
     <div data-testid="study-detail-panel" className="flex flex-col gap-5">
       {/* 1. Header bar */}
@@ -196,13 +241,33 @@ export function StudyDetailPanel({
 
       {/* 3. Viewer + Sidebar grid (design-spec §7.6) */}
       <div className="grid grid-cols-1 gap-5 desktop:grid-cols-[minmax(0,1fr)_320px]">
-        <SliceViewerOrFallback
-          studyUid={study.pseudo_study_uid}
-          sliceCount={sliceCount}
-          previewStatus={previewStatus}
-          modality={study.modality}
-          locale={locale}
-        />
+        {previewManifest === null ? (
+          // Loading manifest — show a small skeleton in the viewer slot.
+          <div
+            data-testid="study-detail-viewer-skeleton"
+            className="h-96 animate-pulse rounded-md bg-bg-muted"
+          />
+        ) : previewManifest === undefined ? (
+          // Manifest 404 / unavailable — legacy study, fall back to
+          // the existing SliceViewerOrFallback (FR-NEWONLY-3 silent
+          // coexistence).
+          <SliceViewerOrFallback
+            studyUid={study.pseudo_study_uid}
+            sliceCount={sliceCount}
+            previewStatus={previewStatus}
+            modality={study.modality}
+            locale={locale}
+          />
+        ) : (
+          // jpg-preview-defacing — buyer sees the per-frame slider with
+          // the AFNI-defaced (or anatomy-clear) frames. Manifest itself
+          // tells the component how to branch on per-series state.
+          <FrameSliderViewer
+            studyUid={study.pseudo_study_uid}
+            manifest={previewManifest}
+            locale={locale}
+          />
+        )}
         <aside className="flex flex-col gap-4">
           {/* Sample download card */}
           <section

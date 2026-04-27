@@ -453,6 +453,45 @@ const en = {
     description:
       "Place a full order for all studies in cohort. 5-phase delivery.",
   },
+  // design-spec-jpg-preview-defacing §14 — FrameSliderViewer namespace.
+  frameSlider: {
+    regionLabel: "Frame slider — series {n} of {total}",
+    seriesSelectorLabel: "Series selector",
+    chipLabel: "{seriesNum} {modality} {bodyPart} {frameCount}f",
+    chipNoBodyPart: "{seriesNum} {modality} {frameCount}f",
+    chipDisabledTooltip: {
+      quarantined: "Defacing failed — preview quarantined.",
+      skipped: "Burned-in text detected — preview skipped.",
+      pending: "Preview still being generated.",
+    },
+    sliderLabel: "Frame number",
+    frameCounter: "Frame {n} of {total}",
+    frameAlt: "Frame {n} of {total} — series {seriesNum} {modality}",
+    loadingFrame: "Loading frame {n} of {total}",
+    keyboardHint:
+      "← → frames · PgUp/Dn ±10 · Home/End first/last",
+    previousFrame: "Previous frame",
+    nextFrame: "Next frame",
+    frameFailedShort: "Frame {n} failed to load",
+    frameFailedRetry: "Retry",
+    frameFailedSkip: "Skip to next frame",
+    defacePill: {
+      afni: "AFNI defaced",
+      noneRequiredModality: "No defacing required ({modality})",
+      noneRequiredAnatomy: "No facial geometry",
+      failed: "Defacing failed — preview quarantined",
+      skippedBurnedIn: "Burned-in text detected — preview skipped",
+    },
+    unavailableQuarantinedTitle: "Preview quarantined",
+    unavailableQuarantinedBody:
+      "Defacing did not complete cleanly for any series in this study. The underlying DICOM is still available for purchase.",
+    unavailableSkippedTitle: "Preview skipped",
+    unavailableSkippedBody:
+      "Burned-in text was detected. The underlying DICOM remains de-identified at the metadata layer.",
+    mobileNotice:
+      "Frame navigation is optimised for desktop. Switch to ≥1024 px for full slider.",
+    liveAnnounce: "Frame {n} of {total} — series {seriesNum}",
+  },
   quota: {
     todayInline: "Today: {used}/{limit}",
     todayInlineSuffix: "sample downloads",
@@ -1006,6 +1045,41 @@ export type Dict = {
   cohortCta: {
     sectionTitle: string;
     description: string;
+  };
+  // design-spec-jpg-preview-defacing §14 — FrameSliderViewer namespace.
+  frameSlider: {
+    regionLabel: string;
+    seriesSelectorLabel: string;
+    chipLabel: string;
+    chipNoBodyPart: string;
+    chipDisabledTooltip: {
+      quarantined: string;
+      skipped: string;
+      pending: string;
+    };
+    sliderLabel: string;
+    frameCounter: string;
+    frameAlt: string;
+    loadingFrame: string;
+    keyboardHint: string;
+    previousFrame: string;
+    nextFrame: string;
+    frameFailedShort: string;
+    frameFailedRetry: string;
+    frameFailedSkip: string;
+    defacePill: {
+      afni: string;
+      noneRequiredModality: string;
+      noneRequiredAnatomy: string;
+      failed: string;
+      skippedBurnedIn: string;
+    };
+    unavailableQuarantinedTitle: string;
+    unavailableQuarantinedBody: string;
+    unavailableSkippedTitle: string;
+    unavailableSkippedBody: string;
+    mobileNotice: string;
+    liveAnnounce: string;
   };
   // design-spec §14.6 — Quota indicator
   quota: {
@@ -1640,6 +1714,45 @@ const ko: Dict = {
   cohortCta: {
     sectionTitle: "코호트에 추가",
     description: "코호트의 모든 study 에 대한 정식 주문. 5 단계 배송.",
+  },
+  // design-spec-jpg-preview-defacing §14 — FrameSliderViewer namespace.
+  frameSlider: {
+    regionLabel: "프레임 슬라이더 — 시리즈 {n} / {total}",
+    seriesSelectorLabel: "시리즈 선택",
+    chipLabel: "{seriesNum} {modality} {bodyPart} {frameCount}프레임",
+    chipNoBodyPart: "{seriesNum} {modality} {frameCount}프레임",
+    chipDisabledTooltip: {
+      quarantined: "얼굴 제거 실패 — 미리보기 격리됨.",
+      skipped: "원본에 글자 새겨짐 — 미리보기 건너뜀.",
+      pending: "미리보기 생성 중입니다.",
+    },
+    sliderLabel: "프레임 번호",
+    frameCounter: "프레임 {n} / {total}",
+    frameAlt: "프레임 {n} / {total} — 시리즈 {seriesNum} {modality}",
+    loadingFrame: "프레임 {n} / {total} 로드 중",
+    keyboardHint:
+      "← → 프레임 · PgUp/Dn ±10 · Home/End 처음/끝",
+    previousFrame: "이전 프레임",
+    nextFrame: "다음 프레임",
+    frameFailedShort: "프레임 {n} 로드 실패",
+    frameFailedRetry: "재시도",
+    frameFailedSkip: "다음 프레임으로",
+    defacePill: {
+      afni: "AFNI 얼굴 제거됨",
+      noneRequiredModality: "얼굴 제거 불필요 ({modality})",
+      noneRequiredAnatomy: "얼굴 영역 없음",
+      failed: "얼굴 제거 실패 — 미리보기 격리됨",
+      skippedBurnedIn: "원본에 글자 새겨짐 — 미리보기 건너뜀",
+    },
+    unavailableQuarantinedTitle: "미리보기 격리됨",
+    unavailableQuarantinedBody:
+      "이 스터디의 모든 시리즈에서 얼굴 제거가 정상 완료되지 않았습니다. DICOM 원본은 구매 가능합니다.",
+    unavailableSkippedTitle: "미리보기 건너뜀",
+    unavailableSkippedBody:
+      "픽셀에 글자가 새겨져 있어 미리보기를 건너뛰었습니다. DICOM 헤더는 정상적으로 비식별화되었습니다.",
+    mobileNotice:
+      "프레임 탐색은 데스크톱에서 최적화됩니다. 1024 px 이상에서 사용하세요.",
+    liveAnnounce: "프레임 {n} / {total} — 시리즈 {seriesNum}",
   },
   quota: {
     todayInline: "오늘: {used}/{limit}",
