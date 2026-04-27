@@ -105,6 +105,7 @@ class Manifest(BaseModel):
     body_part_examined: str | None = None
     patient_sex: Literal["M", "F", "O"] | None = None
     patient_age_bucket: str | None = None  # "30-34", "90+"
+    patient_age: int | None = None
     manufacturer: str | None = Field(default=None, max_length=64)
     manufacturer_model_name: str | None = Field(default=None, max_length=128)
     study_date_shifted: str | None = None  # ISO YYYY-MM-DD

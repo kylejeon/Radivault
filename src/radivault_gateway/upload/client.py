@@ -160,6 +160,7 @@ class UploadClient:
             manifest["body_part_examined"] = getattr(sd, "body_part_examined", None)
             manifest["patient_sex"] = getattr(sd, "patient_sex", None)
             manifest["patient_age_bucket"] = getattr(sd, "patient_age_bucket", None)
+            manifest["patient_age"] = getattr(sd, "patient_age", None)
             manifest["manufacturer"] = getattr(sd, "manufacturer", None)
             manifest["manufacturer_model_name"] = getattr(sd, "manufacturer_model_name", None)
             sd_date = getattr(sd, "study_date_shifted", None)

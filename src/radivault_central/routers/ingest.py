@@ -253,6 +253,7 @@ async def post_ingest(request: Request) -> dict:
     v2_sex = getattr(manifest, "patient_sex", None)
     v2_age_bucket_label = getattr(manifest, "patient_age_bucket", None)
     v2_age_bucket = _age_bucket_to_int(v2_age_bucket_label)
+    v2_patient_age = getattr(manifest, "patient_age", None)
     v2_study_date = _parse_iso_date(getattr(manifest, "study_date_shifted", None))
     v2_thumbnail = getattr(manifest, "thumbnail", None)
     v2_series = list(getattr(manifest, "series", []) or [])
@@ -263,7 +264,7 @@ async def post_ingest(request: Request) -> dict:
     # distinct rows for now — that's OK for facet count cardinality.
     v2_patient_key = (
         hashlib.sha256(manifest.pseudo_study_uid.encode("utf-8")).hexdigest()[:32]
-        if (v2_sex is not None or v2_age_bucket is not None)
+        if (v2_sex is not None or v2_age_bucket is not None or v2_patient_age is not None)
         else None
     )
 
@@ -420,6 +421,7 @@ async def post_ingest(request: Request) -> dict:
             study_date_shifted=v2_study_date,
             patient_sex=v2_sex,
             patient_age_bucket=v2_age_bucket,
+            patient_age=v2_patient_age,
             preview_status=preview_status,
             preview_thumbnail_key=preview_thumbnail_key,
             raw_dicom_tags={
