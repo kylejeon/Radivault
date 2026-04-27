@@ -235,13 +235,42 @@ def sample_key(study_uid: str, sop_instance_uid: str) -> str:
     return f"samples/{study_uid}/{sop_instance_uid}.dcm"
 
 
+# ---------------------------------------------------------------------------
+# jpg-preview-defacing FR-PREVIEW-10 — new-pipeline key shape.
+# ---------------------------------------------------------------------------
+#
+# The new gateway preview_pipeline writes one JPG per frame at
+#   previews/{pseudo_study_uid}/{pseudo_series_uid}/{frame_idx:04d}.jpg
+# in the ``radivault-previews`` (plural) bucket. We keep the legacy
+# ``radivault-preview`` (singular) bucket + ``frames/{study}/{series}/{n}.jpg``
+# layout untouched so existing seeded/verified studies continue to render.
+# Callers detect which bucket to read from by checking
+# ``dicom_preview_frame`` row presence — see router.get_frame.
+
+PREVIEWS_BUCKET = "radivault-previews"  # plural — new pipeline
+
+
+def preview_key_v2(
+    pseudo_study_uid: str, pseudo_series_uid: str, frame_idx: int
+) -> str:
+    """``previews/{study}/{series}/{idx:04d}.jpg`` — 0-based, 4-digit pad.
+
+    Matches ``radivault_gateway.preview_pipeline.preview_key`` 1:1.
+    """
+    return (
+        f"previews/{pseudo_study_uid}/{pseudo_series_uid}/{frame_idx:04d}.jpg"
+    )
+
+
 __all__ = [
     "LocalPreviewStore",
+    "PREVIEWS_BUCKET",
     "PreviewObjectNotFound",
     "PreviewStorageError",
     "PreviewStore",
     "S3PreviewStore",
     "frame_key",
+    "preview_key_v2",
     "sample_key",
     "thumbnail_key",
 ]

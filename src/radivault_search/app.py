@@ -119,14 +119,32 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
 
     # Preview cache adapter (dev-spec-buyer-browse-preview FR-API-1).
     # In test mode use a temp local FS; production reads MinIO env vars.
+    #
+    # jpg-preview-defacing B-4 / H-2 — two MinIO buckets coexist:
+    #   * radivault-preview (singular) — legacy buyer-browse-preview:
+    #       thumbnails/{study}.jpg, frames/{study}/{n}/{m}.jpg, samples/...
+    #   * radivault-previews (plural) — new gateway preview_pipeline:
+    #       previews/{pseudo_study}/{pseudo_series}/{idx:04d}.jpg
+    # Both adapters share the same MinIO endpoint + credentials; only
+    # the bucket name differs. In LocalPreviewStore mode we point both
+    # at the same temp dir so seed scripts can write either layout.
     if testing:
         import tempfile
 
         preview_root = tempfile.mkdtemp(prefix="rv_preview_test_")
         app.state.preview_store = LocalPreviewStore(preview_root)
+        # FR-PREVIEW-9 — separate root for the new pipeline so we can
+        # add IAM split (HIGH #4) without touching the legacy bucket.
+        previews_root = tempfile.mkdtemp(prefix="rv_previews_v2_test_")
+        app.state.previews_store_v2 = LocalPreviewStore(previews_root)
     else:
         endpoint = os.environ.get("RV_PREVIEW_S3_ENDPOINT")
         bucket = os.environ.get("RV_PREVIEW_S3_BUCKET", "radivault-preview")
+        # FR-PREVIEW-9 — new-pipeline bucket. Default value mirrors the
+        # gateway-side ``preview_pipeline.PREVIEW_BUCKET``.
+        bucket_v2 = os.environ.get(
+            "RV_PREVIEWS_S3_BUCKET", "radivault-previews"
+        )
         access_key = os.environ.get("RV_PREVIEW_S3_ACCESS_KEY")
         secret_key = os.environ.get("RV_PREVIEW_S3_SECRET_KEY")
         region = os.environ.get("RV_PREVIEW_S3_REGION", "us-east-1")
@@ -141,12 +159,28 @@ def create_app(settings: Settings | None = None, *, testing: bool = False) -> Fa
                 secret_access_key=secret_key,
                 allow_insecure=not is_prod,
             )
+            # FR-PREVIEW-11 — IAM split is deferred to v0.2 (HIGH #4),
+            # so v0.1 reuses the same access keys but a distinct bucket.
+            # Buyers get GET-only via the BFF; the gateway is the only
+            # writer.
+            app.state.previews_store_v2 = S3PreviewStore(
+                bucket=bucket_v2,
+                region=region,
+                endpoint_url=endpoint,
+                access_key_id=access_key,
+                secret_access_key=secret_key,
+                allow_insecure=not is_prod,
+            )
         else:
             # Filesystem fallback for dev environments without MinIO.
             preview_root = os.environ.get(
                 "RV_PREVIEW_LOCAL_ROOT", "/var/lib/radivault/preview"
             )
+            previews_root_v2 = os.environ.get(
+                "RV_PREVIEWS_LOCAL_ROOT", "/var/lib/radivault/previews"
+            )
             app.state.preview_store = LocalPreviewStore(preview_root)
+            app.state.previews_store_v2 = LocalPreviewStore(previews_root_v2)
     app.state.sample_download_daily_limit = int(
         os.environ.get("RV_SAMPLE_DOWNLOAD_DAILY_LIMIT", "1")
     )
