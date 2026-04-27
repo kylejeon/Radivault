@@ -195,6 +195,16 @@ class Manifest(BaseModel):
     protocol_name: str | None = Field(default=None, max_length=200)
     description_scrub_metadata: dict | None = None
 
+    # buyer-search-v3 FR-V3-DATA-2 — KCD-8 heuristic (modality + body_part)
+    # populated by gateway extract.py (lookup_kcd) and persisted onto the
+    # study row by central ingest. All Optional for backward compat with
+    # pre-v3 manifests; new ingests always populate (Z00.0 fallback when
+    # the (modality, body_part) tuple has no rule). Length caps mirror the
+    # DB columns: kcd_code VARCHAR(10), kcd_label_* VARCHAR(200).
+    kcd_code: str | None = Field(default=None, max_length=10)
+    kcd_label_ko: str | None = Field(default=None, max_length=200)
+    kcd_label_en: str | None = Field(default=None, max_length=200)
+
     # jpg-preview-defacing FR-PREVIEW-1 — manifest v2.2 additive. The
     # gateway preview_pipeline emits a per-study block describing every
     # series's deface decision, frame_count, MinIO keys, and audit hint.

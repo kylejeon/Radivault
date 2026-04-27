@@ -724,6 +724,14 @@ async def post_ingest(request: Request) -> dict:
             },
             study_description=v21_study_description,
             protocol_name=v21_protocol_name,
+            # buyer-search-v3 FR-V3-DATA-2 — propagate the gateway-extracted
+            # KCD heuristic onto the study row so /v1/search/studies filters,
+            # facets and sort can resolve diagnosis. Manifest field is
+            # Optional (backward compat with pre-v3 ingests); when absent we
+            # pass None and the column stays NULL.
+            kcd_code=getattr(manifest, "kcd_code", None),
+            kcd_label_ko=getattr(manifest, "kcd_label_ko", None),
+            kcd_label_en=getattr(manifest, "kcd_label_en", None),
         )
 
         # FR-TS15-10 — record quarantine audit row when scrub flagged the study.

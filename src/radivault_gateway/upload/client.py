@@ -168,6 +168,13 @@ class UploadClient:
             manifest["study_year"] = getattr(sd, "study_year", None)
             manifest["n_series"] = getattr(sd, "n_series", None)
             manifest["series"] = list(getattr(sd, "series", []) or [])
+            # v3 FR-V3-DATA-2 — KCD-8 heuristic (modality + body_part) →
+            # diagnosis. Populated by extract.py via lookup_kcd(); always
+            # non-None when extract ran (DEFAULT_ENTRY = Z00.0 fallback) but
+            # Optional here for forward-compat with non-extract callers.
+            manifest["kcd_code"] = getattr(sd, "kcd_code", None)
+            manifest["kcd_label_ko"] = getattr(sd, "kcd_label_ko", None)
+            manifest["kcd_label_en"] = getattr(sd, "kcd_label_en", None)
         if thumbnail is not None:
             import base64
 
