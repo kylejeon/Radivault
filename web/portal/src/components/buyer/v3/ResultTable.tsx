@@ -15,6 +15,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { HighlightedText } from "./HighlightedText";
 import { HospitalBadge } from "./HospitalBadge";
 import { ModalityDot } from "./ModalityDot";
 
@@ -36,6 +37,9 @@ export type ResultTableItem = {
   kcd_code: string | null;
   kcd_label_ko: string | null;
   kcd_label_en: string | null;
+  // text-search-description FR-TS-9 — server ts_headline result, null when
+  // q is unused (legacy facet-only path).
+  highlight_snippet?: string | null;
 };
 
 export type SortDir = "asc" | "desc";
@@ -275,7 +279,15 @@ export function ResultTable({
             )}
             {isCol("bodypart") && (
               <div className="rv-col" style={{ textTransform: "uppercase", fontWeight: 500, fontSize: 12 }}>
-                {it.body_part ?? "—"}
+                {it.highlight_snippet ? (
+                  <HighlightedText
+                    html={it.highlight_snippet}
+                    fallback={it.body_part ?? "—"}
+                    maxLength={32}
+                  />
+                ) : (
+                  it.body_part ?? "—"
+                )}
               </div>
             )}
             {isCol("kcd") && (
@@ -284,7 +296,21 @@ export function ResultTable({
                   <>
                     <span className="rv-kcd-chip">{it.kcd_code}</span>
                     <span className="rv-kcd-label">
-                      {locale === "ko" ? it.kcd_label_ko ?? "" : it.kcd_label_en ?? ""}
+                      {it.highlight_snippet ? (
+                        <HighlightedText
+                          html={it.highlight_snippet}
+                          fallback={
+                            locale === "ko"
+                              ? it.kcd_label_ko ?? ""
+                              : it.kcd_label_en ?? ""
+                          }
+                          maxLength={64}
+                        />
+                      ) : locale === "ko" ? (
+                        it.kcd_label_ko ?? ""
+                      ) : (
+                        it.kcd_label_en ?? ""
+                      )}
                     </span>
                   </>
                 ) : (

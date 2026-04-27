@@ -235,6 +235,12 @@ html[lang="ko"] body,
   --rv-region-daejeon: #ef4444;
   --rv-region-ulsan: #06b6d4;
 
+  /* text-search-description Phase 1.0 — sole new design token. teal-600 alpha
+     15% so the highlight reads on both white rows and the alternating
+     #f8fafc stripe in the dense result table. Pair with font-weight 600 on
+     <mark> so the cue does not depend on color alone (color-blind a11y). */
+  --mark-highlight-bg: rgba(13, 148, 136, 0.15);
+
   /* Layout */
   --rv-sidebar-w: 320px;
   --rv-row-h: 52px;
@@ -482,6 +488,18 @@ html[lang="ko"] body,
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+}
+
+/* text-search-description FR-TS-9 — match-token highlight in dense table.
+   ts_headline emits <mark>...</mark> spans; HighlightedText forwards them
+   through the whitelist sanitiser. The semibold weight + slightly darker
+   text colour keep matches readable for color-blind users. */
+mark {
+  background: var(--mark-highlight-bg);
+  color: #020617;
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Sidebar accordion. */

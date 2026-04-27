@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { FederatedSignal } from "@/components/buyer/FederatedSignal";
 import {
@@ -39,6 +39,7 @@ import {
   type SortDir,
   type SortKey,
 } from "@/components/buyer/v3/ResultTable";
+import { SearchBar } from "@/components/buyer/v3/SearchBar";
 import {
   KCDHeuristicNote,
   PIPATrustNote,
@@ -58,7 +59,15 @@ type SearchResp = {
   total_hint?: number | null;
   next_cursor?: string | null;
   has_next?: boolean;
-  meta?: { query_duration_ms?: number; buyer_tier?: string | null } | null;
+  meta?: {
+    query_duration_ms?: number;
+    buyer_tier?: string | null;
+    // text-search-description FR-TS-2 / FR-TS-10 — additive fields used by the
+    // search-bar surface. Both safe to read off the legacy facet-only path
+    // because the executor always emits them (false / []).
+    text_search_applied?: boolean;
+    phi_flagged_patterns?: string[];
+  } | null;
 };
 
 /**
@@ -142,12 +151,19 @@ function buildSearchRequest(
   sortKey: SortKey,
   sortDir: SortDir,
   pageSize: number,
+  qText: string,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     sort: SORT_TO_API[`${sortKey}:${sortDir}`] ?? "date_desc",
     limit: pageSize,
     include_facets: true,
   };
+  // text-search-description FR-TS-2 — additive q field. Empty/whitespace is
+  // dropped client-side too so the legacy /search payload shape is identical
+  // to v3 facet-only when the buyer hasn't typed anything.
+  if (qText.trim().length > 0) {
+    body.q = qText.trim();
+  }
   if (facets.modality.length) body.modality = facets.modality;
   if (facets.body_part.length) body.body_part = facets.body_part;
   if (facets.sex.length) body.sex = facets.sex;
@@ -179,6 +195,7 @@ export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
 function SearchAppV3Inner() {
   const { locale: lc } = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [facets, setFacets] = useState<V3FacetState>(EMPTY_V3_FACET_STATE);
   const [sortKey, setSortKey] = useState<SortKey>("examdate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -186,6 +203,14 @@ function SearchAppV3Inner() {
   const [response, setResponse] = useState<SearchResp | null>(null);
   const [loading, setLoading] = useState(true);
   const [kcdQuery, setKcdQuery] = useState("");
+  // text-search-description FR-TS-1 — free-text search bar state. ``qText``
+  // is the live, debounced input; ``qApplied`` is the value that has actually
+  // been submitted (Enter / autocomplete pick) and is currently in the URL.
+  // We split them so typing without submitting doesn't re-fetch on every
+  // keystroke (autocomplete already covers that).
+  const initialQ = (searchParams?.get("q") ?? "").slice(0, 200);
+  const [qText, setQText] = useState(initialQ);
+  const [qApplied, setQApplied] = useState(initialQ);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(
     V3_DEFAULT_VISIBLE,
   );
@@ -213,7 +238,7 @@ function SearchAppV3Inner() {
       if (debounce.current) clearTimeout(debounce.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facets, sortKey, sortDir, pageSize]);
+  }, [facets, sortKey, sortDir, pageSize, qApplied]);
 
   async function runSearch() {
     setLoading(true);
@@ -222,7 +247,9 @@ function SearchAppV3Inner() {
       const res = await fetch("/api/search/studies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildSearchRequest(facets, sortKey, sortDir, pageSize)),
+        body: JSON.stringify(
+          buildSearchRequest(facets, sortKey, sortDir, pageSize, qApplied),
+        ),
       });
       if (res.status === 401) {
         router.push("/signin");
@@ -245,6 +272,17 @@ function SearchAppV3Inner() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // FR-TS-1 — push q into the URL so a /search?q=brain deep-link works.
+  function commitQ(next: string) {
+    const trimmed = next.trim();
+    setQApplied(trimmed);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (trimmed) params.set("q", trimmed);
+    else params.delete("q");
+    const qs = params.toString();
+    router.replace(qs ? `/search?${qs}` : "/search");
   }
 
   const items = useMemo(() => response?.items ?? [], [response]);
@@ -303,6 +341,31 @@ function SearchAppV3Inner() {
           <LocaleToggle variant="dark" />
         </div>
       </div>
+
+      {/* text-search-description FR-TS-1 — hero free-text search bar.
+         Sits above the v3 sub-bar so it dominates the visual entry point
+         without disturbing the 3-pane layout below. ``flag-off`` is honoured
+         via NEXT_PUBLIC_TEXT_SEARCH_ENABLED — when explicitly "false" we
+         unmount the bar so the legacy facet-only flow is byte-identical. */}
+      {process.env.NEXT_PUBLIC_TEXT_SEARCH_ENABLED !== "false" ? (
+        <div
+          style={{
+            padding: "20px 24px 12px",
+            background: "#fff",
+          }}
+        >
+          <SearchBar
+            value={qText}
+            onChange={setQText}
+            onSubmit={(submitted) => {
+              setQText(submitted);
+              commitQ(submitted);
+            }}
+            locale={lc}
+            flaggedPatterns={response?.meta?.phi_flagged_patterns ?? []}
+          />
+        </div>
+      ) : null}
 
       {/* Sub-bar: KCD autocomplete + page size + sort summary */}
       <div

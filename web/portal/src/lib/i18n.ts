@@ -284,6 +284,24 @@ const en = {
     cohortTitle: "Cohort",
     cohortReviewCta: "Review order",
     recentSearches: "Recent searches",
+    // text-search-description Phase 1.0 — 11 keys for the search bar surface.
+    searchBar: {
+      placeholder:
+        "Search by body part, modality, KCD code... (e.g. 'MR brain', 'CT chest', 'I20.9')",
+      placeholderShort: "Search studies",
+      ariaLabel:
+        "Search studies by body part, modality, or KCD code",
+      clearAria: "Clear search",
+      submitButton: "Search",
+      noSuggestions: "No suggestions",
+      loadingSuggestions: "Loading suggestions…",
+      maskedBadgeText: "Query masked",
+      maskedBadgeTooltip:
+        "Search containing patient identifiers is masked in our audit logs and not retained beyond 30 days. Your search still runs as-is.",
+      emptyResultTitle: 'No studies match "{q}"',
+      emptyResultHint: "Try removing filters or different keywords:",
+      emptyResultClear: "Clear search",
+    },
   },
   study: {
     backToResults: "Back to results",
@@ -812,6 +830,20 @@ export type Dict = {
     cohortTitle: string;
     cohortReviewCta: string;
     recentSearches: string;
+    searchBar: {
+      placeholder: string;
+      placeholderShort: string;
+      ariaLabel: string;
+      clearAria: string;
+      submitButton: string;
+      noSuggestions: string;
+      loadingSuggestions: string;
+      maskedBadgeText: string;
+      maskedBadgeTooltip: string;
+      emptyResultTitle: string;
+      emptyResultHint: string;
+      emptyResultClear: string;
+    };
   };
   study: {
     backToResults: string;
@@ -1406,6 +1438,22 @@ const ko: Dict = {
     cohortTitle: "코호트",
     cohortReviewCta: "주문 검토",
     recentSearches: "최근 검색",
+    searchBar: {
+      placeholder:
+        "부위·모달리티·KCD 코드로 검색 (예: 'MR brain', 'CT chest', 'I20.9')",
+      placeholderShort: "검색",
+      ariaLabel: "검색어 입력 — 부위·모달리티·KCD 코드",
+      clearAria: "검색어 지우기",
+      submitButton: "검색",
+      noSuggestions: "추천 검색어 없음",
+      loadingSuggestions: "추천 검색어 로딩 중…",
+      maskedBadgeText: "검색어 마스킹됨",
+      maskedBadgeTooltip:
+        "환자 식별 정보가 포함된 검색어는 감사 로그에서 마스킹되며 30일 이후 폐기됩니다. 검색은 입력 그대로 실행됩니다.",
+      emptyResultTitle: '"{q}" 와 일치하는 study 없음',
+      emptyResultHint: "필터를 제거하거나 다른 키워드를 시도해 보세요:",
+      emptyResultClear: "검색어 지우기",
+    },
   },
   study: {
     backToResults: "결과로 돌아가기",
