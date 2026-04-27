@@ -16,10 +16,12 @@ import base64
 import hashlib
 import json
 import logging
+import re
 import time
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Request
+from sqlalchemy import select
 from ulid import ULID
 
 from radivault_central.audit.ingest_event import record_ingest_event, record_rejection
@@ -180,6 +182,208 @@ def _peek_pseudo_study_uid(raw_manifest: bytes | None) -> str | None:
     if isinstance(val, str) and val:
         return val[:256]
     return None
+
+
+def _persist_preview_batch(
+    session,
+    *,
+    pseudo_study_uid: str,
+    manifest_preview,
+) -> None:
+    """jpg-preview-defacing FR-PREVIEW-12 / FR-PREVIEW-13 / FR-AUDIT-1.
+
+    Persist the gateway-emitted ``manifest.preview`` block into the
+    central DB. Three writes per series, all within the caller's
+    transaction so partial failure is impossible:
+
+      1. UPDATE series.preview_* WHERE pseudo_series_uid=...
+      2. DELETE + INSERT N rows into dicom_preview_frame for the series
+         (DELETE first by ``(pseudo_series_uid, frame_idx)`` so a
+         retry / resync doesn't dup-insert — the table has a UNIQUE
+         constraint on the same pair).
+      3. INSERT 1 row into phi_scrub_audit per series (append-only).
+
+    ``manifest_preview`` is a :class:`PreviewBatch` Pydantic model. When
+    it's None or ``skipped=True`` the function is a no-op.
+    """
+    if manifest_preview is None:
+        return
+    if getattr(manifest_preview, "skipped", False):
+        # FR-PREVIEW-3: flag-off ingest carries skipped=True; nothing to
+        # persist, but it's NOT an error.
+        return
+
+    from datetime import datetime as _dt
+
+    from radivault_central.db.models import (
+        DicomPreviewFrame,
+        PhiScrubAudit,
+        Series,
+    )
+
+    pipeline_version = (
+        getattr(manifest_preview, "pipeline_version", None) or "0.1.0"
+    )
+    now = _dt.now(tz=UTC)
+
+    for series in manifest_preview.series or []:
+        pseudo_series_uid = series.pseudo_series_uid
+        # 1) UPDATE series.preview_* by pseudo_series_uid. Series row
+        # was created earlier in the same transaction by
+        # ``insert_study_full``. We do not INSERT here because the
+        # gateway might emit a preview entry for a series that does not
+        # exist (impossible by contract but defensive: log + skip).
+        series_row = session.scalar(
+            select(Series).where(Series.pseudo_series_uid == pseudo_series_uid)
+        )
+        if series_row is None:
+            log.warning(
+                "preview_persist_series_missing",
+                extra={
+                    "event": "ingest.preview.series_missing",
+                    "pseudo_series_uid": pseudo_series_uid,
+                },
+            )
+            continue
+        series_row.preview_status = series.preview_status
+        series_row.preview_frame_count = int(series.frame_count or 0)
+        series_row.preview_deface_decision = series.deface_decision
+        series_row.preview_deface_method = series.phi_scrub_method
+        series_row.preview_pipeline_version = pipeline_version
+        if series.preview_status == "generated":
+            series_row.preview_generated_at = now
+
+        # 2) DICOM preview frames — idempotent re-ingest via DELETE-then-
+        # INSERT. The UNIQUE(pseudo_series_uid, frame_idx) constraint
+        # on dicom_preview_frame would otherwise raise on retry.
+        if series.frames:
+            session.query(DicomPreviewFrame).filter(
+                DicomPreviewFrame.pseudo_series_uid == pseudo_series_uid
+            ).delete(synchronize_session=False)
+            for frame in series.frames:
+                session.add(
+                    DicomPreviewFrame(
+                        pseudo_series_uid=pseudo_series_uid,
+                        pseudo_study_uid=pseudo_study_uid,
+                        frame_idx=int(frame.frame_idx),
+                        minio_key=frame.minio_key,
+                        width=int(frame.width),
+                        height=int(frame.height),
+                        byte_size=int(frame.byte_size),
+                        sha256=frame.sha256,
+                        phi_scrub_method=frame.phi_scrub_method,
+                        source_instance_uid_pseudo=(
+                            frame.source_instance_uid_pseudo
+                        ),
+                    )
+                )
+
+        # 3) PHI scrub audit — append-only. One row per (series, ingest).
+        # Re-ingest produces multiple rows; the search-side manifest
+        # endpoint picks the latest by max(id) so this is by design.
+        session.add(
+            PhiScrubAudit(
+                pseudo_study_uid=pseudo_study_uid,
+                pseudo_series_uid=pseudo_series_uid,
+                modality=(series.modality or "?")[:8],
+                body_part=(
+                    series.body_part[:32] if series.body_part else None
+                ),
+                deface_decision=series.deface_decision or "not_required",
+                deface_decision_reason=(
+                    series.deface_decision_reason or ""
+                )[:255],
+                phi_scrub_method=(series.phi_scrub_method or "")[:40],
+                sidecar_image_tag=(
+                    series.sidecar_image_tag[:64]
+                    if series.sidecar_image_tag
+                    else None
+                ),
+                afni_version=(
+                    series.afni_version[:32]
+                    if series.afni_version
+                    else None
+                ),
+                duration_ms=series.duration_ms,
+                outcome=series.outcome,
+                error_code=(
+                    series.error_code[:40] if series.error_code else None
+                ),
+                error_detail=_scrub_audit_error_detail(series.error_detail),
+                pipeline_version=pipeline_version[:32],
+            )
+        )
+
+
+# HIGH #5 — PHI-free ``error_detail`` enforcement (jpg-preview-defacing
+# AC-19 / FR-AUDIT-3). Allow-list of strings the sidecar / gateway are
+# expected to emit. Anything else with >2 consecutive digits is replaced
+# with the literal ``"redacted_by_phi_guard"`` and a warning is logged.
+#
+# The sidecar's known error codes are listed in
+# ``docker/afni-refacer/app.py`` + ``radivault_gateway/deface_client.py``;
+# they are short ASCII strings without patient identifiers. The regex
+# guard only targets long digit runs because that is the most common
+# PHI shape (MRN, phone, RRN). Letters + short codes pass freely so
+# legitimate strings like "AFNI exceeded 600s" still survive.
+_PHI_DIGIT_RUN = re.compile(r"\d{3,}")
+_AUDIT_DETAIL_ALLOWLIST = frozenset(
+    {
+        # Sidecar-emitted (docker/afni-refacer/app.py) — exact literals
+        # that contain digit runs by design.
+        # We don't enumerate every possibility; instead we validate
+        # shape: 3+ consecutive digits is suspicious unless explicitly
+        # allow-listed. The allow-list grows as needed.
+    }
+)
+
+
+def _scrub_audit_error_detail(detail: str | None) -> str | None:
+    """FR-AUDIT-3 / HIGH #5 enforcement.
+
+    Returns the input verbatim when it's None / short / digit-light.
+    Replaces with ``"redacted_by_phi_guard"`` (and logs) when the
+    detail contains 3+ consecutive digits NOT matching an allow-listed
+    pattern (timeouts, return codes — these have at most 1-2 digits in
+    sequence).
+    """
+    if detail is None:
+        return None
+    if not isinstance(detail, str):
+        # Defensive: pydantic should guarantee str, but if a future caller
+        # passes a non-string we drop it rather than coerce.
+        return None
+    if len(detail) > 2000:
+        detail = detail[:2000]
+    # Sample of legitimate strings:
+    #   "healthz != ok"                → no digits, ok
+    #   "AFNI exceeded 600s"           → 1 digit run len=3 — currently flagged
+    #                                    (acceptable: emit redacted, audit
+    #                                    still records error_code separately)
+    #   "client-side timeout 600s"     → same
+    #   "tar error: ..."               → may include filenames; if so any
+    #                                    digit run blocks it. OK.
+    #   "afni dumped core"             → no digits, ok
+    #
+    # The conservative posture: any 3+ digit run that isn't in the
+    # allow-list is replaced. error_code on the same row preserves the
+    # diagnostic signal.
+    if _AUDIT_DETAIL_ALLOWLIST:
+        # Future hook — we don't currently allow-list any string
+        # because the sidecar's debug strings have short digit runs.
+        for allowed in _AUDIT_DETAIL_ALLOWLIST:
+            if detail == allowed:
+                return detail
+    if _PHI_DIGIT_RUN.search(detail):
+        log.warning(
+            "audit_error_detail_redacted",
+            extra={
+                "event": "ingest.preview.error_detail_redacted",
+                "len": len(detail),
+            },
+        )
+        return "redacted_by_phi_guard"
+    return detail
 
 
 @router.post("/v1/ingest/studies", status_code=201)
@@ -537,6 +741,20 @@ async def post_ingest(request: Request) -> dict:
                     created_study.study_pk,
                     str(exc)[:200],
                 )
+
+        # jpg-preview-defacing FR-PREVIEW-12 / FR-PREVIEW-13 / FR-AUDIT-1
+        # (B-5 wiring). Persist the gateway-emitted manifest.preview block
+        # into series.preview_*, dicom_preview_frame, phi_scrub_audit. All
+        # writes share the same session/transaction as the study/series
+        # INSERTs above so partial failure is impossible. Pre-jpg-preview-
+        # defacing manifests carry preview=None and the helper is a no-op.
+        manifest_preview = getattr(manifest, "preview", None)
+        if manifest_preview is not None:
+            _persist_preview_batch(
+                session,
+                pseudo_study_uid=manifest.pseudo_study_uid,
+                manifest_preview=manifest_preview,
+            )
         duration_ms = int((time.time() - started) * 1000)
         record_ingest_event(
             session,
