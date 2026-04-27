@@ -70,11 +70,25 @@ services:
     restart: unless-stopped
     mem_limit: 4g
     memswap_limit: 4g  # disable swap (Kyle Q6 default)
-    # AC-21: pin to the internal-only network so apt-get / pip / curl-out
-    # all fail at runtime. The gateway-agent is also attached to deface-net
-    # so POST /deface still works.
+    # AC-21 (production): sidecar 는 deface-net (internal: true) 에만 붙어
+    # apt-get / pip / curl-out 이 모두 kernel 단에서 실패해야 한다.
+    #
+    # AC-21 dev caveat: dev/demo 에서는 host CLI (scripts/demo_seed/
+    # inject_all.sh STEP 3) 의 `radivault-gateway sync-once` 가 host 에서
+    # 실행되므로 sidecar 의 :8090 에 host 로 부터 도달 가능해야 한다.
+    # Docker 의 `internal: true` 네트워크는 ports publish 를 silently 무시
+    # (NAT 룰 미설치) 하므로, dev 전용으로 default bridge 도 함께 attach
+    # 한다. 이렇게 하면 ports: 127.0.0.1:8090:8090 발행이 정상 동작.
+    # 이 변경은 sidecar 의 outbound 를 부분적으로 가능하게 하므로
+    # AC-21 의 strict 정의를 위반한다 — dev/demo 환경 한정. production
+    # hospital compose 에서는 default 네트워크 attachment 와 ports 블록
+    # 모두 제거하고 internal: true deface-net 만 사용해야 한다.
+    # 자세한 토폴로지 설명은 docker/afni-refacer/NETWORKING.md 참조.
     networks:
       - deface-net
+      - default       # dev caveat — host port publish 를 위함, AC-21 위반
+    ports:
+      - "127.0.0.1:8090:8090"
     environment:
       SIDECAR_IMAGE_TAG: "radivault/deface-sidecar:0.1.0"
       LOG_LEVEL: "INFO"

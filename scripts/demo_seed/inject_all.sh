@@ -84,10 +84,35 @@ fi
 
 # --- Step 3: Gateway flow A (once) ----------------------------------------
 GATEWAY_CONFIG="${REPO_ROOT}/configs/demo_gateway.yaml"
+
+# jpg-preview-defacing FR-PREVIEW-3 — host CLI 데모 경로용 env wiring.
+# docker-compose.yml 의 gateway-agent 환경변수는 컨테이너 모드 전용이라 host
+# 에서 `radivault-gateway sync-once` 를 직접 실행하는 본 스크립트와는 무관.
+# 따라서 여기서 명시적으로 export 한다. 이미 정의된 값은 덮어쓰지 않는다.
+#
+# - PREVIEW_PIPELINE_ENABLED:  src/radivault_gateway/preview_pipeline.py의
+#   is_pipeline_enabled() 가 읽는 feature flag (FR-PREVIEW-3).
+# - DEFACE_SIDECAR_URL:        head/neck CT/MR 시리즈에서 게이트웨이가 호출하는
+#   AFNI sidecar HTTP 엔드포인트. docker-compose.yml 에 127.0.0.1:8090 host
+#   port 가 매핑돼 있어 host 모드에서 도달 가능.
+# - RV_CENTRAL_DATABASE_URL:   preview_clients.PgFrameWriter 가 사용하는
+#   central Postgres DSN. docker-compose.central.yml 의 central_app/central_app
+#   기본 자격증명 + host 5432 포트.
+# - RV_MINIO_ENDPOINT/_ACCESS_KEY/_SECRET_KEY: MinioJpegClient 가 frame JPG 를
+#   업로드하는 MinIO. docker-compose.central.yml 의 minioadmin/minioadmin +
+#   host 9000 포트.
+export PREVIEW_PIPELINE_ENABLED="${PREVIEW_PIPELINE_ENABLED:-true}"
+export DEFACE_SIDECAR_URL="${DEFACE_SIDECAR_URL:-http://127.0.0.1:8090}"
+export RV_CENTRAL_DATABASE_URL="${RV_CENTRAL_DATABASE_URL:-postgresql+psycopg://central_app:central_app@127.0.0.1:5432/central}"
+export RV_MINIO_ENDPOINT="${RV_MINIO_ENDPOINT:-http://127.0.0.1:9000}"
+export RV_MINIO_ACCESS_KEY="${RV_MINIO_ACCESS_KEY:-minioadmin}"
+export RV_MINIO_SECRET_KEY="${RV_MINIO_SECRET_KEY:-minioadmin}"
+
 if [[ "${DEMO_SEED_SKIP_GATEWAY:-0}" == "1" ]]; then
   say "STEP 3/6 SKIPPED: radivault-gateway sync-once (DEMO_SEED_SKIP_GATEWAY=1)"
 else
   say "STEP 3/6: radivault-gateway sync-once (host-side CLI, config=${GATEWAY_CONFIG})"
+  say "  PREVIEW_PIPELINE_ENABLED=${PREVIEW_PIPELINE_ENABLED} DEFACE_SIDECAR_URL=${DEFACE_SIDECAR_URL}"
   if ! command -v radivault-gateway >/dev/null 2>&1; then
     say "WARN: radivault-gateway not on PATH — skipping step 3."
     say "      Install with: pip install -e . (from repo root)"
