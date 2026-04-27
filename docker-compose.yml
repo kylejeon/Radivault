@@ -17,14 +17,50 @@ services:
     depends_on:
       - mock-central
       - orthanc
+      - deface-sidecar
     environment:
       RADIVAULT_CONFIG: /etc/radivault/gateway.yml
       NO_COLOR: "1"
+      # jpg-preview-defacing FR-DEFACE-6: gateway calls this URL to invoke
+      # @afni_refacer_run on a per-series basis. Internal compose DNS only.
+      DEFACE_SIDECAR_URL: "http://deface-sidecar:8090"
+      # FR-PREVIEW-3: feature flag — keep OFF in pilot dockerised runs
+      # until Kyle flips it during D-13 sync. process_study() short-circuits
+      # to PreviewBatchResult(skipped=True, reason="flag_off") when false.
+      PREVIEW_PIPELINE_ENABLED: "false"
     volumes:
       - ./configs/gateway.docker.yaml:/etc/radivault/gateway.yml:ro
       - ./secrets:/run/credentials:ro
       - gateway-state:/var/lib/radivault
       - gateway-logs:/var/log/radivault
+
+  # jpg-preview-defacing FR-DEFACE-5 — AFNI defacing sidecar.
+  #
+  # Runs the AFNI @afni_refacer_run pipeline for head/neck CT/MR series.
+  # Gateway-agent calls POST /deface over the internal compose network;
+  # nothing on the public internet should be able to reach this service
+  # (FR-DEFACE-5 + AC-21).
+  #
+  # Memory: 4 GiB hard limit per Kyle 2026-04-27 (dev-spec §11 Q6 default).
+  # OOM-killed runs are surfaced as 500 by the supervising compose +
+  # quarantined by the gateway preview_pipeline (FR-DEFACE-8 runtime path).
+  deface-sidecar:
+    build:
+      context: ./docker/afni-refacer
+      dockerfile: Dockerfile
+    image: radivault/deface-sidecar:0.1.0
+    restart: unless-stopped
+    mem_limit: 4g
+    memswap_limit: 4g  # disable swap (Kyle Q6 default)
+    environment:
+      SIDECAR_IMAGE_TAG: "radivault/deface-sidecar:0.1.0"
+      LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   mock-central:
     build:

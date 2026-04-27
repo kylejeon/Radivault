@@ -88,6 +88,73 @@ class ThumbnailV2(BaseModel):
     data_b64: str  # base64 of JPEG payload
 
 
+class PreviewFrameEntry(BaseModel):
+    """jpg-preview-defacing FR-PREVIEW-13 — single frame manifest row.
+
+    Mirrors the ``dicom_preview_frame`` table 1:1 so the central ingest
+    router can do a straight INSERT. ``minio_key`` is bucket-relative
+    (``previews/{study}/{series}/{idx:04d}.jpg``) — see FR-PREVIEW-10.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    frame_idx: int = Field(ge=0)
+    minio_key: str = Field(min_length=1, max_length=255)
+    width: int = Field(ge=1)
+    height: int = Field(ge=1)
+    byte_size: int = Field(ge=1)
+    sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
+    phi_scrub_method: str = Field(min_length=1, max_length=40)
+    source_instance_uid_pseudo: str | None = Field(default=None, max_length=64)
+
+
+class PreviewSeriesEntry(BaseModel):
+    """jpg-preview-defacing FR-PREVIEW-12 — per-series preview summary.
+
+    Drives the UPDATE on ``series.preview_*`` columns + INSERT on
+    ``phi_scrub_audit``. ``frames`` is empty when ``preview_status`` is
+    ``skipped|quarantined|pending`` (FR-DEFACE-8).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    pseudo_series_uid: str = Field(min_length=1, max_length=64)
+    series_num: int = Field(ge=1)
+    modality: str = Field(min_length=1, max_length=8)
+    body_part: str | None = Field(default=None, max_length=32)
+    preview_status: Literal["generated", "skipped", "quarantined", "pending"]
+    deface_decision: (
+        Literal["required", "not_required", "skipped_unsupported_modality"] | None
+    ) = None
+    deface_decision_reason: str = Field(min_length=1, max_length=255)
+    phi_scrub_method: str = Field(min_length=1, max_length=40)
+    frame_count: int = Field(ge=0)
+    frames: list[PreviewFrameEntry] = Field(default_factory=list)
+    sidecar_image_tag: str | None = Field(default=None, max_length=64)
+    afni_version: str | None = Field(default=None, max_length=32)
+    duration_ms: int | None = None
+    outcome: Literal[
+        "success",
+        "quarantine_input",
+        "quarantine_runtime",
+        "skipped",
+        "not_required",
+    ]
+    error_code: str | None = Field(default=None, max_length=40)
+    error_detail: str | None = Field(default=None, max_length=2000)
+
+
+class PreviewBatch(BaseModel):
+    """jpg-preview-defacing FR-PREVIEW-1 — top-level manifest.preview block."""
+
+    model_config = ConfigDict(extra="allow")
+
+    skipped: bool = False
+    reason: str | None = Field(default=None, max_length=64)
+    pipeline_version: str = Field(default="0.1.0", max_length=32)
+    series: list[PreviewSeriesEntry] = Field(default_factory=list)
+
+
 class Manifest(BaseModel):
     """Canonical ingest manifest (dev-spec §6.5).
 
@@ -127,6 +194,15 @@ class Manifest(BaseModel):
     study_description: str | None = Field(default=None, max_length=200)
     protocol_name: str | None = Field(default=None, max_length=200)
     description_scrub_metadata: dict | None = None
+
+    # jpg-preview-defacing FR-PREVIEW-1 — manifest v2.2 additive. The
+    # gateway preview_pipeline emits a per-study block describing every
+    # series's deface decision, frame_count, MinIO keys, and audit hint.
+    # Central's ingest router persists this into series.preview_*,
+    # dicom_preview_frame, phi_scrub_audit. All fields optional so
+    # gateways without the flag (FR-PREVIEW-3) still produce valid
+    # manifests.
+    preview: PreviewBatch | None = None
 
     @field_validator("anonymization_flag")
     @classmethod
