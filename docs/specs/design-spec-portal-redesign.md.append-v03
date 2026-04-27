@@ -1,0 +1,299 @@
+
+---
+
+## 17. 병원 콘솔 컴포넌트 (v0.3 신규)
+
+> 대상 dev-spec: FR-HO-1..15 + FR-INF-6/7. 컬러는 **Hospital teal (#0d9488)** 기준 (v0.1 §4 토큰 재사용). v0.1 의 `{#value-tile-v1}` `{#footer-kr-v1}` `{#timeline-step-v1}` 적극 재사용.
+
+### 17.1 AuditChainStatusBadge `{#audit-chain-status-v1}`
+
+- **근거**: FR-HO-5 + FR-INF-6 (`GET /api/hospital/me/audit-chain-status`).
+- **3 variant** (status):
+  - `OK` — teal-bg (`bg-teal-50` / fg `#0d9488`) · dot pulse · 라벨 `정상`.
+  - `STALE` — amber (`bg-amber-50` / fg `#b45309`) · 라벨 `지연` · `last_anchor_age_seconds > 1800`.
+  - `BROKEN` — red (`bg-rose-50` / fg `#b91c1c`) · 라벨 `체인 단절` · `chain_continuous=false`.
+- **레이아웃** (3-row 카드, `{#value-tile-v1}` size 차용):
+  ```
+  ┌─ 감사 앵커 체인 ────────────────┐
+  │ ● 정상                          │  ← 상단 status pill
+  │ 마지막 앵커 5분 전 (10:23 KST)  │  ← 한국어 상대 시각
+  │ hash a3f8d9c1b2e4f5a6 · 24h 48건│  ← prefix + 빈도
+  └─────────────────────────────────┘
+  ```
+- **Spec**: prefix 16자 monospace (`font-mono text-xs`). 시각 absolute hover tooltip 으로 UTC 병기.
+- **A11y**: `role="status"` · `aria-live="polite"` (status 변경 시 SR 알림).
+
+### 17.2 GatewayHeartbeatChart `{#gateway-heartbeat-v1}`
+
+- **근거**: FR-HO-3 #5 + 기존 `dev-spec-buyer-portal-demo FR-B-4` 확장 (24h uptime bar 추가).
+- **렌더**: 24-bucket horizontal bar (1h 1 bucket) · sparkline 변형. 색:
+  - online (`< 5m last beat`) → teal `#0d9488`.
+  - warning (`5m ≤ x < 30m`) → amber `#f59e0b`.
+  - offline (`≥ 30m`) → gray `#9ca3af` (red 아님 — 데이터 미수신은 fail 보다 unknown).
+- **레이아웃**:
+  ```
+  ┌─ Gateway 상태 ──────────────────┐
+  │ ● 온라인 · 마지막 신호 32초 전   │
+  │ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮       │  ← 24 bar (좌→우 = -24h→now)
+  │   00         12             24h │
+  └─────────────────────────────────┘
+  ```
+- **Spec**: bar height 24px · gap 1px · 우측 끝 = 현재 시각.
+- **Empty state**: 신호 0회 24h → 회색 bar 전체 + `데이터 없음 — 게이트웨이 점검 필요`.
+
+### 17.3 QuotaTile `{#quota-tile-v1}`
+
+- **근거**: FR-HO-6 + FR-INF-7. **3-up 레이아웃** (일일 / 월간 / 동시업로드).
+- **각 sub-tile**:
+  - 일일 / 월간 — bytes 진행률 bar (teal-fg) + `12.3 GB / 100 GB` (한국어식 풀스펠 KRW 와 달리 영문 단위 OK, K-13 참조).
+  - max_concurrent_uploads — 단순 numeric `4 / 4` + 좌측 작은 bar 4 칸.
+- **레이아웃**:
+  ```
+  ┌─ 업로드 쿼터 ───────────────────┐
+  │ 오늘  ▰▰▰▱▱▱▱▱▱▱  12% (12.3GB) │
+  │ 이달  ▰▰▰▰▰▰▱▱▱▱  62% (188GB)  │
+  │ 동시 업로드 한도        4 / 4   │
+  └─────────────────────────────────┘
+  ```
+- **임계 색**: < 70% teal · 70~89% amber · ≥ 90% red. WCAG 3:1 보장 (v0.1 §4 색 보정 승계).
+- **Disclaimer**: 우상단 작은 글씨 `v0.1 시뮬레이션 — 실 집행 v0.1.1`.
+
+### 17.4 RulesetVersionBadge `{#ruleset-badge-v1}`
+
+- **근거**: FR-HO-6 후반 + FR-INF-7 `ruleset_version` / `salt_version` / `pixel_engine_version`.
+- **레이아웃** (compact, 3-row):
+  ```
+  ┌─ 비식별 규정 버전 ──────────────┐
+  │ Ruleset      v0.1.0             │
+  │ Salt         2026-01            │
+  │ Pixel engine v0.2.0             │
+  │ 마지막 회전 2026-01-15          │
+  └─────────────────────────────────┘
+  ```
+- **Spec**: monospace 버전 텍스트, 버전이 v0.1 stale 이면 작은 amber dot.
+- **Salt rotate 시각** (`rotate_at` — central-ingest 가 v0.1 에서 미제공 시 `salt_version` 의 YYYY-MM 으로 1일 추정).
+
+### 17.5 ModalityDistributionChart `{#modality-dist-v1}`
+
+- **근거**: FR-HO-3 #7 + 기존 `FR-B-6` 승계. **우리 병원만** 분포 (Buyer-side `/search` 의 federated facet 과 다름).
+- **렌더**: 도넛 차트 (Recharts `PieChart` inner radius 60%). 색 토큰: v0.2 §11.1 `--color-modality-{ct|mr|cr|mg|us|pt|xa}` 재사용.
+- **레이아웃**:
+  ```
+  ┌─ 모달리티 분포 ─────────────────┐
+  │       ╭───╮                     │
+  │     ╭─╯ CT├─╮                   │
+  │     │  42% │ │  ▣ CT     42%    │
+  │     ╰─╮   ╭─╯  ▣ MR     31%    │
+  │       ╰───╯    ▣ CR     14%    │
+  │                ▣ MG      8%    │
+  │                ▣ 기타     5%    │
+  └─────────────────────────────────┘
+  ```
+- **Empty state**: 0 study 시 회색 도넛 + `아직 업로드된 study 가 없습니다`.
+- **A11y**: legend 는 텍스트 list. 도넛 자체에 `role="img" aria-label="모달리티 분포: CT 42%, MR 31%..."`.
+
+### 17.6 RevenueTile `{#revenue-tile-v1}`
+
+- **근거**: FR-HO-3 #3 + 기존 `FR-B-2` 확장 (Δ% vs 지난 달 추가).
+- **레이아웃** (`{#value-tile-v1}` 직접 차용 + delta chip):
+  ```
+  ┌─ 이번 달 수익 시뮬 ─────────────┐
+  │ ₩ 18,400,000                    │  ← KRW 풀스펠 (FR-HO-13)
+  │ ▲ 24% vs 지난 달                │  ← 양수 teal · 음수 red
+  │ ※ v0.2 정산 대기 시뮬레이션값   │  ← 항상 표기
+  └─────────────────────────────────┘
+  ```
+- **Spec**: KRW 표기 K-13 결정 따름 (기본: `₩ 18,400,000` 풀스펠). 천단위 콤마 ko-KR locale.
+- **Δ chip**: 양 = teal `▲`, 음 = red `▼`, 0 = gray `—`. 지난 달 0 KRW 면 `신규` 라벨.
+
+### 17.7 OrderInflowTile `{#order-inflow-v1}`
+
+- **근거**: FR-HO-3 #4 + 기존 `FR-B-3` (buyer 실명 마스킹 유지).
+- **레이아웃**:
+  ```
+  ┌─ 들어온 주문 ───────────────────┐
+  │ 12 건 · 1,847 study             │  ← 주문 건수 + 총 study 수
+  │ 최근: 2시간 전                  │
+  │ 활성 buyer 5사 (마스킹)         │  ← 항상 마스킹 (§L-1)
+  └─────────────────────────────────┘
+  ```
+- **Spec**: buyer 실명 절대 금지. `5사` 처럼 갯수만 노출.
+- **링크**: 카드 전체 클릭 → `/hospital/orders` (마스킹 리스트).
+
+---
+
+## 18. 병원 콘솔 화면 와이어 (v0.3)
+
+> 데스크톱 1280 only (FR-HO 사용자는 한국 병원 운영자 = 데스크톱 환경). 한국어 우선. 1024 미만은 `{#footer-kr-v1}` 위에 banner `데스크톱 1280px 이상에서 최적화되어 있습니다`.
+
+### 18.1 `/hospital` — 9 타일 대시보드
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ ▣ RadiVault 병원 콘솔        대시보드 주문 감사 설정    HOSP-001 ▾ ⏻ │  ← Top nav (FR-HO-9)
+├────────────────────────────────────────────────────────────────────────┤
+│  대시보드 · Bon Hospital                          최근 갱신 32초 전 ↻  │
+├────────────────────────────────────────────────────────────────────────┤
+│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                     │
+│ │ 업로드 study │ │ Total bytes  │ │ 모달리티 분포│   row 1: 볼륨/구성  │
+│ │ 1,247        │ │ 248 GB       │ │ (donut)      │                     │
+│ │ ▁▂▃▅▆▇█ 12mo │ │ +12 GB 이달  │ │ CT 42%··    │                     │
+│ └──────────────┘ └──────────────┘ └──────────────┘                     │
+│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                     │
+│ │ 감사 체인    │ │ Gateway HB   │ │ 업로드 쿼터  │   row 2: 시스템     │
+│ │ ● 정상       │ │ ● 온라인 32초│ │ 일/월/동시   │                     │
+│ │ 5분 전 a3f8.│ │ ▮▮▮▮▮▮▮▮ 24h│ │ 12% / 62% / 4│                     │
+│ └──────────────┘ └──────────────┘ └──────────────┘                     │
+│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                     │
+│ │ 이번 달 수익 │ │ 들어온 주문  │ │ 비식별 버전  │   row 3: 비즈/규정  │
+│ │ ₩18,400,000  │ │ 12건/1,847   │ │ ruleset 0.1.0│                     │
+│ │ ▲24% MoM     │ │ 최근 2시간 전│ │ salt 2026-01 │                     │
+│ └──────────────┘ └──────────────┘ └──────────────┘                     │
+├────────────────────────────────────────────────────────────────────────┤
+│  최근 감사 이벤트 (20)                                  전체 로그 →    │  ← FR-HO-7 미리보기
+│  10:23  audit_anchor       a3f8d9c1b2e4f5a6   chain_ok                │
+│  10:18  ingest_complete    e4f1a2b8c7d6e5f4   ...                     │
+│  ...                                                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│  [Footer KR — {#footer-kr-v1} v0.3 변형 / §19]            [● 1:1 문의]│
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+- **그리드**: 1280px 기준 3-col × 3-row, gap 16px. 각 타일 min-h 140px.
+- **State 조합**:
+  - **loading**: 9 타일 동시 skeleton (gray pulse, 280ms stagger 금지 — 의료 신뢰 톤).
+  - **partial-failure**: 타일별 독립 fetch — 1 타일 실패 시 그 타일만 inline error `데이터 일시 지연 · 재시도 ↻`. 다른 타일은 정상 렌더 (운영자가 부분 정보로도 판단 가능해야 함).
+  - **no-permission**: 다른 hospital_id session 으로 접근 불가 시 page-level (§14.4) 패턴 + 토스트 `해당 병원에 접근 권한이 없습니다`.
+
+### 18.2 `/hospital/audit` — 감사 앵커 상세
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  감사 로그 · 시간순 ▾    필터: [모든 type ▾] [최근 24h ▾]   CSV 내보내기│
+├────────────────────────────────────────────────────────────────────────┤
+│  시각              type              hash prefix          연속성       │
+├────────────────────────────────────────────────────────────────────────┤
+│  10:23:00  KST    audit_anchor      a3f8d9c1b2e4f5a6     ✓ ok         │
+│  10:18:42  KST    ingest_complete   e4f1a2b8c7d6e5f4     ✓ ok         │
+│  10:18:01  KST    ingest_start      ...                  ─            │
+│  ...                                                                   │
+│                                  더 보기 ▾ (cursor 기반 페이지네이션)   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Spec**: hash monospace · 클릭 시 전체 hash + 인접 앵커 chain 표시 drawer.
+- **CSV 내보내기**: PHI 포함 0 (hash·timestamp·type 만). 파일명 `audit_<hospital_id>_<YYYYMMDD>.csv`.
+- **Empty**: `이 시간 범위에는 이벤트가 없습니다`.
+- **연속성 break 시**: 해당 row red bg · 앵커 prefix 좌측 ⚠ 아이콘 · 상단 banner `체인 단절 감지 — Kyle 에게 자동 알림 발송됨` (FR-INF-6 chain_continuous=false).
+
+### 18.3 `/hospital/quota` — 쿼터 상세
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  업로드 쿼터 · Bon Hospital                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│  오늘 (2026-04-25 KST)                                                 │
+│  ▰▰▰▱▱▱▱▱▱▱  12.3 GB / 100 GB        리셋: 내일 00:00 KST            │
+│                                                                        │
+│  이달 (2026-04)                                                        │
+│  ▰▰▰▰▰▰▱▱▱▱  188 GB / 300 GB         리셋: 2026-05-01 00:00 KST      │
+│                                                                        │
+│  동시 업로드          4 / 4           Gateway max_concurrent_uploads   │
+├────────────────────────────────────────────────────────────────────────┤
+│  비식별 규정 버전                                                       │
+│  Ruleset       v0.1.0     적용 2026-01-15                             │
+│  Salt          2026-01    회전 2026-01-15  (90일 회전 정책)           │
+│  Pixel engine  v0.2.0     dev-spec-pixel-deid                         │
+├────────────────────────────────────────────────────────────────────────┤
+│  ※ v0.1 은 시뮬레이션 — 실 quota 집행은 v0.1.1                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+- **State**:
+  - 70~89% 사용 → amber banner `이번 달 사용량 70% 초과 — 곧 한도 도달 예상`.
+  - ≥ 90% → red banner + 운영팀 mailto.
+  - **error fetch**: page-level (§14.3) 패턴.
+
+---
+
+## 19. 한국식 풋터 강화 + 1:1 문의 플로팅 (v0.3)
+
+### 19.1 `{#footer-kr-v1}` v0.3 확장
+
+> v0.1 정의 재사용. v0.3 에서는 **병원 콘솔 모든 페이지** 에 강제 적용. EN 변형 (`{#footer-en-v1}`) 은 노출 금지.
+
+- **4 컬럼** (제품·솔루션 / 기술 / 회사 / 법적) 그대로.
+- **하단 법적 블록** (필수 표기, FR-HP-9 + 한국 정보통신망법 준수):
+  ```
+  ─────────────────────────────────────────────────────────────────────
+  RadiVault Inc. · 대표자 Kyle Jeon · 사업자등록번호 [TBD K-3 §Q8]
+  주소 [TBD K-3 §Q8] · 고객센터 1544-[TBD K-14] · privacy@radivault.io
+  개인정보처리방침 · 이용약관 · ISMS-P 준비 중 · ISO 27001 aligned
+  © 2026 RadiVault Inc. All rights reserved.
+  ─────────────────────────────────────────────────────────────────────
+  ```
+- **빌드 검증**: `NODE_ENV=production` 시 `[TBD]` 문자열 grep → CI fail (FR-HP-9 + FR-NFR-7 승계).
+- **ISMS 배지**: 좌측 정렬, 16px high, 텍스트 `ISMS-P 준비 중` (단정 어투 금지). 진본 인증 후 v0.2 에서 정식 배지 image 교체.
+
+### 19.2 1:1 문의 플로팅 버튼 `{#hospital-help-fab-v1}`
+
+- **근거**: FR-HO-10 후반 (1:1 문의 mailto 만 v0.1) + 리서치 §4.6 C-3.
+- **위치**: 우하단 `bottom: 24px; right: 24px;` fixed. z-index 50.
+- **Closed 상태**: 원형 56px, teal-bg `#0d9488` · 흰 question 아이콘 · `aria-label="1:1 문의 열기"`.
+- **Open 상태** (클릭 시 위로 펼침):
+  ```
+                            ┌──────────────────────┐
+                            │ 1:1 문의             │
+                            │ ───────────────────  │
+                            │ 💬 카카오톡 채널     │  ← K-15 §Q (deferred v0.1.1)
+                            │ ✉  이메일 보내기     │  ← mailto: support@radivault.io
+                            │                      │  ?subject=[병원문의]&body=...
+                            │ 평일 09:00~18:00 KST │
+                            └──────────────────────┘
+                                         [● ✕]
+  ```
+- **v0.1 옵션 2 개**:
+  - **카카오톡 채널** — placeholder, 클릭 시 toast `카카오톡 채널 v0.1.1 오픈 예정`. K-15 결정 전까지 비활성 회색.
+  - **이메일** — `mailto:support@radivault.io?subject=[병원문의 HOSP-001]&body=Hospital%3A%20HOSP-001%0A%0A` (hospital_id 자동 prefill, PHI 없음).
+- **A11y**: 닫힘 / 열림 `aria-expanded` · ESC 닫힘 · focus trap 열림 시.
+- **모바일 fallback**: 데스크톱 only 전제 (병원 콘솔 = 데스크톱 only) — 모바일 적응 X.
+
+---
+
+## 20. Kyle 결정 (병원 한정 v0.3) + 변경 이력
+
+### 20.1 신규 K-flag (v0.3 스코프)
+
+| # | 항목 | designer 기본값 | Kyle 결정 필요 이유 |
+|---|------|-----------------|----------------------|
+| **K-13** | KRW 표기 정책 (RevenueTile · 모든 KRW 자리) | **풀스펠 `₩ 18,400,000`** (한국 운영자 친숙) | dev-spec FR-HO-13 가 풀스펠 권고. 약어 `₩18.4M` 는 글로벌 어조라 병원 KR 페이지에서 어색. 단, 도넛 등 좁은 자리 fallback 정책 필요 시. |
+| **K-14** | 1544 고객센터 전화 끝 4자리 | `[TBD]` placeholder, prod 빌드 fail | 실 전화 회선 개통 일정 — Kyle 결정. 미정 시 `02-XXXX-XXXX` 일반 번호로 fallback 할지. |
+| **K-15** | 1:1 문의 카카오톡 채널 활성화 | v0.1 비활성 (회색) + toast `v0.1.1 오픈 예정` | 카카오 비즈 채널 개설·승인 일정. 활성 시 채널 ID 필요. mailto 만으로 D-14 가능 여부. |
+| **K-16** | 데스크톱 미만 (1024px 이하) 처리 | 페이지 상단 banner `데스크톱 1280px 이상 권장` + 정상 렌더 | 병원 운영자 = 데스크톱 가정 dev-spec FR-HO 전제. 그러나 시연 중 노트북 fallback 발생 시 banner 만으로 충분한지. |
+| **K-17** | 감사 체인 단절 시 자동 알림 채널 | 자동 메일 to Kyle (운영팀) — UI banner 동시 | SMS·Slack 추가 여부. 의료 데이터 plat 의 SLO 정의. |
+| **K-18** | Audit CSV 내보내기 권한 범위 | 모든 병원 운영자 허용 (자기 병원 한정) | PHI 0 보장되므로 OK 판단. 그러나 export 자체에 추가 승인 절차 둘지 (책임 분산). |
+
+### 20.2 변경 이력 v0.3
+
+> §16 표 마지막 row 다음에 다음 줄 추가 — 본 append 통합 시 §16 변경 이력 표를 직접 수정.
+
+| 버전 | 날짜 | 작성자 | 변경 |
+|------|------|--------|------|
+| **0.3** | **2026-04-25** | **@designer (Claude Opus 4.7)** | **병원 콘솔 append (FR-HO-1..15 + FR-INF-6/7). §17 컴포넌트 7 개 신규 (`{#audit-chain-status-v1}`·`{#gateway-heartbeat-v1}`·`{#quota-tile-v1}`·`{#ruleset-badge-v1}`·`{#modality-dist-v1}`·`{#revenue-tile-v1}`·`{#order-inflow-v1}`). §18 화면 와이어 3 개 (`/hospital` 9-타일 3×3 그리드 · `/hospital/audit` · `/hospital/quota`). §19 한국식 풋터 v0.3 강화 + 1:1 문의 FAB `{#hospital-help-fab-v1}`. §20 K-13..K-18 신규 6 flag (KRW 표기 · 1544 끝번호 · 카카오 채널 · 모바일 fallback · 단절 알림 · CSV export 권한). 데스크톱 1280 only · 한국어 우선. v0.1/v0.2 §1~§16 무수정.** |
+
+---
+
+### NEXT_STEP (v0.3)
+
+- **완료 산출물**: `/Users/yonghyuk/Radivault/docs/specs/design-spec-portal-redesign.md` (v0.3 Draft — Homepage + Shared + Buyer Portal + Hospital Console)
+- **제안 다음 단계**:
+  1. **@developer 착수 가능** — 우선순위:
+     - **P0 (블로커)**: FR-INF-1..4 (search 테이블 DDL · seed_buyer · verify V-9). 디자인 무관, 즉시.
+     - **P1 (홈페이지)**: FR-HP-1..13 (Hero · Trust bar · How it works · Korean footer). v0.1 컴포넌트 9개 사용.
+     - **P2 (바이어 포털)**: FR-BP-1..20. v0.2 컴포넌트 7개 + `/orders/new` 풀페이지 승격.
+     - **P3 (병원 콘솔)**: FR-HO-1..15 + FR-INF-6/7. v0.3 컴포넌트 7개 + 9-타일 그리드. central-ingest 신규 엔드포인트 2개 (audit-chain-status / quota) 선행 필요.
+  2. **@marketer 병렬** — 병원 콘솔 KR 마이크로카피 (`정상`/`지연`/`체인 단절` 문안 · 1:1 문의 톤 · ISMS-P 준비 중 표기 · `시뮬레이션` 디스클레이머 톤).
+  3. **@qa 준비** — v0.3 와이어 기준 AC 작성 (DA-HO-1..9 — 9 타일 각 1 AC + 1:1 FAB · audit chain break banner · quota 임계 색).
+- **UI_GUIDE.md 갱신 제안**: §17 의 7 신규 컴포넌트 (v0.3) 를 §5 (v0.1 9개) + §11 (v0.2 7개) 와 함께 카탈로그 등재. 총 23 공식 컴포넌트. Hospital teal `#0d9488` 토큰 + status amber `#b45309` / red `#b91c1c` 는 v0.1 §4 에 이미 존재 — 신규 토큰 0.
+- **추가 디자인 필요**: v0.4 후속 — (1) `/hospital/orders` 마스킹 리스트 상세 와이어 (현 v0.3 은 링크만), (2) `/hospital/settings` ruleset·salt 읽기 전용 view, (3) DICOM 뷰어 통합 (`dev-spec-dicom-viewer`, v0.2). 데모 D-14 까지 v0.3 으로 충분 — v0.4 는 D-14 이후.
+- **Kyle 결정 필요 사항**: K-13 (KRW 풀스펠 vs 약어) · K-14 (1544 끝번호) · K-15 (카카오 채널) · K-16 (1024px 이하 처리) · K-17 (단절 알림 채널) · K-18 (CSV export 권한). v0.1 의 K-1..K-7 + v0.2 의 K-8..K-12 미해결 시 prod 빌드 차단 (`[TBD]` detection 동일). dev-spec §14.1 Q7 (Korea heatmap 좌표) · Q8 (사업자등록번호 등) · Q10 (병원 SSO) · Q14 (API key 만료) 는 본 v0.3 가 K-flag 로 흡수.

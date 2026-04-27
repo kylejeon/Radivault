@@ -15,10 +15,28 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import time
 from dataclasses import dataclass
 
 from sqlalchemy import and_, asc, desc, func, literal_column, or_, select, text
+
+
+_TSQUERY_TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
+
+
+def _build_prefix_tsquery(q: str) -> str:
+    """Convert user input to a Postgres tsquery with prefix wildcards.
+
+    "MR brain" -> "mr:* & brain:*"  → matches "MR" prefix, "brain" prefix.
+    "br" -> "br:*"  → matches "brain", "bronchitis", etc. (Kyle FR — partial).
+
+    Tokens are sanitized to alphanumeric only (defense against tsquery
+    syntax injection: '!', '|', '&', ':', '<->' would otherwise be parsed).
+    Empty result means caller should treat as "no q" (skip FTS predicate).
+    """
+    tokens = _TSQUERY_TOKEN_RE.findall(q)
+    return " & ".join(f"{t.lower()}:*" for t in tokens)
 from sqlalchemy.orm import Session
 
 from radivault_central.db.models import Hospital, PatientPseudo, Study
@@ -198,11 +216,15 @@ def run_search(
     # text search, while the executor + count both honour the same predicate.
     if effective_q is not None:
         if dialect_name == "postgresql":
-            where_clauses = list(where_clauses) + [
-                text(
-                    "study.search_text @@ websearch_to_tsquery('english', :q_text)"
-                ).bindparams(q_text=effective_q)
-            ]
+            prefix_q = _build_prefix_tsquery(effective_q)
+            if prefix_q:
+                where_clauses = list(where_clauses) + [
+                    text(
+                        "study.search_text @@ to_tsquery('english', :q_text)"
+                    ).bindparams(q_text=prefix_q)
+                ]
+            # else: empty after sanitize → treat as facet-only (no FTS predicate)
+            effective_q_tsquery = prefix_q  # carry to ORDER BY / ts_headline below
         else:
             # SQLite test fallback — ILIKE across the same fields the tsvector
             # weights (body_part / kcd_label_*) so unit tests can still exercise
@@ -256,10 +278,10 @@ def run_search(
 
     # FR-TS-7 — when q is active, ts_rank_cd dominates. The user's existing
     # sort key drops to secondary so ties at equal rank stay deterministic.
-    if effective_q is not None and dialect_name == "postgresql":
+    if effective_q is not None and dialect_name == "postgresql" and effective_q_tsquery:
         rank_expr = text(
-            "ts_rank_cd(study.search_text, websearch_to_tsquery('english', :q_rank)) DESC"
-        ).bindparams(q_rank=effective_q)
+            "ts_rank_cd(study.search_text, to_tsquery('english', :q_rank)) DESC"
+        ).bindparams(q_rank=effective_q_tsquery)
         stmt = stmt.order_by(rank_expr, sort_dir(sort_col), secondary).limit(req.limit + 1)
     else:
         stmt = stmt.order_by(sort_dir(sort_col), secondary).limit(req.limit + 1)
@@ -272,7 +294,12 @@ def run_search(
     # We compute snippets in a separate trivial query keyed by study_pk so
     # the main keyset stays type-safe (SQLAlchemy ORM scalar load).
     snippet_by_pk: dict[int, str] = {}
-    if effective_q is not None and dialect_name == "postgresql" and page_rows:
+    if (
+        effective_q is not None
+        and dialect_name == "postgresql"
+        and effective_q_tsquery
+        and page_rows
+    ):
         pk_list = [r.study_pk for r in page_rows]
         # ``ts_headline`` operates on plain text; we feed it the same
         # concatenation the trigram index covers so the highlight surfaces
@@ -289,14 +316,14 @@ def run_search(
                        coalesce(kcd_label_en,'') || ' ' ||
                        coalesce(kcd_label_ko,'') || ' ' ||
                        coalesce(modality,''),
-                     websearch_to_tsquery('english', :q_hl),
+                     to_tsquery('english', :q_hl),
                      'MaxFragments=1, MaxWords=12, MinWords=3, '
                      'StartSel=<mark>, StopSel=</mark>'
                    ) AS snippet
               FROM study
              WHERE study_pk = ANY(:pk_list)
             """
-        ).bindparams(q_hl=effective_q, pk_list=pk_list)
+        ).bindparams(q_hl=effective_q_tsquery, pk_list=pk_list)
         try:
             for row in session.execute(snippet_sql).all():
                 snippet_by_pk[int(row.study_pk)] = row.snippet

@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <title>RadiVault — Study Detail (Full-Slice Preview) Mockup</title>
+  <!--
+    Design-spec: docs/specs/design-spec-full-slice-preview-jpg.md
+    Reference tokens: docs/specs/design-spec-portal-redesign.md §4
+    Purpose: visual review only. Not production code.
+    Scope: ViewerArea section of /studies/[uid] (S-1).
+           Header / metadata grid / series list above are NOT redesigned —
+           shown only for context. Cornerstone3D is mocked with a static SVG slice.
+  -->
+  <style>
+    /* ============================================================
+       Tokens — borrowed from portal-redesign §4 (no new colors)
+       Only 4 NEW tokens (--phi-scrub-* + --viewport-bg)
+       ============================================================ */
+    :root {
+      /* Color: Primary (Buyer blue) */
+      --color-primary-50: #eff6ff;
+      --color-primary-100: #dbeafe;
+      --color-primary-500: #3b82f6;
+      --color-primary-600: #2563eb;
+      --color-primary-700: #1d4ed8;
+      --color-primary-900: #1e3a8a;
+
+      /* Color: Hospital teal */
+      --color-teal-50: #f0fdfa;
+      --color-teal-100: #ccfbf1;
+      --color-teal-600: #0d9488;
+      --color-teal-700: #0f766e;
+
+      /* Color: Neutral (slate) */
+      --color-bg: #ffffff;
+      --color-bg-muted: #f8fafc;
+      --color-border: #e2e8f0;
+      --color-border-strong: #cbd5e1;
+      --color-text-muted: #64748b;
+      --color-text: #0f172a;
+      --color-text-strong: #020617;
+
+      /* Color: Status */
+      --color-success-bg: #ecfdf5;
+      --color-success-fg: #047857;
+      --color-warning-bg: #fffbeb;
+      --color-warning-fg: #b45309;
+      --color-error-bg: #fef2f2;
+      --color-error-fg: #b91c1c;
+      --color-info-bg: #eff6ff;
+      --color-info-fg: #1d4ed8;
+
+      /* === NEW tokens (Phase 1) === */
+      --phi-scrub-success: #15803d;       /* alias of green-700 */
+      --phi-scrub-warn: #b45309;          /* alias of warning-fg */
+      --phi-scrub-quarantine: #94a3b8;    /* alias of slate-400 */
+      --viewport-bg: #000000;
+
+      /* Typography */
+      --font-sans-en: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-sans-kr: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
+                      system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+
+      /* Spacing */
+      --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+      --space-6: 24px; --space-8: 32px; --space-12: 48px;
+
+      /* Shadow */
+      --shadow-card: 0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+      --shadow-overlay: 0 10px 25px rgba(15,23,42,0.10), 0 4px 10px rgba(15,23,42,0.06);
+
+      /* Radius */
+      --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-pill: 999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { font-family: var(--font-sans-en); color: var(--color-text); background: var(--color-bg); line-height: 1.5; }
+    body { min-width: 1280px; }
+
+    /* ============================================================
+       Top nav (context only — portal-redesign §11 reuse)
+       ============================================================ */
+    .nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-3) var(--space-6);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg);
+    }
+    .nav-left { display: flex; align-items: center; gap: var(--space-6); }
+    .nav-logo { font-weight: 700; color: var(--color-primary-700); font-size: 18px; }
+    .nav-link { font-size: 14px; color: var(--color-text-muted); text-decoration: none; }
+    .nav-link.active { color: var(--color-text); font-weight: 500; }
+    .nav-right { display: flex; align-items: center; gap: var(--space-4); font-size: 14px; color: var(--color-text-muted); }
+
+    /* ============================================================
+       Page container
+       ============================================================ */
+    .page { max-width: 1440px; margin: 0 auto; padding: var(--space-6); }
+
+    /* Header bar (portal-redesign §11.4 — NOT redesigned, context) */
+    .header-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--color-border); border-radius: var(--radius-md);
+      background: var(--color-bg-muted);
+      margin-bottom: var(--space-4);
+    }
+    .header-back { color: var(--color-primary-600); text-decoration: none; font-size: 14px; }
+    .header-uid { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-muted); }
+    .btn-primary {
+      background: var(--color-primary-600); color: white; border: none;
+      padding: 8px 16px; border-radius: var(--radius-md); font-size: 14px;
+      cursor: pointer; font-weight: 500;
+    }
+    .btn-primary:hover { background: var(--color-primary-700); }
+
+    /* Hospital origin row */
+    .hospital-row {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      background: var(--color-teal-50);
+      border-left: 4px solid var(--color-teal-600);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-6);
+      font-size: 14px;
+    }
+    .hospital-chip {
+      font-family: var(--font-mono); font-size: 12px;
+      padding: 2px 8px; background: white; border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-pill);
+    }
+
+    /* Metadata grid — context only */
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-6); }
+    .panel {
+      border: 1px solid var(--color-border); border-radius: var(--radius-md);
+      padding: var(--space-4); background: var(--color-bg);
+    }
+    .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+                color: var(--color-text-muted); margin-bottom: var(--space-3); }
+    .meta-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px var(--space-4); font-size: 13px; }
+    .meta-grid dt { color: var(--color-text-muted); }
+    .meta-grid dd { color: var(--color-text); font-family: var(--font-mono); font-size: 12px; }
+
+    .series-table { width: 100%; font-size: 13px; }
+    .series-table th { text-align: left; font-size: 11px; color: var(--color-text-muted);
+                       padding: 4px 8px; border-bottom: 1px solid var(--color-border); }
+    .series-table td { padding: 6px 8px; border-bottom: 1px solid var(--color-bg-muted); }
+    .series-table tr.active { background: var(--color-primary-50); }
+    .series-table tr.active td:first-child { border-left: 3px solid var(--color-primary-600); }
+    .series-currently-viewing { font-size: 11px; color: var(--color-primary-700); margin-top: var(--space-2); }
+
+    /* ModalityBadge — portal-redesign §11.1 reuse */
+    .modality-badge {
+      display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
+      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    }
+    .modality-CT { background: var(--color-primary-100); color: var(--color-primary-700); }
+    .modality-MR { background: #ede9fe; color: #6d28d9; }
+
+    /* ============================================================
+       VIEWER AREA — the only redesigned section (S-1)
+       ============================================================ */
+    .viewer-area {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      grid-template-rows: 600px 40px;
+      gap: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+    }
+
+    /* Main viewport (Cornerstone3D mount target) */
+    .viewport {
+      grid-column: 1; grid-row: 1;
+      position: relative;
+      background: var(--viewport-bg);
+      overflow: hidden;
+    }
+
+    /* Mock canvas: chest CT silhouette via SVG */
+    .viewport-canvas {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .viewport-canvas svg { max-width: 80%; max-height: 80%; opacity: 0.92; }
+
+    /* Top-left: modality + KCD */
+    .viewport-overlay-top-left {
+      position: absolute; top: 12px; left: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+      color: white;
+    }
+    .modality-on-dark {
+      display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
+      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+      background: var(--color-primary-600); color: white;
+      width: max-content;
+    }
+    .kcd-strip {
+      font-family: var(--font-mono); font-size: 11px;
+      color: rgba(255,255,255,0.86);
+    }
+    .kcd-strip .kcd-code { color: white; font-weight: 500; }
+
+    /* Top-right: De-ID + PHI Scrub indicator group */
+    .viewport-overlay-top-right {
+      position: absolute; top: 12px; right: 12px;
+      display: flex; flex-direction: column; gap: 6px;
+      width: 220px;
+    }
+    .deid-stamp, .phi-scrub-indicator {
+      background: rgba(15,23,42,0.72);
+      border-radius: var(--radius-md);
+      padding: 8px 12px;
+      color: white;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      backdrop-filter: blur(4px);
+    }
+    .deid-stamp {
+      background: rgba(15,118,110,0.32); /* teal-700 32% on dark canvas */
+      border: 1px solid rgba(15,118,110,0.6);
+    }
+    .stamp-row { display: flex; justify-content: space-between; gap: 8px; }
+    .stamp-label { color: rgba(255,255,255,0.7); }
+    .stamp-value { color: white; }
+    .stamp-value.success { color: #6ee7b7; }
+    .stamp-value.warn    { color: #fbbf24; }
+    .stamp-tail { color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+    .phi-layers { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-top: 6px; }
+    .phi-layer { text-align: center; }
+    .phi-layer-label { font-size: 9px; color: rgba(255,255,255,0.6); }
+    .phi-layer-dot {
+      width: 6px; height: 6px; border-radius: 50%; margin: 2px auto 0;
+    }
+    .dot-success { background: var(--phi-scrub-success); box-shadow: 0 0 4px rgba(21,128,61,0.6); }
+    .dot-warn    { background: var(--phi-scrub-warn);    box-shadow: 0 0 4px rgba(180,83,9,0.6); }
+    .dot-na      { background: var(--phi-scrub-quarantine); }
+
+    /* Bottom-left: hospital region + mini progress */
+    .viewport-overlay-bottom-left {
+      position: absolute; bottom: 12px; left: 12px;
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--font-mono); font-size: 11px;
+      color: rgba(255,255,255,0.86);
+      background: rgba(15,23,42,0.5);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+    }
+    .hospital-region { font-weight: 500; color: white; }
+    .progress-bar { display: inline-block; }
+    .progress-bar .bullet { color: #6ee7b7; }
+    .progress-bar .bullet-empty { color: rgba(255,255,255,0.3); }
+
+    /* First-entry hint overlay */
+    .hint-overlay {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(15,23,42,0.84);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius-md);
+      padding: var(--space-4) var(--space-6);
+      color: white;
+      font-size: 13px;
+      display: flex; flex-direction: column; gap: 6px;
+      animation: hintFadeOut 1.6s ease-in-out forwards;
+      animation-delay: 1.2s;
+      pointer-events: none;
+    }
+    .hint-overlay .hint-row { display: flex; align-items: center; gap: 10px; }
+    .hint-icon { display: inline-block; width: 16px; text-align: center; opacity: 0.8; }
+    @keyframes hintFadeOut { to { opacity: 0; visibility: hidden; } }
+    @media (prefers-reduced-motion: reduce) {
+      .hint-overlay { animation: none; opacity: 1; }
+    }
+
+    /* ============================================================
+       Right column — SeriesThumbnailStrip
+       ============================================================ */
+    .series-strip {
+      grid-column: 2; grid-row: 1;
+      background: var(--color-bg);
+      border-left: 1px solid var(--color-border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .strip-header {
+      padding: var(--space-3) var(--space-4);
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--color-text-muted);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .strip-cards { flex: 0 0 auto; overflow-y: auto; padding: var(--space-2); }
+    .series-card {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-2);
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      margin-bottom: var(--space-1);
+    }
+    .series-card.active {
+      background: var(--color-primary-50);
+      border-color: var(--color-primary-600);
+      border-left-width: 4px;
+    }
+    .series-card:hover:not(.active) { background: var(--color-bg-muted); }
+    .series-thumb {
+      width: 64px; height: 64px;
+      background: var(--viewport-bg);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.7);
+      font-family: var(--font-mono); font-size: 10px;
+      flex-shrink: 0;
+    }
+    .series-meta { font-size: 12px; }
+    .series-meta-title { font-weight: 600; color: var(--color-text); }
+    .series-meta-sub   { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 11px; }
+
+    /* Slice indicator dots row */
+    .slice-indicator {
+      flex: 1 1 auto;
+      padding: var(--space-3) var(--space-4);
+      border-top: 1px solid var(--color-border);
+      overflow: hidden;
+      display: flex; flex-direction: column; gap: var(--space-2);
+    }
+    .slice-indicator-title {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--color-text-muted);
+    }
+    .slice-dots-grid {
+      display: flex; flex-wrap: wrap; gap: 2px;
+      align-content: flex-start;
+      max-height: 90px; overflow-y: auto;
+    }
+    .slice-dot {
+      width: 4px; height: 4px;
+      background: var(--phi-scrub-success);
+      flex-shrink: 0;
+    }
+    .slice-dot.warn { background: var(--phi-scrub-warn); }
+    .slice-dot.na   { background: var(--phi-scrub-quarantine); }
+    .slice-dot.current { box-shadow: 0 0 0 1.5px var(--color-primary-600); width: 6px; height: 6px; margin: -1px; }
+    .slice-legend {
+      font-size: 10px; color: var(--color-text-muted);
+      display: flex; gap: var(--space-3);
+    }
+    .slice-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .slice-legend-dot { display: inline-block; width: 6px; height: 6px; border-radius: 1px; }
+
+    /* ============================================================
+       Toolbar (bottom)
+       ============================================================ */
+    .toolbar {
+      grid-column: 1 / span 2; grid-row: 2;
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: 0 var(--space-3);
+      background: var(--color-bg);
+      border-top: 1px solid var(--color-border);
+      font-size: 13px;
+    }
+    .tb-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 28px; padding: 0 10px;
+      background: transparent;
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--color-text);
+      cursor: pointer; font-size: 12px;
+      gap: 4px;
+    }
+    .tb-btn:hover { background: var(--color-bg-muted); }
+    .tb-btn[disabled],
+    .tb-btn[aria-disabled="true"] {
+      opacity: 0.4; cursor: not-allowed; background: transparent;
+    }
+    .tb-icon-btn {
+      width: 28px; padding: 0; font-size: 14px;
+    }
+    .tb-counter {
+      font-family: var(--font-mono); font-size: 13px;
+      color: var(--color-text);
+      min-width: 130px; text-align: center;
+    }
+    .tb-divider { width: 1px; height: 18px; background: var(--color-border); }
+    .tb-spacer { flex: 1; }
+    .tb-tooltip {
+      position: relative;
+    }
+    .tb-tooltip:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; bottom: calc(100% + 6px); right: 0;
+      background: var(--color-text-strong); color: white;
+      padding: 6px 10px; border-radius: var(--radius-sm);
+      font-size: 11px; white-space: nowrap;
+      z-index: 10;
+    }
+    .tb-3d-disabled {
+      color: var(--color-text-muted);
+    }
+
+    /* ============================================================
+       Section labels for visual review
+       ============================================================ */
+    .review-label {
+      display: inline-block; font-size: 10px; padding: 2px 6px;
+      background: var(--color-warning-bg); color: var(--color-warning-fg);
+      border: 1px dashed var(--color-warning-fg); border-radius: var(--radius-sm);
+      margin-bottom: var(--space-2);
+      font-family: var(--font-mono);
+    }
+    .section-divider {
+      margin: var(--space-12) 0 var(--space-6);
+      padding-top: var(--space-6);
+      border-top: 2px dashed var(--color-border);
+      font-size: 14px;
+      color: var(--color-text-muted);
+    }
+    .scenario-label {
+      font-size: 12px; font-weight: 600;
+      color: var(--color-text-strong);
+      padding: 4px 10px;
+      background: var(--color-info-bg); color: var(--color-info-fg);
+      border-radius: var(--radius-pill);
+      display: inline-block;
+      margin-bottom: var(--space-3);
+    }
+
+    /* ============================================================
+       Quarantine banner (scenario 2: phi_detected)
+       ============================================================ */
+    .quarantine-area {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      grid-template-rows: 600px 40px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+    }
+    .quarantine-banner {
+      grid-column: 1 / span 2; grid-row: 1;
+      display: flex; flex-direction: column;
+      align-items: flex-start; justify-content: center;
+      padding: var(--space-12);
+      background: var(--color-bg);
+      border-left: 4px solid var(--color-warning-fg);
+    }
+    .qb-icon {
+      width: 32px; height: 32px;
+      color: var(--color-warning-fg);
+      margin-bottom: var(--space-4);
+    }
+    .qb-title-en { font-size: 18px; font-weight: 600; color: var(--color-text-strong); }
+    .qb-title-ko { font-size: 14px; color: var(--color-text); margin-top: 4px; }
+    .qb-body { font-size: 14px; color: var(--color-text-muted); margin-top: var(--space-4); max-width: 600px; }
+    .qb-status { font-size: 12px; color: var(--color-text-muted); margin-top: var(--space-3); font-family: var(--font-mono); }
+    .qb-actions { display: flex; gap: var(--space-3); margin-top: var(--space-6); }
+    .qb-cta {
+      padding: 8px 16px; border-radius: var(--radius-md);
+      font-size: 14px; cursor: pointer; border: 1px solid var(--color-border-strong);
+      background: white; color: var(--color-text);
+    }
+    .qb-cta.primary {
+      background: var(--color-primary-600); color: white; border-color: var(--color-primary-600);
+    }
+
+    /* ============================================================
+       Quarantined slice placeholder (scenario 3: partial)
+       ============================================================ */
+    .quarantine-slice-placeholder {
+      width: 100%; height: 100%;
+      background-image: linear-gradient(45deg, var(--color-bg-muted) 25%, transparent 25%),
+                        linear-gradient(-45deg, var(--color-bg-muted) 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, var(--color-bg-muted) 75%),
+                        linear-gradient(-45deg, transparent 75%, var(--color-bg-muted) 75%);
+      background-size: 16px 16px;
+      background-color: #1f2937;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .quarantine-slice-msg {
+      background: rgba(15,23,42,0.85);
+      border: 1px solid var(--color-warning-fg);
+      border-radius: var(--radius-md);
+      padding: var(--space-4) var(--space-6);
+      color: white;
+      text-align: center;
+      max-width: 400px;
+    }
+    .quarantine-slice-msg .qsm-icon { font-size: 32px; color: var(--color-warning-fg); margin-bottom: 8px; }
+    .quarantine-slice-msg .qsm-title-en { font-size: 16px; font-weight: 600; }
+    .quarantine-slice-msg .qsm-title-ko { font-size: 13px; color: rgba(255,255,255,0.8); margin: 4px 0; }
+    .quarantine-slice-msg .qsm-detail { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 8px; }
+
+    /* ============================================================
+       Comparison table (RadiVault vs Segmed)
+       ============================================================ */
+    .compare-table {
+      width: 100%; font-size: 12px; border-collapse: collapse;
+      margin-top: var(--space-4);
+    }
+    .compare-table th, .compare-table td {
+      padding: 8px 12px; text-align: left;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .compare-table th {
+      background: var(--color-bg-muted);
+      font-weight: 600; color: var(--color-text-strong);
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .compare-table td.rv { background: var(--color-primary-50); color: var(--color-primary-700); font-weight: 500; }
+    .compare-table td.segmed { color: var(--color-text-muted); }
+  </style>
+</head>
+<body>
+
+<!-- ================== Top nav (context only) ================== -->
+<nav class="nav">
+  <div class="nav-left">
+    <span class="nav-logo">◆ RadiVault Marketplace</span>
+    <a href="#" class="nav-link">Search</a>
+    <a href="#" class="nav-link active">Studies</a>
+    <a href="#" class="nav-link">Orders</a>
+    <a href="#" class="nav-link">Account</a>
+  </div>
+  <div class="nav-right">
+    <span>EN | KR</span>
+    <a href="#" class="nav-link">Sign out</a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- ================== Header bar (NOT redesigned) ================== -->
+  <div class="header-bar">
+    <div>
+      <a href="#" class="header-back">← Back to results</a>
+      &nbsp;&nbsp;
+      <span class="header-uid">StudyInstanceUID: 1.2.840.113619.2.55.3.604688119.971.1492502881.241.e8f231</span>
+    </div>
+    <button class="btn-primary">+ Add to cohort</button>
+  </div>
+
+  <!-- ================== Hospital origin row (NOT redesigned) ================== -->
+  <div class="hospital-row">
+    <span class="hospital-chip">HOSP-A2</span>
+    <span>From this hospital's pool of 87 studies</span>
+    <a href="#" style="color: var(--color-teal-700); margin-left: auto;">view all →</a>
+  </div>
+
+  <!-- ================== Metadata + series (NOT redesigned, context) ================== -->
+  <div class="columns">
+    <div class="panel">
+      <h3>Study metadata</h3>
+      <dl class="meta-grid">
+        <dt>Modality</dt>          <dd><span class="modality-badge modality-CT">CT</span></dd>
+        <dt>Body Part</dt>         <dd>CHEST</dd>
+        <dt>Age Bucket</dt>        <dd>50-59</dd>
+        <dt>Sex</dt>               <dd>M</dd>
+        <dt>Manufacturer</dt>      <dd>SIEMENS</dd>
+        <dt>Model</dt>             <dd>SOMATOM Force</dd>
+        <dt>Study Date</dt>        <dd>2023-08-14</dd>
+        <dt>Slice Thick</dt>       <dd>1.0 mm</dd>
+        <dt>Pixel Spacing</dt>     <dd>0.78 × 0.78</dd>
+        <dt>Total Bytes</dt>       <dd>142 MB</dd>
+        <dt>Instance Count</dt>    <dd>287</dd>
+      </dl>
+    </div>
+    <div class="panel">
+      <h3>Series (3)</h3>
+      <table class="series-table">
+        <thead><tr><th>#</th><th>Description</th><th>Mod</th><th>Inst</th><th>Size</th></tr></thead>
+        <tbody>
+          <tr class="active"><td>1</td><td>CHEST AXIAL 1.0mm</td><td>CT</td><td>287</td><td>142MB</td></tr>
+          <tr><td>2</td><td>CHEST CORONAL MIP</td><td>CT</td><td>64</td><td>32MB</td></tr>
+          <tr><td>3</td><td>SCOUT</td><td>CT</td><td>2</td><td>1MB</td></tr>
+        </tbody>
+      </table>
+      <div class="series-currently-viewing">▸ currently viewing: Series 1 · slice 142 / 287</div>
+    </div>
+  </div>
+
+  <!-- ================== SCENARIO 1: HAPPY PATH (verified) ================== -->
+  <div class="scenario-label">SCENARIO 1 · happy path · scrub_status = verified</div>
+  <div class="review-label">design-spec §4.2 — ViewerArea (S-1)</div>
+
+  <div class="viewer-area">
+
+    <!-- Main viewport -->
+    <div class="viewport">
+
+      <!-- Mock canvas (Cornerstone3D mount target) -->
+      <div class="viewport-canvas">
+        <!-- Stylized chest CT silhouette -->
+        <svg viewBox="0 0 400 320" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="lung" cx="50%" cy="50%" r="55%">
+              <stop offset="0%" stop-color="#1a1a1a"/>
+              <stop offset="100%" stop-color="#0a0a0a"/>
+            </radialGradient>
+            <radialGradient id="tissue" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#5a5a5a"/>
+              <stop offset="100%" stop-color="#222"/>
+            </radialGradient>
+          </defs>
+          <!-- body outline -->
+          <ellipse cx="200" cy="170" rx="180" ry="130" fill="url(#tissue)"/>
+          <!-- lungs -->
+          <ellipse cx="130" cy="160" rx="55" ry="85" fill="url(#lung)"/>
+          <ellipse cx="270" cy="160" rx="55" ry="85" fill="url(#lung)"/>
+          <!-- heart -->
+          <ellipse cx="195" cy="195" rx="35" ry="45" fill="#7a7a7a" opacity="0.8"/>
+          <!-- spine -->
+          <circle cx="200" cy="245" r="14" fill="#d0d0d0"/>
+          <!-- ribs -->
+          <path d="M50,170 Q200,100 350,170" stroke="#aaa" stroke-width="2" fill="none" opacity="0.4"/>
+          <path d="M55,200 Q200,135 345,200" stroke="#aaa" stroke-width="2" fill="none" opacity="0.4"/>
+          <!-- pneumonia opacity (right lower lobe) -->
+          <ellipse cx="265" cy="200" rx="20" ry="15" fill="#999" opacity="0.6"/>
+        </svg>
+      </div>
+
+      <!-- Top-left: modality + KCD -->
+      <div class="viewport-overlay-top-left">
+        <span class="modality-on-dark">CT</span>
+        <div class="kcd-strip">
+          <span class="kcd-code">KCD: J18.9</span><br>
+          Pneumonia, unspecified · 폐렴, 상세불명
+        </div>
+      </div>
+
+      <!-- Top-right: De-ID Chain stamp + PHI Scrub indicator -->
+      <div class="viewport-overlay-top-right">
+        <div class="deid-stamp" role="article" aria-labelledby="deid-label">
+          <div class="stamp-row">
+            <span class="stamp-label" id="deid-label">De-ID Chain</span>
+            <span class="stamp-value success">✓ verified</span>
+          </div>
+          <div class="stamp-tail">HOSP-A2 · ...e8f231</div>
+        </div>
+        <div class="phi-scrub-indicator" role="article" aria-labelledby="phi-label">
+          <div class="stamp-row">
+            <span class="stamp-label" id="phi-label">PHI Scrub</span>
+            <span class="stamp-value success">8 / 8 ✓</span>
+          </div>
+          <div class="phi-layers">
+            <div class="phi-layer"><div class="phi-layer-label">L1</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L2</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L3</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L4</div><div class="phi-layer-dot dot-na"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L5</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L6</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L7</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L8</div><div class="phi-layer-dot dot-success"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom-left: hospital region + mini progress -->
+      <div class="viewport-overlay-bottom-left">
+        <span class="hospital-region">HOSP-A2 · Seoul</span>
+        <span class="progress-bar">
+          <span class="bullet">●●●●●●●</span><span class="bullet-empty">○○○</span>
+        </span>
+        <span>142 / 287</span>
+      </div>
+
+      <!-- First-entry hint overlay -->
+      <div class="hint-overlay" role="status" aria-live="polite">
+        <div class="hint-row"><span class="hint-icon">🖱</span> Scroll to navigate</div>
+        <div class="hint-row"><span class="hint-icon">⌨</span> ↑↓  Page  Home/End</div>
+        <div class="hint-row"><span class="hint-icon">↔</span> Drag for stack</div>
+      </div>
+    </div>
+
+    <!-- Right: Series thumbnail strip + slice indicator dots -->
+    <aside class="series-strip">
+      <div class="strip-header">SERIES (3)</div>
+      <div class="strip-cards">
+        <div class="series-card active" tabindex="0" role="button" aria-pressed="true">
+          <div class="series-thumb">S1</div>
+          <div class="series-meta">
+            <div class="series-meta-title">CT · AXIAL 1.0mm</div>
+            <div class="series-meta-sub">287 instances</div>
+          </div>
+        </div>
+        <div class="series-card" tabindex="0" role="button" aria-pressed="false">
+          <div class="series-thumb">S2</div>
+          <div class="series-meta">
+            <div class="series-meta-title">CT · CORONAL MIP</div>
+            <div class="series-meta-sub">64 instances</div>
+          </div>
+        </div>
+        <div class="series-card" tabindex="0" role="button" aria-pressed="false">
+          <div class="series-thumb">S3</div>
+          <div class="series-meta">
+            <div class="series-meta-title">CT · SCOUT</div>
+            <div class="series-meta-sub">2 instances</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slice-indicator">
+        <div class="slice-indicator-title">SLICE INDICATORS · current series</div>
+        <div class="slice-dots-grid" id="dots">
+          <!-- Generated below via inline script -->
+        </div>
+        <div class="slice-legend">
+          <span><span class="slice-legend-dot dot-success"></span>verified</span>
+          <span><span class="slice-legend-dot dot-warn"></span>quarantined</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Toolbar (bottom, full-width) -->
+    <div class="toolbar">
+      <button class="tb-btn tb-icon-btn" aria-label="Previous slice">◀</button>
+      <span class="tb-counter">Slice 142 / 287</span>
+      <button class="tb-btn tb-icon-btn" aria-label="Next slice">▶</button>
+      <span class="tb-divider"></span>
+      <button class="tb-btn" disabled aria-disabled="true">CT Lung ▾</button>
+      <span class="tb-divider"></span>
+      <button class="tb-btn">100%</button>
+      <button class="tb-btn">Fit</button>
+      <button class="tb-btn">↻ Reset</button>
+      <span class="tb-spacer"></span>
+      <button class="tb-btn tb-3d-disabled tb-tooltip"
+              aria-disabled="true"
+              data-tooltip="3D reconstruction disabled for de-identification · 비식별화를 위해 3D 재구성이 비활성화됨">
+        3D ⊘
+      </button>
+    </div>
+
+  </div><!-- /.viewer-area -->
+
+
+  <!-- ================== SCENARIO 2: PHI DETECTED (full quarantine) ================== -->
+  <div class="section-divider">design-spec §3.2 + §5.4 — Quarantine fallback (study-level phi_detected)</div>
+  <div class="scenario-label">SCENARIO 2 · scrub_status = phi_detected · BFF returns 451</div>
+  <div class="review-label">design-spec §6.7 — &lt;QuarantineBanner&gt;</div>
+
+  <div class="quarantine-area">
+    <div class="quarantine-banner">
+      <div class="qb-icon">⚠</div>
+      <div class="qb-title-en">Full-slice preview pending PHI re-verification</div>
+      <div class="qb-title-ko">미리보기는 PHI 재검증 대기 중입니다</div>
+      <div class="qb-body">
+        This study's full-slice preview was paused after our automated scrub flagged a potential PHI
+        artifact. Our team has been notified (자동 알림 발송됨) and will verify within 24 hours.
+      </div>
+      <div class="qb-status">Status: phi_detected · Last checked: 2 hours ago · request_id: req_01HX...</div>
+      <div class="qb-actions">
+        <button class="qb-cta primary">View single thumbnail ↓</button>
+        <button class="qb-cta">Contact support →</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ================== SCENARIO 3: PARTIAL QUARANTINE (slice-level) ================== -->
+  <div class="section-divider">design-spec §3.3 + §5.5 — Partial quarantine (single slice)</div>
+  <div class="scenario-label">SCENARIO 3 · scrub_status = quarantined_partial · slice 47 quarantined</div>
+  <div class="review-label">design-spec §5.5 — placeholder slice rendering</div>
+
+  <div class="viewer-area">
+    <div class="viewport">
+      <div class="quarantine-slice-placeholder">
+        <div class="quarantine-slice-msg">
+          <div class="qsm-icon">⊘</div>
+          <div class="qsm-title-en">Slice 47 quarantined</div>
+          <div class="qsm-title-ko">슬라이스 47 격리됨</div>
+          <div class="qsm-detail">PHI artifact detected by L2 OCR.<br>Skipped to preserve patient privacy.</div>
+        </div>
+      </div>
+
+      <!-- Top-right indicators show 7/8 partial -->
+      <div class="viewport-overlay-top-right">
+        <div class="deid-stamp">
+          <div class="stamp-row">
+            <span class="stamp-label">De-ID Chain</span>
+            <span class="stamp-value warn">⚠ partial</span>
+          </div>
+          <div class="stamp-tail">HOSP-B7 · ...a4d901</div>
+        </div>
+        <div class="phi-scrub-indicator">
+          <div class="stamp-row">
+            <span class="stamp-label">PHI Scrub</span>
+            <span class="stamp-value warn">7 / 8 ⚠</span>
+          </div>
+          <div class="phi-layers">
+            <div class="phi-layer"><div class="phi-layer-label">L1</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L2</div><div class="phi-layer-dot dot-warn"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L3</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L4</div><div class="phi-layer-dot dot-na"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L5</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L6</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L7</div><div class="phi-layer-dot dot-success"></div></div>
+            <div class="phi-layer"><div class="phi-layer-label">L8</div><div class="phi-layer-dot dot-success"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="viewport-overlay-bottom-left">
+        <span class="hospital-region">HOSP-B7 · Daejeon</span>
+        <span>47 / 287</span>
+      </div>
+    </div>
+
+    <aside class="series-strip">
+      <div class="strip-header">SERIES (1) — partial</div>
+      <div class="strip-cards">
+        <div class="series-card active">
+          <div class="series-thumb">S1</div>
+          <div class="series-meta">
+            <div class="series-meta-title">CT · AXIAL 1.0mm</div>
+            <div class="series-meta-sub" style="color: var(--color-warning-fg);">285 / 287 verified</div>
+          </div>
+        </div>
+      </div>
+      <div class="slice-indicator">
+        <div class="slice-indicator-title">SLICE INDICATORS · 2 quarantined</div>
+        <div class="slice-dots-grid" id="dots-partial"></div>
+        <div class="slice-legend">
+          <span><span class="slice-legend-dot dot-success"></span>verified · 285</span>
+          <span><span class="slice-legend-dot dot-warn"></span>quarantined · 2</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="toolbar">
+      <button class="tb-btn tb-icon-btn">◀</button>
+      <span class="tb-counter">Slice 47 / 287 ⚠</span>
+      <button class="tb-btn tb-icon-btn">▶</button>
+      <span class="tb-divider"></span>
+      <button class="tb-btn" disabled>CT Lung ▾</button>
+      <span class="tb-divider"></span>
+      <button class="tb-btn">100%</button>
+      <button class="tb-btn">Fit</button>
+      <button class="tb-btn">↻ Reset</button>
+      <span class="tb-spacer"></span>
+      <button class="tb-btn tb-3d-disabled tb-tooltip"
+              aria-disabled="true"
+              data-tooltip="3D reconstruction disabled for de-identification">
+        3D ⊘
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ================== Differentiation table ================== -->
+  <div class="section-divider">design-spec §12 — RadiVault vs Segmed Openda visual comparison</div>
+  <div class="scenario-label">REFERENCE — competitive differentiation</div>
+
+  <table class="compare-table">
+    <thead>
+      <tr><th>Element</th><th>Segmed Openda</th><th>RadiVault</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Main viewport</td>
+        <td class="segmed">Cornerstone3D StackScroll</td>
+        <td class="rv">Cornerstone3D StackScroll (same base)</td>
+      </tr>
+      <tr>
+        <td>Series navigation</td>
+        <td class="segmed">Left OHIF-style strip</td>
+        <td class="rv">Right strip (left = facet in /search)</td>
+      </tr>
+      <tr>
+        <td>Provenance display</td>
+        <td class="segmed">— (study UID only)</td>
+        <td class="rv">De-ID Chain stamp · hospital + UID + 8-layer ✓</td>
+      </tr>
+      <tr>
+        <td>PHI scrub status</td>
+        <td class="segmed">— (none)</td>
+        <td class="rv">PhiScrubIndicator · L1..L8 dots + per-slice strip</td>
+      </tr>
+      <tr>
+        <td>Diagnostic ontology</td>
+        <td class="segmed">Sparse (description text only)</td>
+        <td class="rv">KCD-7 code + EN/KR diagnosis name</td>
+      </tr>
+      <tr>
+        <td>Hospital region</td>
+        <td class="segmed">— (none)</td>
+        <td class="rv">HOSP-A2 · Seoul (consented region only)</td>
+      </tr>
+      <tr>
+        <td>3D / MPR</td>
+        <td class="segmed">Active (optional)</td>
+        <td class="rv">Always disabled · explicitly visualized (L8 guard)</td>
+      </tr>
+      <tr>
+        <td>Modality preset</td>
+        <td class="segmed">Manual W/L slider</td>
+        <td class="rv">Auto-applied + displayed (Phase 1 read-only)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top: var(--space-6); font-size: 12px; color: var(--color-text-muted);">
+    Mockup file: <code>docs/specs/mockups/full-slice-preview-jpg/study-detail.html</code><br>
+    Design spec: <code>docs/specs/design-spec-full-slice-preview-jpg.md</code> · v0.1 · 2026-04-26<br>
+    Tokens reference: <code>docs/specs/design-spec-portal-redesign.md §4</code>
+  </p>
+
+</div><!-- /.page -->
+
+<script>
+  // Generate slice indicator dots — happy path: 287 dots, current = 142
+  (function() {
+    const grid = document.getElementById('dots');
+    if (!grid) return;
+    const total = 287, current = 142;
+    for (let i = 0; i < total; i++) {
+      const d = document.createElement('span');
+      d.className = 'slice-dot';
+      if (i === current) d.classList.add('current');
+      grid.appendChild(d);
+    }
+  })();
+
+  // Partial scenario: 287 dots, slice 47 + 138 quarantined
+  (function() {
+    const grid = document.getElementById('dots-partial');
+    if (!grid) return;
+    const total = 287, quarantined = [47, 138], current = 47;
+    for (let i = 0; i < total; i++) {
+      const d = document.createElement('span');
+      d.className = 'slice-dot';
+      if (quarantined.includes(i)) d.classList.add('warn');
+      if (i === current) d.classList.add('current');
+      grid.appendChild(d);
+    }
+  })();
+</script>
+
+</body>
+</html>

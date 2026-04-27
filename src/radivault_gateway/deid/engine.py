@@ -475,15 +475,19 @@ class DeidEngine:
 
     @staticmethod
     def _bin_age(raw: str) -> str:
-        # DICOM PatientAge format: nnnU where U is {D,W,M,Y}.
+        # HIPAA Safe Harbor §164.514(b)(2)(i)(B): ages 0-89 exact, 90+ aggregated.
+        # Industry standard (TCIA, Segmed openda, NIH IDC, MD.ai). Earlier 5-year
+        # binning was over-conservative vs PIPA Annex E (which only requires
+        # "minimum necessary", not strict bins).
         match = re.match(r"(\d+)([DWMY])", raw.strip())
         if not match:
             return ""
         num, unit = int(match.group(1)), match.group(2)
         if unit == "Y":
-            binned = (num // 5) * 5
-            return f"{binned:03d}Y"
-        return raw  # leave sub-year ages unchanged (neonatal context)
+            if num >= 90:
+                return "090Y"
+            return f"{num:03d}Y"
+        return raw  # neonatal D/W/M unchanged
 
     def _set_method_tags(self, ds: Dataset) -> None:
         ds.PatientIdentityRemoved = "YES"

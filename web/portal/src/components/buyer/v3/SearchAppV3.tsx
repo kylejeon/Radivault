@@ -32,7 +32,6 @@ import {
   type FacetItem,
   type V3FacetState,
 } from "@/components/buyer/v3/FacetSidebarV3";
-import { KCDAutocomplete, type KCDItem } from "@/components/buyer/v3/KCDAutocomplete";
 import {
   ResultTable,
   type ResultTableItem,
@@ -202,7 +201,6 @@ function SearchAppV3Inner() {
   const [pageSize, setPageSize] = useState(25);
   const [response, setResponse] = useState<SearchResp | null>(null);
   const [loading, setLoading] = useState(true);
-  const [kcdQuery, setKcdQuery] = useState("");
   // text-search-description FR-TS-1 — free-text search bar state. ``qText``
   // is the live, debounced input; ``qApplied`` is the value that has actually
   // been submitted (Enter / autocomplete pick) and is currently in the URL.
@@ -316,11 +314,6 @@ function SearchAppV3Inner() {
     });
   }
 
-  function onKcdSelect(item: KCDItem) {
-    if (facets.kcd_code.includes(item.code)) return;
-    setFacets({ ...facets, kcd_code: [...facets.kcd_code, item.code] });
-  }
-
   return (
     <div className="surface-buyer">
       {/* Top-bar trust pill row */}
@@ -378,12 +371,7 @@ function SearchAppV3Inner() {
           borderBottom: "1px solid var(--rv-stone-200)",
         }}
       >
-        <KCDAutocomplete
-          value={kcdQuery}
-          onChange={setKcdQuery}
-          onSelect={onKcdSelect}
-          locale={lc}
-        />
+        <div style={{ flex: 1 }} />
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <label style={{ fontSize: 12, color: "var(--rv-stone-500)" }}>
             {lc === "ko" ? "페이지" : "Page size"}
