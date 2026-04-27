@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>RadiVault — Text Search Phase 1.5 Mockup (Description + Locale-Aware KCD)</title>
+<meta name="viewport" content="width=1440, initial-scale=1" />
+<style>
+  /* ==========================================================
+     RadiVault Phase 1.5 Mockup — design tokens (v3 + Phase 1.0)
+     - 신규 토큰 0개. 모두 v3 baseline + Phase 1.0 차용.
+     ========================================================== */
+  :root {
+    /* Colors (v3 baseline) */
+    --color-primary-50:   #eff6ff;
+    --color-primary-100:  #dbeafe;
+    --color-primary-600:  #2563eb;
+    --color-primary-700:  #1d4ed8;
+    --color-teal-50:      #f0fdfa;
+    --color-teal-100:     #ccfbf1;
+    --color-teal-600:     #0d9488;
+    --color-teal-700:     #0f766e;
+    --color-bg:           #ffffff;
+    --color-bg-muted:     #f8fafc;
+    --color-border:       #e2e8f0;
+    --color-border-strong:#cbd5e1;
+    --color-text-muted:   #64748b;
+    --color-text:         #0f172a;
+    --color-text-strong:  #020617;
+    --color-warning-light:#fffbeb;
+    --color-warning-dark: #b45309;
+
+    /* Phase 1.0 신규 토큰 */
+    --mark-highlight-bg:  rgba(13, 148, 136, 0.15);
+
+    /* Typography */
+    --font-sans-en: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-sans-kr: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
+                    system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    --font-mono:    "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+
+    /* Spacing */
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-6: 24px; --space-8: 32px; --space-12: 48px; --space-16: 64px;
+
+    /* Radius */
+    --radius-sm:   4px;
+    --radius-md:   8px;
+    --radius-lg:   12px;
+    --radius-pill: 999px;
+
+    /* Shadow */
+    --shadow-card:    0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-overlay: 0 10px 25px rgba(15,23,42,0.10), 0 4px 10px rgba(15,23,42,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--color-bg-muted);
+    color: var(--color-text);
+    font-family: var(--font-sans-en);
+    font-size: 16px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  body[data-locale="ko"], .scenario[data-locale="ko"] {
+    font-family: var(--font-sans-kr);
+  }
+
+  /* Page wrapper */
+  .page {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-8);
+  }
+
+  .page-title {
+    font-size: 24px; font-weight: 700; color: var(--color-text-strong);
+    margin: 0 0 var(--space-2);
+  }
+  .page-subtitle {
+    font-size: 14px; color: var(--color-text-muted);
+    margin: 0 0 var(--space-12);
+  }
+
+  /* Scenario block */
+  .scenario {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-12);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+  .scenario-label {
+    display: inline-block;
+    background: var(--color-text-strong);
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+    margin: var(--space-4) 0 0 var(--space-4);
+  }
+  .scenario-meta {
+    padding: var(--space-2) var(--space-4) var(--space-4);
+    font-size: 12px;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .scenario-meta code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--color-bg-muted);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+  }
+
+  /* App nav (mock) */
+  .app-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 var(--space-6); height: 56px;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .app-brand { font-weight: 600; color: var(--color-text-strong); font-size: 14px; }
+  .app-nav-right {
+    display: flex; gap: var(--space-4); align-items: center;
+    font-size: 13px; color: var(--color-text-muted);
+  }
+  .locale-pill {
+    display: inline-flex; align-items: center; gap: var(--space-1);
+    background: var(--color-bg-muted);
+    padding: 4px 10px; border-radius: var(--radius-pill);
+    font-family: var(--font-mono); font-size: 11px; color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  /* Search bar (Phase 1.0 컴포넌트 재사용) */
+  .search-bar {
+    display: flex; align-items: center;
+    height: 56px;
+    margin: var(--space-6) var(--space-6) var(--space-4);
+    padding: 0 var(--space-4);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    gap: var(--space-3);
+  }
+  .search-bar:focus-within {
+    border: 2px solid var(--color-teal-600);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  }
+  .search-icon { width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0; }
+  .search-input {
+    flex: 1; height: 100%;
+    border: none; outline: none; background: transparent;
+    font: inherit; font-size: 16px;
+    color: var(--color-text);
+  }
+  .search-input::placeholder { color: var(--color-text-muted); }
+  .search-clear {
+    width: 16px; height: 16px; cursor: pointer;
+    color: var(--color-text-muted);
+  }
+
+  /* 3-pane layout */
+  .pane-3col {
+    display: grid;
+    grid-template-columns: 240px 1fr 280px;
+    gap: 0;
+    border-top: 1px solid var(--color-border);
+    min-height: 480px;
+  }
+  .pane-facets {
+    border-right: 1px solid var(--color-border);
+    padding: var(--space-4);
+    background: var(--color-bg);
+    font-size: 13px;
+  }
+  .pane-results {
+    background: var(--color-bg-muted);
+    padding: var(--space-3);
+    overflow: hidden;
+  }
+  .pane-cohort {
+    border-left: 1px solid var(--color-border);
+    background: var(--color-bg);
+    padding: var(--space-4);
+    font-size: 13px;
+  }
+
+  /* Facet sidebar (간략 mock) */
+  .facet-section {
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .facet-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    color: var(--color-text-muted);
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-2);
+  }
+  .facet-item {
+    display: flex; justify-content: space-between;
+    padding: var(--space-1) 0;
+    font-size: 13px; color: var(--color-text);
+  }
+  .facet-item .count { color: var(--color-text-muted); font-size: 12px; }
+
+  /* Federated signal bar */
+  .fed-signal {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+  .fed-signal .count-strong { color: var(--color-text-strong); font-weight: 600; }
+
+  /* Result table */
+  .result-table {
+    width: 100%;
+    background: var(--color-bg);
+    border-collapse: collapse;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-size: 13px;
+  }
+  .result-table thead th {
+    background: var(--color-bg-muted);
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+  }
+  .result-table tbody td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+    vertical-align: middle;
+  }
+  .result-table tbody tr:hover {
+    background: var(--color-primary-50);
+  }
+  .col-checkbox { width: 28px; }
+  .col-mod { width: 56px; }
+  .col-body { width: 88px; }
+  .col-sex { width: 64px; }
+  .col-hosp { width: 120px; }
+  .col-date { width: 92px; }
+  .col-desc { min-width: 200px; max-width: 320px; }
+  .cell-truncate {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Mark (Phase 1.0 highlight) */
+  mark {
+    background: var(--mark-highlight-bg);
+    color: var(--color-text-strong);
+    font-weight: 600;
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+
+  /* KCD Chip */
+  .kcd-row {
+    display: inline-flex; align-items: center; gap: var(--space-3);
+    line-height: 1.4;
+  }
+  .kcd-chip {
+    display: inline-flex; align-items: center;
+    background: var(--color-teal-100);
+    color: var(--color-teal-700);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    cursor: help;
+    border: 1px solid transparent;
+    position: relative;
+  }
+  .kcd-chip:focus, .kcd-chip:hover {
+    border-color: var(--color-teal-600);
+    outline: none;
+  }
+  .kcd-chip:hover .kcd-tooltip,
+  .kcd-chip:focus .kcd-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+  .kcd-label {
+    font-size: 13px;
+    color: var(--color-text);
+  }
+
+  /* KCD Tooltip */
+  .kcd-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-text-strong);
+    color: white;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    font-weight: 400;
+    font-family: var(--font-sans-en);
+    white-space: nowrap;
+    box-shadow: var(--shadow-overlay);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 100ms;
+    pointer-events: none;
+    z-index: 60;
+    max-width: 320px;
+    text-wrap: pretty;
+  }
+  .kcd-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: var(--color-text-strong);
+  }
+  .kcd-tooltip.always-visible {
+    opacity: 1; visibility: visible;
+    white-space: normal;
+    width: 280px;
+  }
+  [data-locale="ko"] .kcd-tooltip { font-family: var(--font-sans-kr); }
+
+  /* PhiPendingBadge - cell context */
+  .phi-pending-cell {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    cursor: help;
+  }
+  .phi-pending-cell svg { width: 14px; height: 14px; }
+
+  /* PhiPendingBadge - detail context */
+  .phi-pending-detail {
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    background: var(--color-warning-light);
+    color: var(--color-warning-dark);
+    padding: var(--space-3) var(--space-4);
+    border-left: 4px solid var(--color-warning-dark);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .phi-pending-detail svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .phi-inline-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--color-warning-light);
+    color: var(--color-warning-dark);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: var(--space-2);
+  }
+  .phi-inline-badge svg { width: 11px; height: 11px; }
+
+  /* Cohort cart (mock) */
+  .cohort-empty {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: var(--space-8) var(--space-4);
+  }
+
+  /* Autocomplete dropdown (scenario specific) */
+  .autocomplete-dropdown {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    margin: 0 var(--space-6);
+    overflow: hidden;
+  }
+  .autocomplete-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 14px;
+    color: var(--color-text);
+    cursor: pointer;
+  }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item.focused {
+    background: var(--color-primary-50);
+    border-left: 4px solid var(--color-primary-600);
+    padding-left: calc(var(--space-4) - 4px);
+  }
+  .autocomplete-item .match-text {
+    flex: 1;
+  }
+  .autocomplete-item .match-text mark {
+    text-decoration: underline;
+    text-decoration-color: var(--color-teal-600);
+    text-underline-offset: 2px;
+  }
+  .field-badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-family: var(--font-mono);
+  }
+  .field-badge.body-part,
+  .field-badge.modality,
+  .field-badge.protocol {
+    background: var(--color-bg-muted);
+    color: var(--color-text-muted);
+  }
+  .field-badge.kcd {
+    background: var(--color-teal-100);
+    color: var(--color-teal-700);
+  }
+  .field-badge.study-desc {
+    background: var(--color-teal-50);
+    color: var(--color-teal-700);
+    border: 1px solid var(--color-teal-100);
+  }
+
+  /* Study Detail metadata grid */
+  .study-detail-panel {
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    margin: var(--space-3);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg-muted);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .audit-chain-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #ecfdf5;
+    color: #047857;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .metadata-grid {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 0;
+  }
+  .metadata-grid dt,
+  .metadata-grid dd {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    margin: 0;
+    font-size: 13px;
+  }
+  .metadata-grid dt {
+    background: var(--color-bg-muted);
+    font-weight: 500;
+    color: var(--color-text-muted);
+  }
+  .metadata-grid dd { color: var(--color-text); }
+  .metadata-grid dt.new-row,
+  .metadata-grid dd.new-row {
+    background: var(--color-teal-50);
+    border-top: 1px dashed var(--color-teal-600);
+  }
+  .metadata-grid dd.new-row {
+    background: linear-gradient(to right, var(--color-teal-50), transparent);
+  }
+  .footer-note {
+    display: block;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .series-collapsible {
+    background: var(--color-bg-muted);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    font-size: 13px;
+    color: var(--color-text);
+  }
+  .series-collapsible-header {
+    display: flex; align-items: center; gap: var(--space-2);
+    cursor: pointer;
+    color: var(--color-primary-600);
+    font-weight: 500;
+  }
+  .series-list {
+    margin: var(--space-2) 0 0;
+    padding-left: var(--space-4);
+    font-size: 13px;
+    color: var(--color-text);
+  }
+  .series-list li { padding: 2px 0; }
+
+  /* Side-by-side scenario for tooltip (d) */
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-6);
+    padding: var(--space-6);
+    background: var(--color-bg-muted);
+  }
+  .side-by-side-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-8) var(--space-6);
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-4);
+    min-height: 220px;
+    justify-content: center;
+  }
+  .side-by-side-card .locale-tag {
+    align-self: flex-start;
+    background: var(--color-text-strong);
+    color: white;
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /* Annotation overlay text */
+  .annot {
+    color: var(--color-primary-600);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    margin-left: var(--space-2);
+  }
+</style>
+</head>
+<body data-locale="en">
+
+<div class="page">
+
+  <h1 class="page-title">RadiVault — Text Search Phase 1.5 Mockup</h1>
+  <p class="page-subtitle">
+    feature-slug: <code>text-search-description-phase15</code> ·
+    Description extraction + Locale-aware ICD-10/KCD-8 labelling ·
+    5 시나리오 (a~e) · 데이터: TCIA 기반 더미, 환자 정보 0건
+  </p>
+
+  <!-- ==========================================================
+       (a) en locale + description 매치
+       ========================================================== -->
+  <div class="scenario" data-locale="en">
+    <span class="scenario-label">a) en locale + description 매치</span>
+    <div class="scenario-meta">
+      <code>/search?q=knee scanogram</code> · locale=<code>en</code> · DESCRIPTION 컬럼 ON · 8 rows
+    </div>
+
+    <div class="app-nav">
+      <div class="app-brand">◆ RadiVault Marketplace</div>
+      <div class="app-nav-right">
+        <span>Search</span><span>Orders</span><span>Docs</span>
+        <span class="locale-pill">EN ▾</span>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="search-input" type="search" value="knee scanogram"
+        placeholder="Search by body part, modality, KCD code, or description... (e.g. 'MR brain', 'knee scanogram', 'I20.9')" />
+      <svg class="search-clear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+
+    <div class="pane-3col">
+      <!-- Facet sidebar -->
+      <div class="pane-facets">
+        <div class="facet-section">
+          <div class="facet-title">Modality</div>
+          <div class="facet-item"><span>CR</span><span class="count">5</span></div>
+          <div class="facet-item"><span>DX</span><span class="count">3</span></div>
+        </div>
+        <div class="facet-section">
+          <div class="facet-title">Body Part</div>
+          <div class="facet-item"><span>KNEE</span><span class="count">8</span></div>
+        </div>
+        <div class="facet-section">
+          <div class="facet-title">Sex</div>
+          <div class="facet-item"><span>F</span><span class="count">5</span></div>
+          <div class="facet-item"><span>M</span><span class="count">3</span></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="pane-results">
+        <div class="fed-signal">
+          <span><span class="count-strong">8 studies</span> across <span class="count-strong">2 hospitals</span> · q: <code>knee scanogram</code></span>
+          <span>ts_rank_cd ↓</span>
+        </div>
+
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="col-checkbox">☐</th>
+              <th class="col-mod">Mod.</th>
+              <th>KCD</th>
+              <th class="col-body">Body</th>
+              <th class="col-sex">Sex/Age</th>
+              <th class="col-hosp">Hospital</th>
+              <th class="col-date">Date</th>
+              <th class="col-desc">Description <span class="annot">← NEW</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>☐</td>
+              <td>CR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 M17.0
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Knee osteoarthritis</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>F / 67</td>
+              <td>HOSP-7F2A</td>
+              <td>2024-08-15</td>
+              <td class="cell-truncate" title="Knee Scanogram, AX standing">
+                <mark>Knee</mark> <mark>Scanogram</mark>, AX standing
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>CR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 M17.1
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Other primary knee osteoarthritis</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>F / 72</td>
+              <td>HOSP-7F2A</td>
+              <td>2024-09-02</td>
+              <td class="cell-truncate" title="Knee Scanogram XR, weight bearing protocol">
+                <mark>Knee</mark> <mark>Scanogram</mark> XR, weight bearing protocol
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>DX</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 S83.5
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Sprain of cruciate ligament</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>M / 31</td>
+              <td>HOSP-9C4D</td>
+              <td>2024-10-11</td>
+              <td class="cell-truncate" title="Knee Scanogram standing AP/LAT">
+                <mark>Knee</mark> <mark>Scanogram</mark> standing AP/LAT
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>CR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 M22.4
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Chondromalacia patellae</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>F / 28</td>
+              <td>HOSP-9C4D</td>
+              <td>2024-11-03</td>
+              <td class="cell-truncate" title="Knee Scanogram bilateral">
+                <mark>Knee</mark> <mark>Scanogram</mark> bilateral
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Cohort cart -->
+      <div class="pane-cohort">
+        <div class="facet-title">Cohort cart</div>
+        <div class="cohort-empty">No studies selected.<br/>Check rows to add.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       (b) ko locale + description 매치 (동일 query)
+       ========================================================== -->
+  <div class="scenario" data-locale="ko">
+    <span class="scenario-label">b) ko locale + description 매치 (동일 query, 라벨만 로컬라이즈)</span>
+    <div class="scenario-meta">
+      <code>/search?q=knee scanogram</code> · locale=<code>ko</code> ·
+      검색 결과 byte-identical (AC-TS15-16) · 라벨/툴팁만 ko 로 분기
+    </div>
+
+    <div class="app-nav">
+      <div class="app-brand">◆ RadiVault Marketplace</div>
+      <div class="app-nav-right">
+        <span>검색</span><span>주문</span><span>문서</span>
+        <span class="locale-pill">KO ▾</span>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="search-input" type="search" value="knee scanogram"
+        placeholder="신체부위, 모달리티, KCD 코드 또는 검사명 검색... (예: 'MR 뇌', '슬관절 검사', 'I20.9')" />
+      <svg class="search-clear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+
+    <div class="pane-3col">
+      <div class="pane-facets">
+        <div class="facet-section">
+          <div class="facet-title">모달리티</div>
+          <div class="facet-item"><span>CR</span><span class="count">5</span></div>
+          <div class="facet-item"><span>DX</span><span class="count">3</span></div>
+        </div>
+        <div class="facet-section">
+          <div class="facet-title">신체부위</div>
+          <div class="facet-item"><span>KNEE</span><span class="count">8</span></div>
+        </div>
+        <div class="facet-section">
+          <div class="facet-title">성별</div>
+          <div class="facet-item"><span>F</span><span class="count">5</span></div>
+          <div class="facet-item"><span>M</span><span class="count">3</span></div>
+        </div>
+      </div>
+
+      <div class="pane-results">
+        <div class="fed-signal">
+          <span><span class="count-strong">8개 검사</span> · <span class="count-strong">2개 병원</span> · 검색어: <code>knee scanogram</code></span>
+          <span>ts_rank_cd ↓</span>
+        </div>
+
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="col-checkbox">☐</th>
+              <th class="col-mod">모달리티</th>
+              <th>KCD</th>
+              <th class="col-body">부위</th>
+              <th class="col-sex">성별/연령</th>
+              <th class="col-hosp">병원</th>
+              <th class="col-date">날짜</th>
+              <th class="col-desc">검사 설명 <span class="annot">← 신규</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>☐</td>
+              <td>CR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">KCD-8 M17.0
+                    <span class="kcd-tooltip">WHO ICD-10 호환 (95% 동일)</span>
+                  </span>
+                  <span class="kcd-label">슬관절 골관절염</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>F / 67</td>
+              <td>HOSP-7F2A</td>
+              <td>2024-08-15</td>
+              <td class="cell-truncate" title="Knee Scanogram, AX standing">
+                <mark>Knee</mark> <mark>Scanogram</mark>, AX standing
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>CR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">KCD-8 M17.1
+                    <span class="kcd-tooltip">WHO ICD-10 호환 (95% 동일)</span>
+                  </span>
+                  <span class="kcd-label">기타 원발성 슬관절증</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>F / 72</td>
+              <td>HOSP-7F2A</td>
+              <td>2024-09-02</td>
+              <td class="cell-truncate" title="Knee Scanogram XR, weight bearing protocol">
+                <mark>Knee</mark> <mark>Scanogram</mark> XR, weight bearing protocol
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>DX</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">KCD-8 S83.5
+                    <span class="kcd-tooltip">WHO ICD-10 호환 (95% 동일)</span>
+                  </span>
+                  <span class="kcd-label">십자인대의 염좌</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>M / 31</td>
+              <td>HOSP-9C4D</td>
+              <td>2024-10-11</td>
+              <td class="cell-truncate" title="Knee Scanogram standing AP/LAT">
+                <mark>Knee</mark> <mark>Scanogram</mark> standing AP/LAT
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>CR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">KCD-8 M22.4
+                    <span class="kcd-tooltip">WHO ICD-10 호환 (95% 동일)</span>
+                  </span>
+                  <span class="kcd-label">슬개골 연골연화증</span>
+                </div>
+              </td>
+              <td>KNEE</td>
+              <td>F / 28</td>
+              <td>HOSP-9C4D</td>
+              <td>2024-11-03</td>
+              <td class="cell-truncate" title="Knee Scanogram bilateral">
+                <mark>Knee</mark> <mark>Scanogram</mark> bilateral
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pane-cohort">
+        <div class="facet-title">코호트 카트</div>
+        <div class="cohort-empty">선택된 검사 없음.<br/>행을 체크하여 추가하세요.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       (c) PHI 격리된 description fallback
+       ========================================================== -->
+  <div class="scenario" data-locale="en">
+    <span class="scenario-label">c) PHI 격리된 description fallback (cell context)</span>
+    <div class="scenario-meta">
+      <code>/search?q=brain</code> · 격리되지 않은 row 중 일부 description 빈 string →
+      <code>⚠ pending</code> 회색 텍스트 + tooltip
+    </div>
+
+    <div class="app-nav">
+      <div class="app-brand">◆ RadiVault Marketplace</div>
+      <div class="app-nav-right">
+        <span>Search</span><span>Orders</span><span>Docs</span>
+        <span class="locale-pill">EN ▾</span>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="search-input" type="search" value="brain"
+        placeholder="Search by body part, modality, KCD code, or description... (e.g. 'MR brain', 'knee scanogram', 'I20.9')" />
+      <svg class="search-clear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+
+    <div class="pane-3col">
+      <div class="pane-facets">
+        <div class="facet-section">
+          <div class="facet-title">Modality</div>
+          <div class="facet-item"><span>MR</span><span class="count">12</span></div>
+          <div class="facet-item"><span>CT</span><span class="count">7</span></div>
+        </div>
+        <div class="facet-section">
+          <div class="facet-title">Body Part</div>
+          <div class="facet-item"><span>BRAIN</span><span class="count">19</span></div>
+        </div>
+      </div>
+
+      <div class="pane-results">
+        <div class="fed-signal">
+          <span><span class="count-strong">19 studies</span> across <span class="count-strong">3 hospitals</span> · q: <code>brain</code></span>
+          <span>ts_rank_cd ↓</span>
+        </div>
+
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="col-checkbox">☐</th>
+              <th class="col-mod">Mod.</th>
+              <th>KCD</th>
+              <th class="col-body">Body</th>
+              <th class="col-sex">Sex/Age</th>
+              <th class="col-hosp">Hospital</th>
+              <th class="col-date">Date</th>
+              <th class="col-desc">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>☐</td>
+              <td>MR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 G45.9
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Transient ischaemic attack</span>
+                </div>
+              </td>
+              <td>BRAIN</td>
+              <td>M / 58</td>
+              <td>HOSP-7F2A</td>
+              <td>2024-07-10</td>
+              <td class="cell-truncate" title="MR Brain w/ contrast">
+                MR <mark>Brain</mark> w/ contrast
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>MR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 G93.1
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Anoxic brain damage</span>
+                </div>
+              </td>
+              <td>BRAIN</td>
+              <td>F / 64</td>
+              <td>HOSP-7F2A</td>
+              <td>2024-08-22</td>
+              <td>
+                <span class="phi-pending-cell" tabindex="0" title="Excluded for de-identification review">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                  pending
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>CT</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 I63.9
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Cerebral infarction, unspecified</span>
+                </div>
+              </td>
+              <td>BRAIN</td>
+              <td>M / 71</td>
+              <td>HOSP-9C4D</td>
+              <td>2024-09-15</td>
+              <td class="cell-truncate" title="CT Brain noncontrast, axial 5mm">
+                CT <mark>Brain</mark> noncontrast, axial 5mm
+              </td>
+            </tr>
+            <tr>
+              <td>☐</td>
+              <td>MR</td>
+              <td>
+                <div class="kcd-row">
+                  <span class="kcd-chip" tabindex="0">ICD-10 G40.9
+                    <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                  </span>
+                  <span class="kcd-label">Epilepsy, unspecified</span>
+                </div>
+              </td>
+              <td>BRAIN</td>
+              <td>F / 19</td>
+              <td>HOSP-2B8E</td>
+              <td>2024-10-04</td>
+              <td>
+                <span class="phi-pending-cell" tabindex="0" title="Excluded for de-identification review">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                  pending
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pane-cohort">
+        <div class="facet-title">Cohort cart</div>
+        <div class="cohort-empty">No studies selected.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       (d) tooltip hover (KCD chip + locale 설명) — side-by-side
+       ========================================================== -->
+  <div class="scenario">
+    <span class="scenario-label">d) KCD chip tooltip hover (locale 별 비교)</span>
+    <div class="scenario-meta">
+      hover (200ms delay) 또는 Tab focus (즉시) → tooltip 표시 ·
+      bg <code>#020617</code> · fg white · arrow 8px 가리킴 · z-index 60
+    </div>
+
+    <div class="side-by-side">
+      <!-- en -->
+      <div class="side-by-side-card" data-locale="en">
+        <span class="locale-tag">locale=en</span>
+        <div style="position: relative; padding-top: 80px;">
+          <div class="kcd-row">
+            <span class="kcd-chip" style="position: relative;">
+              ICD-10 G45.9
+              <span class="kcd-tooltip always-visible">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+            </span>
+            <span class="kcd-label">Transient ischaemic attack</span>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-muted); text-align: center;">
+          chip prominence: <code>"ICD-10"</code> 강조 · tooltip: 영문 provenance
+        </div>
+      </div>
+      <!-- ko -->
+      <div class="side-by-side-card" data-locale="ko">
+        <span class="locale-tag">locale=ko</span>
+        <div style="position: relative; padding-top: 80px;">
+          <div class="kcd-row">
+            <span class="kcd-chip" style="position: relative;">
+              KCD-8 G45.9
+              <span class="kcd-tooltip always-visible">WHO ICD-10 호환 (95% 동일)</span>
+            </span>
+            <span class="kcd-label">일과성 뇌허혈 발작</span>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--color-text-muted); text-align: center;">
+          chip prominence: <code>"KCD-8"</code> 강조 · tooltip: 한글 provenance
+        </div>
+      </div>
+    </div>
+    <div style="padding: var(--space-3) var(--space-6); background: var(--color-bg-muted); border-top: 1px solid var(--color-border); font-size: 12px; color: var(--color-text-muted);">
+      <strong>핵심 규칙</strong>: chip pill 자체의 시각 (bg <code>#ccfbf1</code>, fg <code>#0f766e</code>, padding <code>2×8px</code>, radius-pill) 은 locale 무관 동일.
+      차이는 prefix 1 단어 + tooltip 텍스트 만.
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       (e) Study Detail metadata grid 확장
+       ========================================================== -->
+  <div class="scenario" data-locale="en">
+    <span class="scenario-label">e) Study Detail metadata grid 확장 (신규 2 행 + 격리 fallback)</span>
+    <div class="scenario-meta">
+      <code>/studies/abc-123</code> · 9 행 → 11 행 ·
+      Study Description / Protocol Name 신규 (teal-50 highlight) · KCDChip variant=detail + footer note ·
+      우측 격리 fallback variant 동시 표시
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); padding: var(--space-3); background: var(--color-bg-muted);">
+
+      <!-- 왼쪽: 정상 case -->
+      <div class="study-detail-panel">
+        <div class="panel-header">
+          <span>Study Metadata · normal case</span>
+          <span class="audit-chain-badge">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            verified
+          </span>
+        </div>
+        <dl class="metadata-grid">
+          <dt>Study UID</dt>
+          <dd style="font-family: var(--font-mono); font-size: 11px;">uid:1.2.840.113619...</dd>
+          <dt>Modality</dt><dd>MR</dd>
+          <dt>Body Part</dt><dd>KNEE</dd>
+          <dt>KCD</dt>
+          <dd>
+            <div class="kcd-row" style="display: flex; flex-direction: column; align-items: flex-start;">
+              <div style="display: flex; align-items: center; gap: var(--space-3);">
+                <span class="kcd-chip" tabindex="0">ICD-10 M17.0
+                  <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                </span>
+                <span class="kcd-label">Knee osteoarthritis</span>
+              </div>
+              <span class="footer-note">Provenance: Korean Standard Classification of Diseases v8 (KCD-8)</span>
+            </div>
+          </dd>
+          <dt>Hospital</dt><dd>HOSP-OPAQUE-7F2A (federated)</dd>
+          <dt>Date</dt><dd>2024-08-15</dd>
+          <dt>Sex / Age</dt><dd>F / 67</dd>
+          <dt>Series count</dt><dd>4</dd>
+          <dt>Audit chain</dt>
+          <dd>
+            <span class="audit-chain-badge">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+              verified
+            </span>
+            <a href="#" style="margin-left: var(--space-2); font-size: 12px; color: var(--color-primary-600);">view audit log →</a>
+          </dd>
+          <dt class="new-row">Study Description <span class="annot">NEW</span></dt>
+          <dd class="new-row">MR Knee w/o contrast</dd>
+          <dt class="new-row">Protocol Name <span class="annot">NEW</span></dt>
+          <dd class="new-row">AX T1 FLAIR, SAG T2, COR FLAIR</dd>
+          <dt>Series Descriptions</dt>
+          <dd>
+            <div class="series-collapsible">
+              <div class="series-collapsible-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                Hide
+              </div>
+              <ul class="series-list">
+                <li>AX T1 FLAIR</li>
+                <li>SAG T2</li>
+                <li>COR FLAIR</li>
+                <li>AX DWI</li>
+              </ul>
+            </div>
+          </dd>
+        </dl>
+      </div>
+
+      <!-- 오른쪽: 격리 fallback case -->
+      <div class="study-detail-panel">
+        <div class="panel-header">
+          <span>Study Metadata · PHI quarantine fallback</span>
+          <span class="audit-chain-badge">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            verified
+          </span>
+        </div>
+        <dl class="metadata-grid">
+          <dt>Study UID</dt>
+          <dd style="font-family: var(--font-mono); font-size: 11px;">uid:1.2.840.113619...</dd>
+          <dt>Modality</dt><dd>MR</dd>
+          <dt>Body Part</dt><dd>BRAIN</dd>
+          <dt>KCD</dt>
+          <dd>
+            <div class="kcd-row" style="display: flex; flex-direction: column; align-items: flex-start;">
+              <div style="display: flex; align-items: center; gap: var(--space-3);">
+                <span class="kcd-chip" tabindex="0">ICD-10 G93.1
+                  <span class="kcd-tooltip">Korean coded as KCD-8 (95% identical to WHO ICD-10)</span>
+                </span>
+                <span class="kcd-label">Anoxic brain damage</span>
+              </div>
+              <span class="footer-note">Provenance: Korean Standard Classification of Diseases v8 (KCD-8)</span>
+            </div>
+          </dd>
+          <dt>Hospital</dt><dd>HOSP-OPAQUE-7F2A (federated)</dd>
+          <dt>Date</dt><dd>2024-08-22</dd>
+          <dt>Sex / Age</dt><dd>F / 64</dd>
+          <dt>Series count</dt><dd>3</dd>
+          <dt>Audit chain</dt>
+          <dd>
+            <span class="audit-chain-badge">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+              verified
+            </span>
+            <span class="phi-inline-badge" title="description verification pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              description pending
+            </span>
+          </dd>
+          <dt class="new-row">Study Description <span class="annot">NEW</span></dt>
+          <dd class="new-row">
+            <div class="phi-pending-detail">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              PHI verification pending
+            </div>
+          </dd>
+          <dt class="new-row">Protocol Name <span class="annot">NEW</span></dt>
+          <dd class="new-row">
+            <div class="phi-pending-detail">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              PHI verification pending
+            </div>
+          </dd>
+          <dt>Series Descriptions</dt>
+          <dd>
+            <div class="series-collapsible">
+              <div class="series-collapsible-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                View 3 series descriptions
+              </div>
+            </div>
+          </dd>
+        </dl>
+      </div>
+
+    </div>
+
+    <div style="padding: var(--space-3) var(--space-6); background: var(--color-bg-muted); border-top: 1px solid var(--color-border); font-size: 12px; color: var(--color-text-muted);">
+      <strong>색맹 대응 (DA-10)</strong>: PhiPendingBadge 는 색만 의존하지 않음. ⚠ 아이콘 + "PHI verification pending" 텍스트 두 단서로 의미 전달.
+      audit chain 행 옆 inline 배지로 컨텍스트 빠르게 인식.
+    </div>
+  </div>
+
+  <!-- Annotations footer -->
+  <div style="margin-top: var(--space-12); padding: var(--space-6); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 13px;">
+    <h3 style="margin-top: 0; color: var(--color-text-strong);">디자인 토큰 매핑 (검수용)</h3>
+    <ul style="color: var(--color-text-muted); padding-left: var(--space-4);">
+      <li>KCDChip bg: <code>--color-teal-100</code> (#ccfbf1) · fg: <code>--color-teal-700</code> (#0f766e) — locale 무관 동일</li>
+      <li>KCDChip tooltip bg: <code>--color-text-strong</code> (#020617) · fg: white</li>
+      <li>PhiPendingBadge cell: <code>--color-text-muted</code> (#64748b) + ⚠ icon</li>
+      <li>PhiPendingBadge detail: bg <code>--color-warning-light</code> (#fffbeb) · fg <code>--color-warning-dark</code> (#b45309) · border-left 4px</li>
+      <li>Description 셀 매치 토큰 <code>&lt;mark&gt;</code>: bg <code>--mark-highlight-bg</code> (rgba(13,148,136,0.15)) · text-strong + font-weight 600 (Phase 1.0 자동 적용)</li>
+      <li>autocomplete STUDY DESC 배지: bg <code>--color-teal-50</code> (#f0fdfa) · fg <code>--color-teal-700</code></li>
+      <li>autocomplete PROTOCOL 배지: bg <code>--color-bg-muted</code> · fg <code>--color-text-muted</code> (neutral)</li>
+      <li><strong>신규 디자인 토큰 0개</strong> — v3 + Phase 1.0 토큰 100% 차용</li>
+    </ul>
+  </div>
+
+</div>
+
+</body>
+</html>
