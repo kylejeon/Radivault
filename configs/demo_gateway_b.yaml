@@ -1,0 +1,80 @@
+# RadiVault Gateway Agent — demo / CEO rehearsal configuration (HOSP-002).
+#
+# Sister of configs/demo_gateway.yaml. Targets the second PACS introduced
+# for the D-13 multi-hospital demo:
+#   PACS     = radivault-orthanc-b-1 (8043, AUTHENTICATION_ENABLED=false
+#              but the upstream image still exposes default basic auth so
+#              we send orthanc:orthanc which the schema requires anyway)
+#   Central  = radivault-central-1 (port 8000)
+#   Hospital = HOSP-002 (region_pseudo=BUSAN-B, name "튼튼병원")
+#
+# Per-hospital salt is REQUIRED by PIPA / dev-spec — the value below was
+# freshly generated with `openssl rand -hex 32` on 2026-04-27 and MUST
+# differ from configs/demo_gateway.yaml.
+#
+# State / staging / audit live under demo_data/gateway_b/ to keep
+# gateway-a's uid_map and event log untouched.
+
+version: 1
+
+agent:
+  gateway_id: "gw_demo_local_b"
+  hospital_id: "HOSP-002"
+  org_root_oid: "2.25.140737488355328"
+
+pacs:
+  base_url: "http://localhost:8043/dicom-web"
+  auth:
+    type: "basic"
+    # orthanc-b ships with default basic auth even though
+    # ORTHANC__AUTHENTICATION_ENABLED=false; default creds work.
+    username: "orthanc"
+    password: "orthanc"
+  max_concurrency: 2
+  poll_interval_seconds: 30   # Demo cadence — see demo_gateway.yaml note
+  query:
+    modalities: ["CR", "CT", "MR", "DX", "MG", "PT"]
+    lookback_days: 365
+
+deid:
+  ruleset_version: "v0.1.0"
+  # Per-hospital salt (PIPA). Generated 2026-04-27 with `openssl rand -hex 32`.
+  # Must NOT equal configs/demo_gateway.yaml `deid.salt`.
+  salt: "9802e4a5b837c9b2baa80b5531e76adacc8b4e008cee72f76379df96c7ef961c"
+  salt_version: 1
+  burnin_quarantine_modalities: ["SC", "US", "OT"]
+  retain_options:
+    longitudinal_dates: true
+    patient_characteristics: true
+    clean_descriptors: true
+    clean_graphics: true
+    safe_private: false
+    uids: false
+    institution_identity: false
+    device_identity: "partial"
+
+staging:
+  root: "./demo_data/gateway_b/staging"
+  retention_hours: 72
+  max_disk_pct: 80
+
+state:
+  db_path: "./demo_data/gateway_b/state.sqlite3"
+
+audit:
+  path: "./demo_data/gateway_b/audit.log"
+  anchor_interval_seconds: 3600
+
+central:
+  base_url: "http://localhost:8000"
+  allow_insecure: true
+  # HOSP-002 bearer issued 2026-04-27, kid=rvct_e3959f1e. Mirror lives
+  # in demo_data/gateway_b/HOSP-002_token.txt (gitignored).
+  upload_token: "rvct_e3959f1e.DuvLU8Ne5v5lEjmNFrlfd2h1DHKlioA9UgXKtay3vVBS7K6r"
+  upload_timeout_seconds: 600
+  max_upload_retries: 3
+
+logging:
+  level: "INFO"
+  json: false
+  console_color: "never"

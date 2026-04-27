@@ -56,8 +56,28 @@ services:
     volumes:
       - orthanc-data:/var/lib/orthanc/db
 
+  # Second PACS for the D-13 multi-hospital demo. Owned by HOSP-002
+  # ("튼튼병원" / region_pseudo=BUSAN-B). Starts empty; the first study
+  # arrives live during the demo via STOW (see scripts/demo_setup/
+  # demo_live_upload.sh). Listens on host 8043 (HTTP/DICOMweb) and 4243
+  # (DIMSE) to coexist with orthanc-1 (8042/4242).
+  orthanc-b:
+    image: jodogne/orthanc-plugins:latest
+    restart: unless-stopped
+    ports:
+      - "8043:8042"
+      - "4243:4242"
+    environment:
+      ORTHANC_NAME: radivault-hosp-002
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
+      ORTHANC__DICOM_WEB__ROOT: /dicom-web/
+    volumes:
+      - orthanc-b-data:/var/lib/orthanc/db
+
 volumes:
   gateway-state:
   gateway-logs:
   mock-central-dump:
   orthanc-data:
+  orthanc-b-data:
