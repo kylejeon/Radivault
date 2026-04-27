@@ -1,0 +1,115 @@
+# dev-spec-text-search-description-phase15 §6.4 R3_INSTITUTION
+#
+# Korean top-30 general-hospital identifier tokens to strip from DICOM
+# StudyDescription / SeriesDescription / ProtocolName free-text after the
+# DCM 113105 baseline pass. Tokens are matched whole-word, case-insensitive
+# (English/transliterated) or substring-equal (Hangul) inside a token.
+#
+# Operating policy:
+# - Hot-reloadable from disk (extract_text.py reads at module import + checks
+#   mtime each gateway sync cycle).
+# - Adding a token requires PR review + scrub_version bump (Phase 1.5 → 1.6).
+# - Tokens MUST be the institution identifier itself, never a person name —
+#   person names are R1_PATIENT_NAME_* aggressive regex.
+#
+# Coverage rationale: top-30 by inpatient bed count + top tertiary-referral
+# centres (상급종합병원). Western/teaching-hospital tokens included for
+# multi-site studies (MGH, Mayo, Stanford) so foreign Reading rooms that
+# emit institution-tagged descriptions are also redacted.
+version: "1.5.0"
+tokens:
+  # Tertiary referral hospitals — Hangul.
+  - 서울대병원
+  - 서울대학교병원
+  - 분당서울대병원
+  - 분당서울대학교병원
+  - 세브란스
+  - 강남세브란스
+  - 신촌세브란스
+  - 용인세브란스
+  - 삼성서울
+  - 강북삼성
+  - 서울아산
+  - 아산병원
+  - 가톨릭
+  - 서울성모
+  - 강남성모
+  - 여의도성모
+  - 성빈센트
+  - 부산대병원
+  - 양산부산대병원
+  - 경북대병원
+  - 칠곡경북대
+  - 전남대병원
+  - 화순전남대
+  - 충남대병원
+  - 충북대병원
+  - 강원대병원
+  - 제주대병원
+  - 인하대병원
+  - 길병원
+  - 가천길
+  - 단국대병원
+  - 한림대
+  - 고대구로
+  - 고대안암
+  - 고려대병원
+  - 한양대병원
+  - 이대목동
+  - 이대서울
+  - 순천향
+  - 경희대병원
+  - 강동경희대
+  - 건국대병원
+  - 분당차
+  - 차의과학대
+  - 명지병원
+  - 일산명지
+  - 동아대병원
+  - 인제대
+  - 부산백
+  - 일산백
+  - 상계백
+  - 해운대백
+  - 보훈병원
+  - 국립암센터
+  - NCC
+  - 국립의료원
+  # Tertiary referral hospitals — English / transliterated.
+  - SNUH
+  - SNUBH
+  - YONSEI
+  - SEVERANCE
+  - SAMSUNG
+  - SMC
+  - ASAN
+  - AMC
+  - CATHOLIC
+  - CMC
+  - PNUH
+  - KNUH
+  - CNUH
+  - JNUH
+  - GACHON
+  - KOREA-UNIV
+  - HANYANG
+  - EWHA
+  - SOONCHUNHYANG
+  - KYUNG-HEE
+  - KONKUK
+  - INHA
+  - INJE
+  - DANKOOK
+  - HALLYM
+  # Foreign tertiary identifiers commonly embedded by reading-room imports.
+  - MGH
+  - MAYO
+  - STANFORD
+  - JOHNS-HOPKINS
+  - HOPKINS
+  - UCSF
+  - DUKE
+  - HARVARD
+  # Generic facility tokens — intentionally omitted (CLINIC, HOSPITAL,
+  # 병원, 의원) because over-broad substring match would over-redact
+  # normal medical English and is not a tight PHI signal on its own.

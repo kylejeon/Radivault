@@ -1,0 +1,95 @@
+# dev-spec-text-search-description-phase15 §6.4 W3_PROTOCOL_KEYWORD
+#
+# Protocol-naming vocabulary that should always survive the PHI scrub. Empty
+# tokens, generic English connectors, and procedural verbs that frequently
+# appear in DICOM ProtocolName / SeriesDescription. Adding a token here
+# protects it against R1 (English-name) over-redaction.
+#
+# Tokens are matched WHOLE-WORD case-insensitive.
+version: "1.5.0"
+tokens:
+  # Modality short codes — also W1_MEDICAL_TERM in extract_text.py.
+  - MR
+  - MRI
+  - CT
+  - PET
+  - PT
+  - US
+  - XR
+  - CR
+  - DX
+  - NM
+  - MG
+  - DR
+  - RF
+  - XA
+  - SR
+  - SEG
+  - PR
+  # Common protocol generic keywords.
+  - SCREENING
+  - DIAGNOSTIC
+  - ROUTINE
+  - STANDARD
+  - PROTOCOL
+  - SCAN
+  - STUDY
+  - EXAM
+  - SERIES
+  - SEQUENCE
+  - VIEW
+  - VIEWS
+  - SLICE
+  - SLICES
+  - SHOT
+  # Common protocol qualifiers.
+  - WITH
+  - WITHOUT
+  - WO
+  - W/O
+  - W/
+  - W/C
+  - WC
+  - AND
+  - PLUS
+  - VS
+  - OR
+  - FOR
+  - OF
+  # Common procedural verbs.
+  - PERFORM
+  - PERFORMED
+  - ACQUIRE
+  - ACQUIRED
+  - RECON
+  - RECONSTRUCTED
+  - SUBTRACTED
+  - DELAYED
+  - REPEATED
+  - ROUTINE
+  - PRELIM
+  # Anatomic-side modifiers.
+  - LEFT
+  - RIGHT
+  - BIL
+  - BILAT
+  - BILATERAL
+  - UNILATERAL
+  - LT
+  - RT
+  # Time/phase markers (NOT dates — those are R5_DATE).
+  - PRE
+  - POST
+  - INITIAL
+  - BASELINE
+  - REPEAT
+  - FU
+  - F/U
+  - FOLLOWUP
+  - FOLLOW-UP
+  - DELAY
+  - DELAYED
+  - EARLY
+  - LATE
+  - PHASE
+  - PHASES

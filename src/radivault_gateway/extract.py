@@ -32,6 +32,15 @@ class StudyMetadata:
       mapping populated by :func:`extract_study_metadata` from the
       (modality, body_part) tuple via
       :mod:`radivault_gateway.kcd_heuristic`.
+
+    text-search-description Phase 1.5 additions (FR-TS15-1, FR-TS15-5):
+    - ``study_description`` / ``protocol_name`` — scrubbed free-text
+      pulled from DICOM (0008,1030) / (0018,1030).
+    - ``description_scrub_metadata`` — audit block attached to manifest
+      v2.1 (NFR-TS15-AUDIT-1).
+    - Per-series description lives in the ``series`` dict's
+      ``series_description_clean`` slot (already-existing v2 series schema
+      that previously held only deid-tool output — reused).
     """
 
     body_part_examined: str | None = None
@@ -52,6 +61,10 @@ class StudyMetadata:
     kcd_code: str | None = None
     kcd_label_ko: str | None = None
     kcd_label_en: str | None = None
+    # text-search-description Phase 1.5 — scrubbed descriptions.
+    study_description: str | None = None
+    protocol_name: str | None = None
+    description_scrub_metadata: dict | None = None
 
 
 def _parse_age_bucket(raw: str | None) -> str | None:
@@ -211,6 +224,7 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
         return md
 
     series_map: dict[str, dict] = {}
+    series_first_ds: dict[str, pydicom.Dataset] = {}
     total_bytes = 0
     first_ds: pydicom.Dataset | None = None
     first_modality: str | None = None
@@ -249,6 +263,10 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
             },
         )
         entry["n_instances"] += 1
+        # text-search-description Phase 1.5 — capture first dataset per series
+        # so we can later read SeriesDescription (0008,103E) for scrub.
+        if series_uid not in series_first_ds:
+            series_first_ds[series_uid] = ds
 
     md.n_series = len(series_map)
     md.n_instances = sum(s["n_instances"] for s in series_map.values())
@@ -300,5 +318,48 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
     md.kcd_code = kcd_entry.code
     md.kcd_label_ko = kcd_entry.label_ko
     md.kcd_label_en = kcd_entry.label_en
+
+    # text-search-description Phase 1.5 (FR-TS15-1) — extract + scrub the 3
+    # description fields. Lazy import keeps this module light for tests that
+    # mock out the gateway and never touch description text.
+    from radivault_gateway.description_scrub import (
+        SCRUB_VERSION,
+        description_extraction_enabled,
+        extract_descriptions,
+        scrub_description,
+    )
+
+    if not description_extraction_enabled():
+        # FR-TS15-16 — kill switch. Leave fields as None so manifest will
+        # serialise them as ``null`` and central preserves NULL columns.
+        return md
+
+    series_ds_iter = list(series_first_ds.values())
+    extracted = extract_descriptions(first_ds, series_datasets=series_ds_iter)
+
+    md.study_description = extracted.study_description.text or None
+    md.protocol_name = extracted.protocol_name.text or None
+    # Attach per-series description into the existing series dict slot.
+    series_uids_in_order = list(series_first_ds.keys())
+    for series_uid, scrubbed in zip(series_uids_in_order, extracted.series_descriptions):
+        for entry in md.series:
+            if entry.get("pseudo_series_uid") == series_uid:
+                entry["series_description"] = scrubbed.text or None
+                break
+
+    md.description_scrub_metadata = {
+        "scrub_version": SCRUB_VERSION,
+        "blacklist_matched": extracted.aggregated_blacklist,
+        "whitelist_matched": extracted.aggregated_whitelist,
+        "quarantine": extracted.quarantine,
+        "truncated": (
+            extracted.study_description.truncated
+            or extracted.protocol_name.truncated
+            or any(s.truncated for s in extracted.series_descriptions)
+        ),
+        "before_hash": extracted.study_description.before_hash,
+        "after_hash": extracted.study_description.after_hash,
+        "suspicious_token_count": extracted.suspicious_token_count_total,
+    }
 
     return md
