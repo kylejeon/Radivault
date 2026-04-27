@@ -39,7 +39,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0009_text_search_description_phase15"
+revision = "0009_text_search_phase15"
 down_revision = "0008_text_search_safe_fields"
 branch_labels = None
 depends_on = None
