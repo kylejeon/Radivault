@@ -67,13 +67,13 @@ export function AccountClient({
     locale === "ko" ? "ko-KR" : "en-US",
   );
 
-  async function regenerate() {
+  async function postApiKeyAction(action: "generate" | "regenerate") {
     setBusy(true);
     try {
       const res = await fetch("/api/account/api-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "regenerate" }),
+        body: JSON.stringify({ action }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -96,6 +96,15 @@ export function AccountClient({
       setBusy(false);
       setConfirmRegen(false);
     }
+  }
+
+  // Defer-mint flow (Kyle 2026-04-27): empty-state Generate button skips
+  // the "Regenerate?" confirmation modal — there is no key to overwrite.
+  function generate() {
+    void postApiKeyAction("generate");
+  }
+  function regenerate() {
+    void postApiKeyAction("regenerate");
   }
 
   async function revoke() {
@@ -149,9 +158,27 @@ export function AccountClient({
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-2xl font-semibold text-text-strong">
-        {dict.account.pageTitle}
-      </h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold text-text-strong">
+          {dict.account.pageTitle}
+        </h1>
+        {/*
+          Sign-out moved here when MarketplaceNav was rewritten in
+          bab29b5 (the in-nav form button was dropped). Posts to the
+          legacy /api/session/delete which destroys the iron-session
+          cookie and 303-redirects to "/". Form-based so it works
+          without JavaScript.
+        */}
+        <form action="/api/session/delete" method="post">
+          <button
+            type="submit"
+            data-testid="account-signout"
+            className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-text-muted hover:bg-bg-muted hover:text-text"
+          >
+            {dict.buyerNav.signOut}
+          </button>
+        </form>
+      </div>
 
       <section
         aria-label={dict.account.profileTitle}
@@ -190,6 +217,7 @@ export function AccountClient({
           lastUsedAt={keyState.lastUsedAt}
           busy={busy}
           onRegenerate={() => setConfirmRegen(true)}
+          onGenerate={generate}
           onRevoke={() => setConfirmRevoke(true)}
           cardTitle={t.apiKeyCard.cardTitle}
           tierLabel={t.apiKeyCard.tierLabel}
