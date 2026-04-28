@@ -46,7 +46,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="surface-buyer min-h-screen bg-bg">
-      <MarketplaceNav active="/dashboard" />
+      <MarketplaceNav active="/dashboard" org={session.org} email={session.email} />
       <main className="mx-auto max-w-content px-6 py-8" data-testid="dashboard">
         <header className="mb-6">
           <h1 className="text-2xl font-semibold text-text-strong">

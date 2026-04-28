@@ -132,6 +132,7 @@ export async function POST(req: Request) {
   session.locale = "en";
   session.tier = buyer.tier;
   session.signedInAt = Date.now();
+  session.org = buyer.organization;
   delete session.apiKey;
   await session.save();
 

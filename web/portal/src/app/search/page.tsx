@@ -27,7 +27,7 @@ export default async function SearchPage() {
 
   return (
     <div className="surface-buyer min-h-screen bg-bg">
-      <MarketplaceNav active="/search" />
+      <MarketplaceNav active="/search" org={session.org} email={session.email} />
       <main className="mx-auto max-w-app">
         <SearchAppV3 locale="en" />
       </main>

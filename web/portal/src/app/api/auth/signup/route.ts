@@ -5,12 +5,12 @@
  *   1. zod validate (incl. PIPA 3-of-3 if locale=ko)
  *   2. ERR_EMAIL_TAKEN / ERR_EMAIL_RECENTLY_DELETED checks
  *   3. argon2.hash(password)  ~50ms
- *   4. mintApiKey() → kid + tokenHash + plaintext (returned ONCE)
- *   5. store.createBuyerWithCredentials() — single transaction in store
- *   6. iron-session set
- *   7. (skip-flag false) generate + insert OTP, log to stdout in dev/demo
- *   8. INSERT auth_session_event(signup)
- *   9. 201 + Set-Cookie + apiKeyRevealOnce body
+ *   4. store.createBuyerWithCredentials() — buyer + credentials only
+ *   5. iron-session set
+ *   6. (skip-flag false) generate + insert OTP, log to stdout in dev/demo
+ *   7. INSERT auth_session_event(signup)
+ *   8. 201 + Set-Cookie. NO API key — buyers who need programmatic access
+ *      generate one explicitly from /account (Kyle 2026-04-27 defer-mint).
  *
  * Rate limit: 1/min/IP.
  */
@@ -21,7 +21,6 @@ import { ZodError } from "zod";
 import { signupSchema } from "@/lib/auth/schemas";
 import { hashPassword } from "@/lib/auth/argon2";
 import { generateOtp, hashOtp } from "@/lib/auth/otp";
-import { mintApiKey } from "@/lib/auth/api-key";
 import { getAuthStore, AuthStoreError } from "@/lib/auth/store";
 import { signupRateLimiter } from "@/lib/rate-limit";
 import { authError, newRequestId, resolveClientIp, resolveUserAgent } from "@/lib/auth/responses";
@@ -113,10 +112,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // Argon2 hash + API key mint happen in parallel — both are CPU-bound +
-  // independent.
+  // Argon2 hash for the password. API key mint deferred to /account
+  // generate (Kyle 2026-04-27 defer-mint flow).
   const passwordHash = await hashPassword(parsed.password);
-  const minted = mintApiKey();
 
   const consents: Record<string, string | null> = parsed.pipaConsents
     ? {
@@ -144,8 +142,7 @@ export async function POST(req: Request) {
       marketingEmailOptIn: parsed.marketingEmailOptIn,
       pipaConsents: consents,
       consentTermsVersion: "tos-v1.0;privacy-v1.0",
-      apiKeyKid: minted.kid,
-      apiKeyTokenHash: minted.tokenHash,
+      // apiKeyKid / apiKeyTokenHash intentionally omitted — defer mint.
       skipEmailVerify: env.buyerAuthSkipEmailVerify,
     });
   } catch (err) {
@@ -195,7 +192,7 @@ export async function POST(req: Request) {
     eventType: "signup",
     ip,
     userAgent: ua,
-    metadata: { kid: minted.kid, locale: parsed.locale },
+    metadata: { locale: parsed.locale },
   });
 
   // iron-session — v0.2 payload. Plaintext API key NEVER goes in the
@@ -209,6 +206,7 @@ export async function POST(req: Request) {
   session.locale = parsed.locale;
   session.tier = created.buyer.tier;
   session.signedInAt = Date.now();
+  session.org = created.buyer.organization;
   // legacy field intentionally NOT set — new signups don't paste keys
   delete session.apiKey;
   await session.save();
@@ -218,8 +216,7 @@ export async function POST(req: Request) {
       buyerId: created.buyer.buyerId,
       email: created.buyer.contactEmail,
       emailVerified: created.credentials.emailVerifiedAt !== null,
-      apiKeyRevealOnce: minted.plaintext,
-      apiKeyKid: minted.kid,
+      // No API key on signup. Generated on demand from /account.
       next: "/search",
       request_id: requestId,
     },

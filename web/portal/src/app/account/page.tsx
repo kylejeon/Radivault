@@ -62,7 +62,7 @@ export default async function AccountPage() {
 
   return (
     <div className="surface-buyer min-h-screen bg-bg">
-      <MarketplaceNav active="/account" />
+      <MarketplaceNav active="/account" org={session.org} email={session.email} />
       <main className="mx-auto max-w-content px-6 py-6">
         <AccountClient
           buyerId={buyerId}

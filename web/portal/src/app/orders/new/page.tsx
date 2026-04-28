@@ -14,10 +14,14 @@ export default async function OrderReviewPage() {
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
-  if (!session?.apiKey) redirect("/signin");
+  // Accept either v0.2 email/password (buyerPk) or legacy paste-mode apiKey,
+  // matching the BLOCKER #1 fix already applied to /search. Without this,
+  // every email/password buyer (now the default after defer-mint) bounces
+  // back to /signin → /search and the Review-order CTA appears broken.
+  if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
   return (
     <div className="surface-buyer min-h-screen bg-bg">
-      <MarketplaceNav active="/orders" />
+      <MarketplaceNav active="/cohorts" org={session.org} email={session.email} />
       <main className="mx-auto max-w-content px-6 py-6">
         <OrderReviewClient locale="en" />
       </main>

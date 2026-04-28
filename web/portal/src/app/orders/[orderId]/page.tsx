@@ -14,11 +14,12 @@ export default async function OrderDetailPage({
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
-  if (!session?.apiKey) redirect("/signin");
+  // Accept buyerPk OR legacy apiKey (defer-mint flow).
+  if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
   const { orderId } = await params;
   return (
     <div className="surface-buyer min-h-screen bg-bg">
-      <MarketplaceNav active="/orders" />
+      <MarketplaceNav active="/orders" org={session.org} email={session.email} />
       <main className="mx-auto max-w-content px-6 py-6">
         <OrderDetail orderId={orderId} />
       </main>

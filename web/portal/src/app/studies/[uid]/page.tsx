@@ -30,7 +30,7 @@ export default async function StudyDetailPage({
   // gutter that breaks the dark canvas / right-rail composition.
   return (
     <div className="surface-buyer min-h-screen bg-bg">
-      <MarketplaceNav active="/search" />
+      <MarketplaceNav active="/search" org={session.org} email={session.email} />
       <StudyDetailClient uid={uid} locale="en" />
     </div>
   );

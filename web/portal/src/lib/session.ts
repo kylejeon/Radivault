@@ -46,6 +46,9 @@ export type BuyerSession = {
   locale?: "en" | "ko";
   tier?: string;
   signedInAt?: number;
+  // Display org for MarketplaceNav avatar (Kyle 2026-04-28). Optional —
+  // legacy / pre-v0.3.3 cookies fall back to the email local-part.
+  org?: string;
 };
 
 export type HospitalSession = {
