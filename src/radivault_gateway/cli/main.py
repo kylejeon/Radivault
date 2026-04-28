@@ -578,11 +578,49 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
     )
     interval = poll_interval or cfg.pacs.poll_interval_seconds
     anchor_interval = cfg.audit.anchor_interval_seconds
-    pipeline = _build_pipeline(cfg)
-    # Reuse pipeline's upload client + audit logger for anchor scheduling so
-    # head_hash always reflects the most recent chain state.
-    audit_logger = pipeline._audit
-    upload_client = pipeline._upload
+
+    # Multi-PACS daemon (Kyle 2026-04-28). The previous single-PACS path
+    # only polled cfg.pacs (first endpoint) so newly-uploaded studies on
+    # secondary endpoints (Orthanc-B / HOSP-002) never auto-synced. The
+    # daemon now drives run_multi_pacs_once() per tick, identical scope
+    # to ``sync-once``.
+    from radivault_gateway.orchestrator import run_multi_pacs_once
+    from radivault_gateway.upload import UploadClient
+
+    state_db, audit_logger, staging, deid, pixel_engine = (
+        _build_shared_components(cfg)
+    )
+    # Primary upload client purely for anchor scheduling (audit chain is
+    # gateway-wide so any valid central token works). Pick the highest-
+    # priority enabled endpoint; if none, abort with a friendly error.
+    primary_endpoint = next(
+        (ep for ep in cfg.pacs_endpoints if ep.enabled),
+        None,
+    )
+    if primary_endpoint is None:
+        click.echo(
+            "[ERR_MPS_002] no enabled PACS endpoints — daemon cannot start",
+            err=True,
+        )
+        sys.exit(64)
+    primary_hospital_id = cfg.hospital_id_for(primary_endpoint)
+    try:
+        primary_token = cfg.central.token_for_hospital(primary_hospital_id)
+    except KeyError as exc:
+        click.echo(
+            f"[ERR_MPS_001] no central upload token for hospital "
+            f"'{primary_hospital_id}': {exc}",
+            err=True,
+        )
+        sys.exit(64)
+    upload_client = UploadClient(
+        cfg.central.base_url,
+        upload_token=primary_token,
+        timeout_seconds=cfg.central.upload_timeout_seconds,
+        max_retries=cfg.central.max_upload_retries,
+        allow_insecure=cfg.central.allow_insecure,
+    )
+
     # FR-36 / AC-18: pixel-stage crash recovery at startup.
     if cfg.deid.pixel.enabled:
         from radivault_gateway.orchestrator.recovery import (
@@ -590,18 +628,20 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
         )
 
         recovery = recover_orphaned_pixel_processing(
-            pipeline._db,
+            state_db,
             audit=audit_logger,
-            staging=pipeline._staging,
+            staging=staging,
         )
         if recovery.recovered:
             click.echo(
                 f"[radivault-gateway] pixel recovery: rolled back "
                 f"{recovery.recovered} orphaned pixel_processing study(ies)"
             )
+
+    enabled_pacs = [ep.id for ep in cfg.pacs_endpoints if ep.enabled]
     click.echo(
-        f"[radivault-gateway] starting, poll_interval={interval}s "
-        f"anchor_interval={anchor_interval}s"
+        f"[radivault-gateway] starting (multi-PACS), poll_interval={interval}s "
+        f"anchor_interval={anchor_interval}s pacs={','.join(enabled_pacs)}"
     )
     import signal
     import time
@@ -662,11 +702,43 @@ def start(ctx: click.Context, oneshot: bool, poll_interval: int | None) -> None:
         )
 
     while not stopping["flag"]:
-        summary = pipeline.run_once()
-        click.echo(
-            f"tick uploaded={summary.uploaded} quarantined={summary.quarantined} "
-            f"failed={summary.failed}"
-        )
+        try:
+            multi_summary = run_multi_pacs_once(
+                cfg,
+                state_db=state_db,
+                audit_logger=audit_logger,
+                staging=staging,
+                deid=deid,
+                pixel=pixel_engine,
+            )
+        except Exception as exc:
+            click.echo(
+                f"[radivault-gateway] WARN tick failed: {exc}",
+                err=True,
+            )
+            multi_summary = None
+        if multi_summary is not None:
+            tick_uploaded = sum(
+                r.summary.uploaded
+                for r in multi_summary.runs
+                if r.ok and r.summary is not None
+            )
+            tick_quarantined = sum(
+                r.summary.quarantined
+                for r in multi_summary.runs
+                if r.ok and r.summary is not None
+            )
+            tick_failed = sum(
+                r.summary.failed
+                for r in multi_summary.runs
+                if r.ok and r.summary is not None
+            )
+            pacs_ok = multi_summary.successes
+            pacs_total = len(multi_summary.runs)
+            click.echo(
+                f"tick pacs_ok={pacs_ok}/{pacs_total} uploaded={tick_uploaded} "
+                f"quarantined={tick_quarantined} failed={tick_failed}"
+            )
         if time.monotonic() - last_anchor_at >= anchor_interval:
             _maybe_anchor()
             last_anchor_at = time.monotonic()
