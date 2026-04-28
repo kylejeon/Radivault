@@ -3,22 +3,21 @@
 /**
  * <ViewerWatermark> — C-DV-Watermark (design-spec-dicom-viewer §4.10).
  *
- * `◆ RADIVAULT` SVG wordmark placed top-center of the canvas inner. Used
- * for anti-screenshot identification: lossy live, but visible in
- * captures + slideshow demos so the source is identifiable.
+ * `◆ RADIVAULT` SVG wordmark placed bottom-right of the canvas inner
+ * (Kyle 2026-04-28 — was top-center). Used for anti-screenshot
+ * identification: visible in captures + slideshow demos so the source
+ * is identifiable.
  *
- * Mockup tones:
- *   - position: top 18%, center, transformX(-50%)
+ * Visual:
  *   - tilt: -12°
- *   - opacity 0.08, mix-blend-mode: screen — visible on dark lung-window
+ *   - opacity 0.32, mix-blend-mode: screen — visible on dark lung-window
  *     and bright bone-window without invading diagnostic area.
  *   - width 22% of canvas inner (clamp 140-260 px); 32% on mobile.
  *   - aria-hidden, pointer-events:none, user-select:none.
  *
  * Z-index: 3 — below the 4-corner overlays (z=4) and DefacePill (z=5),
- * above the image (z=0~1). Screen-grab includes the watermark; the image
- * itself is unaffected by the SVG (transform does not apply to the
- * canvas image element).
+ * above the image (z=0~1). When BR overlay (De-ID hash) is wired, it
+ * renders on top of this watermark.
  */
 
 export function ViewerWatermark() {

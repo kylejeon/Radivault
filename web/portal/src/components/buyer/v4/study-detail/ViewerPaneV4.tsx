@@ -182,7 +182,7 @@ export function ViewerPaneV4({
   const [ww, setWw] = useState(WW_DEFAULT);
   const [wl, setWl] = useState(WL_DEFAULT);
   const [activePreset, setActivePreset] = useState<PresetId>("none");
-  const [activeTool, setActiveTool] = useState<"pan" | "wl">("wl");
+  const [activeTool, setActiveTool] = useState<"pan" | "wl">("pan");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Reset frame index + zoom/pan when series changes; preserve W-L per

@@ -67,17 +67,20 @@ export function clampWindow(value: number, min: number, max: number): number {
 
 /**
  * Bound the pan so at least half of the image stays inside the canvas
- * inner rect. The inner is `aspect-ratio: 1/1`, but we use the rendered
- * size; the image is `object-fit: contain` so it fully fills.
+ * inner rect. At zoom > 1 the bound is `(innerSize*zoom - innerSize)/2`
+ * (image excess); at zoom <= 1 we permit ±innerSize/2 so the user can
+ * still pan the fit-to-screen image off-axis when the Pan tool is
+ * active (Kyle 2026-04-28 — left-drag must work at default zoom too).
  */
 function clampPan(pan: Pan, zoom: number, innerSize: number): Pan {
-  if (zoom <= 1) return PAN_DEFAULT;
-  // At zoom=z, the image covers innerSize*z. Half of it should remain
-  // inside innerSize → max |translate| = (innerSize*z - innerSize) / 2.
-  const maxOffset = (innerSize * zoom - innerSize) / 2;
+  const overhang =
+    zoom > 1
+      ? (innerSize * zoom - innerSize) / 2
+      : innerSize / 2;
+  if (overhang === 0) return PAN_DEFAULT;
   return {
-    x: Math.max(-maxOffset, Math.min(maxOffset, pan.x)),
-    y: Math.max(-maxOffset, Math.min(maxOffset, pan.y)),
+    x: Math.max(-overhang, Math.min(overhang, pan.x)),
+    y: Math.max(-overhang, Math.min(overhang, pan.y)),
   };
 }
 
@@ -211,11 +214,14 @@ export function ViewerCanvas({
   // ------------------------------------------------------------------
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if (!innerRef.current) return;
-    // Right button → W/L. Otherwise → pan when zoom > 1.
+    // Right-click + Shift+left always do W/L (radiology standard).
+    // Plain left-click respects activeTool (Kyle 2026-04-28).
     const isRight = e.button === 2;
     const isShiftLeft = e.button === 0 && e.shiftKey;
-    const isWlMode = isRight || isShiftLeft;
-    const isPanMode = !isWlMode && e.button === 0 && zoom > 1;
+    const isLeftPlain = e.button === 0 && !e.shiftKey;
+    const isWlMode =
+      isRight || isShiftLeft || (isLeftPlain && activeTool === "wl");
+    const isPanMode = isLeftPlain && activeTool === "pan";
     if (!isWlMode && !isPanMode) return;
     e.preventDefault();
     const target = e.currentTarget;
@@ -309,7 +315,7 @@ export function ViewerCanvas({
         {!hideWatermark ? <ViewerWatermark /> : null}
         <div
           className={clsx("rv-viewer-canvas-v4__img-wrap")}
-          data-pannable={zoom > 1}
+          data-pannable={activeTool === "pan"}
           data-testid="dv-canvas-surface"
           onWheel={onWheel}
           onPointerDown={onPointerDown}

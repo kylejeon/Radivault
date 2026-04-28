@@ -1897,19 +1897,23 @@ mark {
   text-align: right;
 }
 
-/* ----- Watermark ----- */
+/* ----- Watermark ----- *
+ * Bottom-right corner, brighter so the source is identifiable in
+ * screenshots / slideshow demos (Kyle 2026-04-28). Sits above the
+ * BR overlay text only when BR is empty; once De-ID hash is wired
+ * the BR overlay (z=4) renders on top of this (z=3).
+ */
 .rv-viewer-watermark {
   position: absolute;
-  top: 18%;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 12px;
+  right: 14px;
   width: 22%;
   min-width: 140px;
   max-width: 260px;
   height: auto;
   pointer-events: none;
   z-index: 3;
-  opacity: 0.08;
+  opacity: 0.32;
   mix-blend-mode: screen;
   user-select: none;
 }
