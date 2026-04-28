@@ -326,9 +326,12 @@ export function ViewerCanvas({
           onContextMenu={onContextMenu}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* No `key` on <img> (Kyle 2026-04-28) — letting React reuse the
+              same element on src change keeps the previous frame visible
+              until the new one decodes, eliminating the white flash during
+              real-time slider scrub. */}
           <img
             ref={imgRef}
-            key={frameUrl}
             src={frameUrl}
             alt={alt}
             draggable={false}

@@ -64,7 +64,6 @@ import { PRESETS, type PresetId, type PresetSpec } from "./PresetMenu";
 
 const PRELOAD_RADIUS = 2;
 const PAGE_STEP = 10;
-const DRAG_DEBOUNCE_MS = 80;
 const ANNOUNCE_DEBOUNCE_MS = 200;
 const ZOOM_KEY_FACTOR = 1.1;
 
@@ -168,7 +167,6 @@ export function ViewerPaneV4({
     [resolvedSeries],
   );
   const [current, setCurrent] = useState<number>(initialFrame);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [announce, setAnnounce] = useState<string>("");
   const containerRef = useRef<HTMLElement>(null);
@@ -249,7 +247,6 @@ export function ViewerPaneV4({
 
   useEffect(
     () => () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
       if (announceRef.current) clearTimeout(announceRef.current);
     },
     [],
@@ -399,11 +396,11 @@ export function ViewerPaneV4({
   }
 
   function onSliderChange(value: number) {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(
-      () => setCurrent(clampFrame(value)),
-      DRAG_DEBOUNCE_MS,
-    );
+    // Real-time scrub (Kyle 2026-04-28) — was 80 ms debounced; now updates
+    // on every tick so the image follows the slider thumb. Browser HTTP
+    // cache + PRELOAD_RADIUS=2 absorb the burst; uncached far slices
+    // momentarily flash to the next available preload.
+    setCurrent(clampFrame(value));
   }
 
   // ---------- Toolbar handlers ----------

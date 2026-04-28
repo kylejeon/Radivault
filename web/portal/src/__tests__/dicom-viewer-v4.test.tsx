@@ -532,7 +532,9 @@ describe("ViewerPaneV4 — slider drag debounce", () => {
     vi.useRealTimers();
   });
 
-  it("AC-DV-4.1 slider drag → 80 ms debounce → frame swap", () => {
+  it("AC-DV-4.1 slider drag → immediate frame swap (real-time scrub)", () => {
+    // Kyle 2026-04-28: was 80 ms debounced. Now updates synchronously so
+    // the displayed slice follows the slider thumb during scrub.
     render(<ControlledViewer manifest={makeManifest()} />);
     const slider = screen.getByTestId("dv-frame-slider") as HTMLInputElement;
     // Default frame is 78 (median of 155).
@@ -540,13 +542,7 @@ describe("ViewerPaneV4 — slider drag debounce", () => {
       "78 / 155",
     );
     fireEvent.change(slider, { target: { value: "100" } });
-    // Pre-debounce, count unchanged.
-    expect(screen.getByTestId("dv-frame-counter").textContent).toBe(
-      "78 / 155",
-    );
-    act(() => {
-      vi.advanceTimersByTime(81);
-    });
+    // Counter updates on the same tick — no debounce.
     expect(screen.getByTestId("dv-frame-counter").textContent).toBe(
       "100 / 155",
     );
