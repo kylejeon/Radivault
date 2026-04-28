@@ -239,21 +239,40 @@ def test_daemon_loop_schedules_anchor(mock_central_client, tmp_path, monkeypatch
             content=resp.content,
         )
 
-    original_build = cli_main._build_pipeline
+    # The daemon `start` command was migrated to multi-PACS in d860345 —
+    # it builds shared components + a primary upload client directly and
+    # calls run_multi_pacs_once() instead of pipeline.run_once(). To
+    # exercise the same anchor scheduling path we (1) replace the
+    # UploadClient class with a subclass whose httpx client uses the
+    # MockTransport bridge, and (2) stub run_multi_pacs_once to a no-op
+    # empty-summary so the loop ticks once without touching any PACS.
+    from radivault_gateway import upload as upload_pkg
+    from radivault_gateway.orchestrator import multi_pacs as multi_pacs_mod
+    from radivault_gateway.orchestrator.multi_pacs import MultiPacsRunSummary
 
-    def _build_with_stub(cfg):
-        pipeline = original_build(cfg)
-        # Replace the upload client's transport with the mock central bridge.
-        pipeline._upload._client = httpx.Client(
-            transport=httpx.MockTransport(_bridge),
-            headers={"Authorization": "Bearer tok-abc"},
-            base_url="http://testserver",
-        )
-        # Stub PACS query to return zero studies so run_once just ticks once.
-        pipeline._pacs.query_studies = lambda *a, **kw: []  # type: ignore[assignment]
-        return pipeline
+    real_upload_client_cls = upload_pkg.UploadClient
 
-    monkeypatch.setattr(cli_main, "_build_pipeline", _build_with_stub)
+    class _StubUploadClient(real_upload_client_cls):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._client = httpx.Client(
+                transport=httpx.MockTransport(_bridge),
+                headers={"Authorization": "Bearer tok-abc"},
+                base_url="http://testserver",
+            )
+
+    monkeypatch.setattr(upload_pkg, "UploadClient", _StubUploadClient)
+
+    def _stub_run(*_args, **_kwargs):
+        return MultiPacsRunSummary(runs=[])
+
+    monkeypatch.setattr(multi_pacs_mod, "run_multi_pacs_once", _stub_run)
+    # The daemon imports run_multi_pacs_once from the package re-export,
+    # so patch that path too.
+    monkeypatch.setattr(
+        "radivault_gateway.orchestrator.run_multi_pacs_once",
+        _stub_run,
+    )
 
     # Force the anchor interval check to fire on first tick by pretending the
     # last anchor was long ago: we use --oneshot so the main loop exits after
