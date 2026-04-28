@@ -2,20 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { SliceViewerOrFallback } from "@/components/SliceViewer";
-import {
-  FrameSliderViewer,
-  type PreviewManifest,
-} from "@/components/preview/FrameSliderViewer";
+import { type PreviewManifest } from "@/components/preview/FrameSliderViewer";
 import {
   ComplianceCollapse,
   LongitudinalTimeline,
   MetaCard,
   QualityMetricsCard,
-  SeriesMiniCardList,
   StudyDetailSubBar,
   ViewerPaneV3,
-  type SeriesMiniItem,
 } from "@/components/buyer/v3/study-detail";
+import {
+  SeriesMiniCardListV4,
+  ViewerPaneV4,
+  type SeriesMiniItemV4,
+} from "@/components/buyer/v4/study-detail";
 import type { Locale } from "@/lib/i18n";
 
 /**
@@ -226,6 +226,34 @@ export function StudyDetailPanel({
     };
   }, [study.pseudo_study_uid]);
 
+  // FR-DV-2.5 — active series UID lifted to panel level so the v4 viewer
+  // and the right-rail SERIES card mirror each other.
+  const [activeSeriesUid, setActiveSeriesUid] = useState<string | null>(null);
+  useEffect(() => {
+    if (!previewManifest) return;
+    if (activeSeriesUid) return;
+    const firstGenerated = previewManifest.series.find(
+      (s) => s.preview_status === "generated",
+    );
+    if (firstGenerated) setActiveSeriesUid(firstGenerated.pseudo_series_uid);
+    else if (previewManifest.series.length > 0) {
+      setActiveSeriesUid(previewManifest.series[0].pseudo_series_uid);
+    }
+  }, [previewManifest, activeSeriesUid]);
+
+  // FR-DV-1.4 / page-scoped CSS — opt the body into the v4 layout overrides
+  // (compliance footer compactness, viewport clamp). Cleared on unmount so
+  // any other route keeps the v3 surface intact.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const prev = document.body.dataset.page;
+    document.body.dataset.page = "study-detail-v4";
+    return () => {
+      if (prev != null) document.body.dataset.page = prev;
+      else delete document.body.dataset.page;
+    };
+  }, []);
+
   // ---------------------------------------------------------------
   // Derived display values for the right-rail cards.
   // ---------------------------------------------------------------
@@ -242,10 +270,17 @@ export function StudyDetailPanel({
   const studyDescription =
     study.study_description ?? study.protocol_name ?? null;
 
-  // Series mini items — pass through optional v0.1.5 fields (description,
-  // slice thickness, resolution) when they happen to be populated; otherwise
-  // SeriesMiniRow falls back to "Series N" + "—" sub.
-  const seriesItems: SeriesMiniItem[] = study.series.map((s) => ({
+  // Series mini items — merge study.series rows with the preview manifest
+  // so we can render disabled state for non-generated series. When the
+  // manifest is still loading or 404, fall back to study.series only and
+  // assume `generated` (legacy behaviour pre v4).
+  const manifestByUid: Record<string, PreviewManifest["series"][number]> = {};
+  if (previewManifest) {
+    for (const s of previewManifest.series) {
+      manifestByUid[s.pseudo_series_uid] = s;
+    }
+  }
+  const seriesItems: SeriesMiniItemV4[] = study.series.map((s) => ({
     pseudo_series_uid: s.pseudo_series_uid,
     modality: s.modality,
     n_instances: s.n_instances,
@@ -253,6 +288,8 @@ export function StudyDetailPanel({
     slice_thickness_mm: s.slice_thickness_mm ?? null,
     resolution_w: s.resolution_w ?? null,
     resolution_h: s.resolution_h ?? null,
+    preview_status:
+      manifestByUid[s.pseudo_series_uid]?.preview_status ?? null,
   }));
 
   // Viewer overlays — use real values where available; corners not populated
@@ -304,14 +341,14 @@ export function StudyDetailPanel({
       {/* 2. Main 2-col layout — viewer + right rail */}
       <main className="rv-layout-detail">
         {/* Left: viewer pane */}
-        <ViewerPaneV3
-          topLeft={overlayTopLeft}
-          topRight={overlayTopRight}
-          bottomLeft={overlayBottomLeft}
-          bottomRight={null /* De-ID hash not yet wired — leave blank */}
-          locale={locale}
-        >
-          {previewManifest === null ? (
+        {previewManifest === null ? (
+          <ViewerPaneV3
+            topLeft={overlayTopLeft}
+            topRight={overlayTopRight}
+            bottomLeft={overlayBottomLeft}
+            bottomRight={null}
+            locale={locale}
+          >
             <div
               data-testid="study-detail-viewer-skeleton"
               style={{
@@ -321,8 +358,16 @@ export function StudyDetailPanel({
                 background: "#0f172a",
               }}
             />
-          ) : previewManifest === undefined ? (
-            previewStatus === "verified" ? (
+          </ViewerPaneV3>
+        ) : previewManifest === undefined ? (
+          <ViewerPaneV3
+            topLeft={overlayTopLeft}
+            topRight={overlayTopRight}
+            bottomLeft={overlayBottomLeft}
+            bottomRight={null}
+            locale={locale}
+          >
+            {previewStatus === "verified" ? (
               <SliceViewerOrFallback
                 studyUid={study.pseudo_study_uid}
                 sliceCount={sliceCount}
@@ -337,15 +382,21 @@ export function StudyDetailPanel({
                 modality={study.modality}
                 locale={locale}
               />
-            )
-          ) : (
-            <FrameSliderViewer
-              studyUid={study.pseudo_study_uid}
-              manifest={previewManifest}
-              locale={locale}
-            />
-          )}
-        </ViewerPaneV3>
+            )}
+          </ViewerPaneV3>
+        ) : (
+          <ViewerPaneV4
+            studyUid={study.pseudo_study_uid}
+            manifest={previewManifest}
+            activeSeriesUid={activeSeriesUid}
+            onActiveSeriesChange={setActiveSeriesUid}
+            overlayTopLeft={overlayTopLeft}
+            overlayTopRight={overlayTopRight}
+            overlayBottomLeft={overlayBottomLeft}
+            overlayBottomRight={null}
+            locale={locale}
+          />
+        )}
 
         {/* Right rail */}
         <aside className="rv-right-rail" aria-label="Study metadata">
@@ -439,7 +490,12 @@ export function StudyDetailPanel({
               ]}
             />
 
-            <SeriesMiniCardList series={seriesItems} locale={locale} />
+            <SeriesMiniCardListV4
+              series={seriesItems}
+              activeSeriesUid={activeSeriesUid}
+              onSelect={setActiveSeriesUid}
+              locale={locale}
+            />
 
             <MetaCard
               title={t.acquisition}
@@ -488,14 +544,18 @@ export function StudyDetailPanel({
             />
           </section>
 
-          <LongitudinalTimeline
-            patientPseudoId={patientPseudo}
-            steps={null /* TODO backend: fetch related studies for patient */}
-            locale={locale}
-          />
+          <div className="rv-detail-section--longitudinal-v42">
+            <LongitudinalTimeline
+              patientPseudoId={patientPseudo}
+              steps={null /* TODO backend: fetch related studies for patient */}
+              locale={locale}
+            />
+          </div>
 
-          {/* Sticky CTA — Add to cohort (Sample download removed Kyle 2026-04-28). */}
-          <div className="rv-detail-cta">
+          {/* Sticky CTA — single primary (Sample download + hint removed
+              v0.3 of design-spec, Kyle 2026-04-28). z-index 4 + isolation
+              fix vs longitudinal timeline dots stack-bleed. */}
+          <div className="rv-detail-cta rv-detail-cta--v42">
             <button
               type="button"
               onClick={onAddToCohort}
@@ -507,9 +567,7 @@ export function StudyDetailPanel({
                 background: alreadyInCohort
                   ? "var(--rv-stone-200)"
                   : "var(--rv-navy-900)",
-                color: alreadyInCohort
-                  ? "var(--rv-stone-500)"
-                  : "#fff",
+                color: alreadyInCohort ? "var(--rv-stone-500)" : "#fff",
                 border: "1px solid transparent",
                 borderRadius: "var(--rv-radius-md)",
                 fontSize: 13,
@@ -519,7 +577,6 @@ export function StudyDetailPanel({
             >
               {alreadyInCohort ? t.inCohort : t.add}
             </button>
-            <div className="rv-detail-cta__hint">{t.ctaHint}</div>
           </div>
         </aside>
       </main>

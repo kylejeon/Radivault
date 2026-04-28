@@ -120,7 +120,9 @@ describe("StudyDetailPanel (study-detail v3 mockup)", () => {
     expect(screen.getByTestId("quality-metrics-card")).toBeInTheDocument();
     expect(screen.getByTestId("meta-card-patient")).toBeInTheDocument();
     expect(screen.getByTestId("meta-card-study")).toBeInTheDocument();
-    expect(screen.getByTestId("meta-card-series")).toBeInTheDocument();
+    // v4: meta-card-series test-id was renamed to dv-meta-card-series
+    // (study-detail v4 — DICOM Viewer v2 sync component)
+    expect(screen.getByTestId("dv-meta-card-series")).toBeInTheDocument();
     expect(screen.getByTestId("meta-card-acquisition")).toBeInTheDocument();
     expect(screen.getByTestId("meta-card-pixel")).toBeInTheDocument();
     expect(screen.getByTestId("longitudinal-timeline")).toBeInTheDocument();
