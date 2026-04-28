@@ -175,6 +175,12 @@ class UploadClient:
             manifest["kcd_code"] = getattr(sd, "kcd_code", None)
             manifest["kcd_label_ko"] = getattr(sd, "kcd_label_ko", None)
             manifest["kcd_label_en"] = getattr(sd, "kcd_label_en", None)
+            # Kyle 2026-04-28 — search results table showed "—" for the
+            # Description column because these two fields, although extracted
+            # by extract.py and accepted by central/manifest/schema.py, were
+            # never copied into the wire manifest here.
+            manifest["study_description"] = getattr(sd, "study_description", None)
+            manifest["protocol_name"] = getattr(sd, "protocol_name", None)
         if thumbnail is not None:
             import base64
 
