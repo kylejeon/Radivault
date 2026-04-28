@@ -1,42 +1,63 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BuyerModalityBadge } from "./ModalityBadge";
-import { HospitalBadge } from "@/components/buyer/v3/HospitalBadge";
 import { SliceViewerOrFallback } from "@/components/SliceViewer";
-import { SampleDownloadButton } from "@/components/preview/SampleDownloadButton";
 import {
   FrameSliderViewer,
   type PreviewManifest,
 } from "@/components/preview/FrameSliderViewer";
 import {
-  QuotaIndicator,
-  type QuotaState,
-} from "@/components/preview/QuotaIndicator";
-import { getDict, type Locale } from "@/lib/i18n";
+  ComplianceCollapse,
+  LongitudinalTimeline,
+  MetaCard,
+  QualityMetricsCard,
+  SeriesMiniCardList,
+  StudyDetailSubBar,
+  ViewerPaneV3,
+  type SeriesMiniItem,
+} from "@/components/buyer/v3/study-detail";
+import type { Locale } from "@/lib/i18n";
 
 /**
- * StudyDetailPanel {#study-detail-v1} — design-spec-portal-redesign §11.4
- * extended by design-spec-buyer-browse-preview §7.
+ * StudyDetailPanel — study-detail v3 (mockup buyer-ux-v2/v3/study-detail.html).
  *
- * Layout (top→bottom):
+ * Layout (top → bottom):
  *
- *   1. Header bar (back link · UID · "Add to cohort").
- *   2. Hospital origin row.
- *   3. Main grid 1fr · 320px:
- *      - Left  : SliceViewer (verified) | ModalityFallback
- *      - Right : Sample download CTA · Quota · Cohort CTA · Series list
- *   4. Metadata 2-col grid (StudyItem fields).
+ *   1. <StudyDetailSubBar>        — back · hospital · KCD · modality · UID
+ *   2. <ViewerPaneV3>             — dark canvas + 4 corner overlays
+ *      · child = <FrameSliderViewer> | <SliceViewerOrFallback>
+ *        | <LegacyThumbnailFallback>
+ *   3. Right rail (sticky):
+ *      · <QualityMetricsCard>     — 2x2 derived signals
+ *      · <MetaCard kind="patient">
+ *      · <MetaCard kind="study">
+ *      · <SeriesMiniCardList>
+ *      · <MetaCard kind="acquisition">
+ *      · <MetaCard kind="pixel">
+ *      · <LongitudinalTimeline>
+ *      · sticky CTA — Add to cohort
+ *   4. <ComplianceCollapse>       — collapsible footer (DeID stepper + audit)
  *
- * SaMD footer is owned by the page wrapper (StudyDetailClient), not this
- * component, because it needs to be page-sticky.
+ * SaMD disclaimer is rendered inside <ViewerPaneV3>; the page-level sticky
+ * <SaMDFooter> from `StudyDetailClient` remains for cross-route consistency.
+ *
+ * Backend coverage:
+ *   - All 14 fields the mockup shows are slotted. Fields not yet wired to the
+ *     central index (KVP, Tube current, Contrast, PixelSpacing, Slice
+ *     thickness, PhotomtrInterp, FrameOfRef, Accession, IRB, anchor hash)
+ *     render as "—" with a `--missing` modifier. Backend extension is a
+ *     separate dev-spec; here we ship the UI skeleton.
  */
 
 export type SeriesSummary = {
   pseudo_series_uid: string;
   modality: string | null;
   n_instances: number;
+  // v3 mockup-only fields — optional, populated when backend extends:
+  description?: string | null;
+  slice_thickness_mm?: number | null;
+  resolution_w?: number | null;
+  resolution_h?: number | null;
 };
 
 export type StudyDetail = {
@@ -55,13 +76,20 @@ export type StudyDetail = {
   hospital_opaque_id: string | null;
   /**
    * Buyer-facing hospital identity (e.g., "SEOUL-A", "BUSAN-B"). Same value
-   * the search results table renders via <HospitalBadge>. Falls back to the
-   * `HOSP-XXXXXX` opaque short code if the upstream omits it (Kyle
-   * 2026-04-27 — `HOSP-3B25BB` is meaningless to a buyer).
+   * the search results table renders via <HospitalBadge>. Falls back to a
+   * `HOSP-XXXXXX` opaque short code if the upstream omits it.
    */
   hospital_region_pseudo?: string | null;
   ingested_at: string | null;
   series: SeriesSummary[];
+  // FR-V3-API-2 — KCD ontology fields surfaced in the sub-bar chip + Study
+  // card description. All optional (legacy studies don't have KCD).
+  kcd_code?: string | null;
+  kcd_label_ko?: string | null;
+  kcd_label_en?: string | null;
+  // Phase 1.5 free-text — optional study description / protocol name.
+  study_description?: string | null;
+  protocol_name?: string | null;
   // dev-spec-buyer-browse-preview FR-DATA-1 — when absent, we treat the
   // study as 'pending' (safe default) so the viewer falls back.
   preview_status?:
@@ -80,9 +108,21 @@ export type StudyDetailPanelProps = {
   locale?: Locale;
 };
 
+const MISSING = "—";
+
 function shortHospital(id: string | null): string {
-  if (!id) return "—";
+  if (!id) return MISSING;
   return `HOSP-${id.slice(0, 6).toUpperCase()}`;
+}
+
+function patientPseudoFromUid(uid: string): string {
+  // Stable, opaque, deterministic pseudo derived from the study UID tail. The
+  // central pipeline issues a real per-patient pseudo at ingest; until that
+  // surfaces in the search detail response we synthesise a display-only token
+  // so the cohort timeline title is never empty. Kept short on purpose so
+  // nobody mistakes it for a real medical record number.
+  const tail = uid.replace(/[^A-Za-z0-9]/g, "").slice(-6).toUpperCase();
+  return tail ? `PT-${tail}` : "PT-—";
 }
 
 export function StudyDetailPanel({
@@ -91,88 +131,68 @@ export function StudyDetailPanel({
   alreadyInCohort,
   locale = "en",
 }: StudyDetailPanelProps) {
-  const dict = getDict(locale);
   const t =
     locale === "ko"
       ? {
-          back: "← 결과로 돌아가기",
-          add: "코호트에 추가",
+          add: "+ 코호트에 추가",
           inCohort: "✓ 이미 코호트에 있음",
-          metaTitle: "STUDY 메타데이터",
-          seriesTitle: "SERIES",
+          ctaHint:
+            "코호트에 담아 /orders/new 에서 전체 study 배송 계약을 검토하세요. 본 페이지의 미리보기는 SaMD 면책 대상입니다.",
+          patient: "환자",
+          patientPseudoId: "가명 ID",
+          patientSex: "성별",
+          patientAge: "나이 (세)",
+          patientConsent: "동의",
+          study: "검사",
+          examDate: "촬영일 (시프트)",
+          accession: "접수",
+          description: "설명",
           modality: "모달리티",
-          bodyPart: "신체 부위",
-          age: "연령",
-          sex: "성별",
+          bodyPart: "부위",
+          acquisition: "획득 정보",
           manufacturer: "제조사",
           model: "모델",
-          studyDate: "촬영 일자",
-          totalBytes: "총 용량",
-          instances: "인스턴스 수",
-          seriesCount: "시리즈 수",
-          ingested: "수집 시각",
-          hospital: "이 병원의 보유 study 수",
-          viewAll: "이 병원 전체 보기 →",
+          kvp: "KVP",
+          tubeCurrent: "관전류",
+          contrast: "조영제",
+          pixelTitle: "픽셀 · 공간",
+          photomtr: "PhotomtrInterp",
+          pixelSpacing: "PixelSpacing",
+          frameOfRef: "FrameOfRef",
         }
       : {
-          back: "← Back to results",
           add: "+ Add to cohort",
           inCohort: "✓ Already in cohort",
-          metaTitle: "STUDY METADATA",
-          seriesTitle: "SERIES",
+          ctaHint:
+            "Add this study to your cohort and review full delivery in /orders/new. Previews on this page are subject to the SaMD disclaimer.",
+          patient: "Patient",
+          patientPseudoId: "Pseudo ID",
+          patientSex: "Sex",
+          patientAge: "Age (years)",
+          patientConsent: "Consent",
+          study: "Study",
+          examDate: "Exam Date (shifted)",
+          accession: "Accession",
+          description: "Description",
           modality: "Modality",
-          bodyPart: "Body Part",
-          age: "Age",
-          sex: "Sex",
+          bodyPart: "Body part",
+          acquisition: "Acquisition",
           manufacturer: "Manufacturer",
           model: "Model",
-          studyDate: "Study Date",
-          totalBytes: "Total Bytes",
-          instances: "Instance Count",
-          seriesCount: "Series Count",
-          ingested: "Ingested",
-          hospital: "From this hospital",
-          viewAll: "view all from this hospital →",
+          kvp: "KVP (CT)",
+          tubeCurrent: "Tube current",
+          contrast: "Contrast",
+          pixelTitle: "Pixel & spatial",
+          photomtr: "PhotomtrInterp",
+          pixelSpacing: "PixelSpacing",
+          frameOfRef: "FrameOfRef",
         };
 
-  const totalMb = (study.total_bytes / (1024 * 1024)).toFixed(1);
   const previewStatus = study.preview_status ?? "pending";
   const sliceCount = study.preview_slice_count ?? 1;
 
-  // Quota state — fetched on mount + bumped optimistically by the
-  // SampleDownloadButton via onQuotaUpdate.
-  const [quota, setQuota] = useState<QuotaState | null>(null);
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const res = await fetch("/api/account/quota");
-        if (!active) return;
-        if (!res.ok) return;
-        const body = (await res.json()) as {
-          daily_used: number;
-          daily_limit: number;
-          resets_at: string | null;
-        };
-        setQuota({
-          used: body.daily_used,
-          limit: body.daily_limit,
-          resetsAtIso: body.resets_at,
-        });
-      } catch {
-        /* tolerate — UI will show skeleton */
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // jpg-preview-defacing FR-API-2 — fetch preview manifest in parallel
-  // with the study fetch (already done by parent client). 404 means the
-  // study predates the new pipeline (FR-NEWONLY-2 silent coexistence)
-  // so we fall back to the existing SliceViewerOrFallback.
-  // ``previewManifest === null`` => still loading.
+  // jpg-preview-defacing FR-API-2 — fetch preview manifest in parallel.
+  // ``previewManifest === null``      => still loading.
   // ``previewManifest === undefined`` => 404 / unavailable, fall back.
   const [previewManifest, setPreviewManifest] = useState<
     PreviewManifest | null | undefined
@@ -192,9 +212,6 @@ export function StudyDetailPanel({
           return;
         }
         if (!res.ok) {
-          // Other failures: treat as legacy / fall back. Keeps the
-          // page resilient when search service has the new endpoint
-          // disabled.
           setPreviewManifest(undefined);
           return;
         }
@@ -209,201 +226,327 @@ export function StudyDetailPanel({
     };
   }, [study.pseudo_study_uid]);
 
+  // ---------------------------------------------------------------
+  // Derived display values for the right-rail cards.
+  // ---------------------------------------------------------------
+  const hospitalRegion =
+    study.hospital_region_pseudo ?? shortHospital(study.hospital_opaque_id);
+  const patientPseudo = patientPseudoFromUid(study.pseudo_study_uid);
+  const totalMb = (study.total_bytes / (1024 * 1024)).toFixed(1);
+
+  // KCD chip in sub-bar: prefer locale-matched label tooltip.
+  const kcdLabel =
+    locale === "ko"
+      ? study.kcd_label_ko ?? study.kcd_label_en
+      : study.kcd_label_en ?? study.kcd_label_ko;
+  const studyDescription =
+    study.study_description ?? study.protocol_name ?? null;
+
+  // Series mini items — pass through optional v0.1.5 fields (description,
+  // slice thickness, resolution) when they happen to be populated; otherwise
+  // SeriesMiniRow falls back to "Series N" + "—" sub.
+  const seriesItems: SeriesMiniItem[] = study.series.map((s) => ({
+    pseudo_series_uid: s.pseudo_series_uid,
+    modality: s.modality,
+    n_instances: s.n_instances,
+    description: s.description ?? null,
+    slice_thickness_mm: s.slice_thickness_mm ?? null,
+    resolution_w: s.resolution_w ?? null,
+    resolution_h: s.resolution_h ?? null,
+  }));
+
+  // Viewer overlays — use real values where available; corners not populated
+  // simply omit lines rather than printing "—" inside dark overlays (those
+  // would look like data, not absence).
+  const overlayTopLeft = (
+    <>
+      {[hospitalRegion, study.modality].filter(Boolean).join(" · ") || null}
+      {study.preview_slice_count != null ? (
+        <>
+          <br />
+          slice {Math.max(1, Math.floor(sliceCount / 2))} / {sliceCount}
+        </>
+      ) : null}
+    </>
+  );
+  const overlayTopRight = (
+    <>
+      {[study.manufacturer, study.model_name].filter(Boolean).join(" · ") ||
+        null}
+      {study.study_date_shifted ? (
+        <>
+          <br />
+          {study.study_date_shifted} (shifted)
+        </>
+      ) : null}
+    </>
+  );
+  const overlayBottomLeft = (
+    <>
+      {[study.sex, study.patient_age].filter((v) => v != null).join(" · ") ||
+        null}
+      <br />
+      pseudo {patientPseudo}
+    </>
+  );
+
   return (
-    <div data-testid="study-detail-panel" className="flex flex-col gap-5">
-      {/* 1. Header bar */}
-      <header className="sticky top-16 z-10 -mx-6 flex items-center justify-between gap-4 border-b border-border bg-bg px-6 py-3">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/search"
-            className="text-sm text-primary-700 hover:underline"
-          >
-            {t.back}
-          </Link>
-          <code
-            className="font-mono text-xs text-text-muted"
-            title={study.pseudo_study_uid}
-          >
-            UID: {study.pseudo_study_uid}
-          </code>
-        </div>
-        <button
-          type="button"
-          onClick={onAddToCohort}
-          disabled={alreadyInCohort}
-          data-testid="add-to-cohort"
-          className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white disabled:bg-bg-muted disabled:text-text-muted"
+    <div data-testid="study-detail-panel" style={{ width: "100%" }}>
+      {/* 1. Sub-bar (back · hospital · KCD · modality · UID) */}
+      <StudyDetailSubBar
+        pseudoStudyUid={study.pseudo_study_uid}
+        modality={study.modality}
+        hospitalRegionPseudo={study.hospital_region_pseudo ?? null}
+        kcdCode={study.kcd_code ?? null}
+        locale={locale}
+      />
+
+      {/* 2. Main 2-col layout — viewer + right rail */}
+      <main className="rv-layout-detail">
+        {/* Left: viewer pane */}
+        <ViewerPaneV3
+          topLeft={overlayTopLeft}
+          topRight={overlayTopRight}
+          bottomLeft={overlayBottomLeft}
+          bottomRight={null /* De-ID hash not yet wired — leave blank */}
+          locale={locale}
         >
-          {alreadyInCohort ? t.inCohort : t.add}
-        </button>
-      </header>
-
-      {/* 2. Hospital origin — uses the same region_pseudo pill as search
-          results so buyers can match a study back to "SEOUL-A" / "BUSAN-B"
-          rather than puzzling over an opaque HOSP-3B25BB short code (Kyle
-          2026-04-27). Falls back to the legacy short code only when the
-          upstream omits region_pseudo. */}
-      <div className="flex items-center gap-2 rounded-md bg-bg-muted px-4 py-2 text-sm">
-        {study.hospital_region_pseudo ? (
-          <HospitalBadge regionPseudo={study.hospital_region_pseudo} />
-        ) : (
-          <>
-            <span aria-hidden className="text-primary-600">◆</span>
-            <span className="font-mono text-text">
-              {shortHospital(study.hospital_opaque_id)}
-            </span>
-          </>
-        )}
-        <span className="text-text-muted">· {t.hospital}</span>
-      </div>
-
-      {/* 3. Viewer + Sidebar grid (design-spec §7.6) */}
-      <div className="grid grid-cols-1 gap-5 desktop:grid-cols-[minmax(0,1fr)_320px]">
-        {previewManifest === null ? (
-          // Loading manifest — show a small skeleton in the viewer slot.
-          <div
-            data-testid="study-detail-viewer-skeleton"
-            className="h-96 animate-pulse rounded-md bg-bg-muted"
-          />
-        ) : previewManifest === undefined ? (
-          // Manifest 404 / unavailable — legacy study (pre jpg-preview-
-          // defacing pipeline). Show the existing 256×256 mid-slice
-          // thumbnail directly so the viewer slot isn't an empty
-          // placeholder when the actual JPG asset DOES exist (Kyle
-          // 2026-04-27). The verified-status path keeps its full
-          // SliceViewer scrubber; only the not-yet-verified fallback
-          // changed.
-          previewStatus === "verified" ? (
-            <SliceViewerOrFallback
-              studyUid={study.pseudo_study_uid}
-              sliceCount={sliceCount}
-              previewStatus={previewStatus}
-              modality={study.modality}
-              locale={locale}
+          {previewManifest === null ? (
+            <div
+              data-testid="study-detail-viewer-skeleton"
+              style={{
+                width: "100%",
+                height: "100%",
+                minHeight: 480,
+                background: "#0f172a",
+              }}
             />
+          ) : previewManifest === undefined ? (
+            previewStatus === "verified" ? (
+              <SliceViewerOrFallback
+                studyUid={study.pseudo_study_uid}
+                sliceCount={sliceCount}
+                previewStatus={previewStatus}
+                modality={study.modality}
+                locale={locale}
+              />
+            ) : (
+              <LegacyThumbnailFallback
+                studyUid={study.pseudo_study_uid}
+                previewStatus={previewStatus}
+                modality={study.modality}
+                locale={locale}
+              />
+            )
           ) : (
-            <LegacyThumbnailFallback
+            <FrameSliderViewer
               studyUid={study.pseudo_study_uid}
-              previewStatus={previewStatus}
-              modality={study.modality}
+              manifest={previewManifest}
               locale={locale}
             />
-          )
-        ) : (
-          // jpg-preview-defacing — buyer sees the per-frame slider with
-          // the AFNI-defaced (or anatomy-clear) frames. Manifest itself
-          // tells the component how to branch on per-series state.
-          <FrameSliderViewer
-            studyUid={study.pseudo_study_uid}
-            manifest={previewManifest}
+          )}
+        </ViewerPaneV3>
+
+        {/* Right rail */}
+        <aside className="rv-right-rail" aria-label="Study metadata">
+          <QualityMetricsCard
+            imageCount={study.n_instances}
+            seriesCount={study.n_series}
+            sliceThicknessMm={null /* TODO surface from raw_dicom_tags(0018,0050) */}
+            resolutionWidth={null /* TODO surface from raw_dicom_tags(0028,0010) */}
+            resolutionHeight={null /* TODO surface from raw_dicom_tags(0028,0011) */}
+            pixelSpacingMm={null /* TODO surface from raw_dicom_tags(0028,0030) */}
+            completenessPct={null /* TODO compute from 12-field fill rate */}
             locale={locale}
           />
-        )}
-        <aside className="flex flex-col gap-4">
-          {/* Sample download card removed (Kyle 2026-04-28) — viewer
-              already shows the JPG preview, separate "Download preview JPG"
-              CTA was redundant. SampleDownloadButton component kept for
-              backwards compatibility. */}
 
-          {/* Cohort sidebar card removed (Kyle 2026-04-27) — the page
-              header already carries the primary "Add to cohort" CTA, the
-              duplicate sidebar copy was confusing. The card's
-              description was promoted into a small helper line under the
-              header button instead — see StudyDetailClient. */}
+          {/* Metadata cards — Patient / Study / Series / Acquisition / Pixel */}
+          <section
+            className="rv-detail-section"
+            data-testid="study-detail-meta-section"
+          >
+            <div className="rv-detail-section__title">
+              <span>{locale === "ko" ? "메타데이터" : "Metadata"}</span>
+              <span
+                style={{
+                  fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                  fontSize: 10,
+                  color: "var(--rv-stone-500)",
+                  textTransform: "none",
+                  letterSpacing: 0,
+                }}
+              >
+                {totalMb} MB · {study.n_instances.toLocaleString()}{" "}
+                {locale === "ko" ? "인스턴스" : "inst"}
+              </span>
+            </div>
 
-          {/* Series list */}
-          <section className="rounded-md border border-border bg-bg p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
-              {t.seriesTitle} ({study.series.length})
-            </h3>
-            {study.series.length === 0 ? (
-              <p className="text-sm text-text-muted">—</p>
-            ) : (
-              <ul className="flex flex-col divide-y divide-border text-sm">
-                {study.series.map((s, i) => (
-                  <li
-                    key={s.pseudo_series_uid}
-                    className="flex items-center justify-between gap-2 py-2"
-                  >
-                    <span className="text-text-muted">{i + 1}</span>
-                    <code
-                      className="flex-1 truncate font-mono text-xs text-text"
-                      title={s.pseudo_series_uid}
-                    >
-                      …{s.pseudo_series_uid.slice(-10)}
-                    </code>
-                    <BuyerModalityBadge modality={s.modality} size="sm" />
-                    <span className="font-mono text-xs text-text-muted">
-                      {s.n_instances}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <MetaCard
+              title={t.patient}
+              slug="patient"
+              rows={[
+                {
+                  key: "pseudo-id",
+                  label: t.patientPseudoId,
+                  value: patientPseudo,
+                },
+                { key: "sex", label: t.patientSex, value: study.sex },
+                {
+                  key: "age",
+                  label: t.patientAge,
+                  value:
+                    study.patient_age != null
+                      ? String(study.patient_age)
+                      : null,
+                },
+                {
+                  key: "consent",
+                  label: t.patientConsent,
+                  value: "PIPA §28-8",
+                },
+              ]}
+            />
+
+            <MetaCard
+              title={t.study}
+              slug="study"
+              rows={[
+                {
+                  key: "exam-date",
+                  label: t.examDate,
+                  value: study.study_date_shifted,
+                },
+                {
+                  key: "accession",
+                  label: t.accession,
+                  value: locale === "ko" ? "마스킹됨" : "masked",
+                },
+                {
+                  key: "description",
+                  label: t.description,
+                  value: studyDescription ?? kcdLabel ?? null,
+                },
+                {
+                  key: "modality",
+                  label: t.modality,
+                  value: study.modality,
+                },
+                {
+                  key: "body-part",
+                  label: t.bodyPart,
+                  value: study.body_part,
+                },
+              ]}
+            />
+
+            <SeriesMiniCardList series={seriesItems} locale={locale} />
+
+            <MetaCard
+              title={t.acquisition}
+              slug="acquisition"
+              rows={[
+                {
+                  key: "manufacturer",
+                  label: t.manufacturer,
+                  value: study.manufacturer,
+                },
+                { key: "model", label: t.model, value: study.model_name },
+                { key: "kvp", label: t.kvp, value: null /* TODO (0018,0060) */ },
+                {
+                  key: "tube-current",
+                  label: t.tubeCurrent,
+                  value: null /* TODO (0018,1151) */,
+                },
+                {
+                  key: "contrast",
+                  label: t.contrast,
+                  value: null /* TODO (0018,0010) */,
+                },
+              ]}
+            />
+
+            <MetaCard
+              title={t.pixelTitle}
+              slug="pixel"
+              rows={[
+                {
+                  key: "photomtr",
+                  label: t.photomtr,
+                  value: null /* TODO (0028,0004) */,
+                },
+                {
+                  key: "pixel-spacing",
+                  label: t.pixelSpacing,
+                  value: null /* TODO (0028,0030) */,
+                },
+                {
+                  key: "frame-of-ref",
+                  label: t.frameOfRef,
+                  value: null /* TODO (0020,0052) */,
+                },
+              ]}
+            />
           </section>
+
+          <LongitudinalTimeline
+            patientPseudoId={patientPseudo}
+            steps={null /* TODO backend: fetch related studies for patient */}
+            locale={locale}
+          />
+
+          {/* Sticky CTA — Add to cohort (Sample download removed Kyle 2026-04-28). */}
+          <div className="rv-detail-cta">
+            <button
+              type="button"
+              onClick={onAddToCohort}
+              disabled={alreadyInCohort}
+              data-testid="add-to-cohort"
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: alreadyInCohort
+                  ? "var(--rv-stone-200)"
+                  : "var(--rv-navy-900)",
+                color: alreadyInCohort
+                  ? "var(--rv-stone-500)"
+                  : "#fff",
+                border: "1px solid transparent",
+                borderRadius: "var(--rv-radius-md)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: alreadyInCohort ? "default" : "pointer",
+              }}
+            >
+              {alreadyInCohort ? t.inCohort : t.add}
+            </button>
+            <div className="rv-detail-cta__hint">{t.ctaHint}</div>
+          </div>
         </aside>
-      </div>
+      </main>
 
-      {/* 4. Metadata grid */}
-      <div className="grid grid-cols-1 gap-5 desktop:grid-cols-1">
-        <section className="rounded-md border border-border bg-bg p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            {t.metaTitle}
-          </h2>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm desktop:grid-cols-4">
-            <MetaRow label={t.modality}>
-              <BuyerModalityBadge modality={study.modality} />
-            </MetaRow>
-            <MetaRow label={t.bodyPart}>{study.body_part ?? "—"}</MetaRow>
-            <MetaRow label={t.age}>
-              {study.patient_age != null ? String(study.patient_age) : "—"}
-            </MetaRow>
-            <MetaRow label={t.sex}>{study.sex ?? "—"}</MetaRow>
-            <MetaRow label={t.manufacturer}>
-              {study.manufacturer ?? "—"}
-            </MetaRow>
-            <MetaRow label={t.model}>{study.model_name ?? "—"}</MetaRow>
-            <MetaRow label={t.studyDate}>
-              {study.study_date_shifted ?? "—"}
-            </MetaRow>
-            <MetaRow label={t.totalBytes}>
-              <span className="font-mono">{totalMb} MB</span>
-            </MetaRow>
-            <MetaRow label={t.instances}>
-              <span className="font-mono">{study.n_instances.toLocaleString()}</span>
-            </MetaRow>
-            <MetaRow label={t.seriesCount}>
-              <span className="font-mono">{study.n_series}</span>
-            </MetaRow>
-          </dl>
-        </section>
-      </div>
+      {/* 4. Compliance & audit footer (default-collapsed) */}
+      <ComplianceCollapse
+        ingestedAt={study.ingested_at}
+        hospitalIrb={null /* TODO backend audit chain */}
+        consentType={"broad · PIPA §28-8"}
+        anchorHash={null /* TODO audit chain */}
+        chainStatus={null /* TODO audit chain */}
+        chainEventCount={null}
+        wormRetentionYears={5}
+        rulesetVersion={null /* TODO surface from gateway pipeline */}
+        runAt={null}
+        locale={locale}
+      />
     </div>
-  );
-}
-
-function MetaRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <>
-      <dt className="text-xs text-text-muted">{label}</dt>
-      <dd className="text-sm text-text">{children}</dd>
-    </>
   );
 }
 
 /**
  * <LegacyThumbnailFallback> — used when the new jpg-preview-defacing
  * manifest is unavailable (legacy study) AND `preview_status` is not yet
- * `verified`. Renders the existing per-study mid-slice thumbnail (always
- * generated at gateway-ingest time by `thumbnail.py`, 256×256, q85) so the
+ * `verified`. Renders the existing per-study mid-slice thumbnail so the
  * viewer slot isn't an empty placeholder. A small caption surfaces the
- * `PHI verification pending` state instead of an oversized empty state.
+ * `PHI verification pending` state.
  */
 function LegacyThumbnailFallback({
   studyUid,
@@ -423,10 +566,9 @@ function LegacyThumbnailFallback({
           captionPending:
             "PHI 검증 대기 중 — 대표 슬라이스 한 장만 표시됩니다.",
           captionPhi: "PHI 가 감지되어 미리보기가 차단되었습니다.",
-          captionNa:
-            modality
-              ? `${modality} 모달리티는 슬라이스 미리보기를 제공하지 않습니다.`
-              : "이 모달리티는 슬라이스 미리보기를 제공하지 않습니다.",
+          captionNa: modality
+            ? `${modality} 모달리티는 슬라이스 미리보기를 제공하지 않습니다.`
+            : "이 모달리티는 슬라이스 미리보기를 제공하지 않습니다.",
           alt: "대표 슬라이스 미리보기",
         }
       : {
@@ -446,10 +588,7 @@ function LegacyThumbnailFallback({
         : t.captionPending;
 
   if (errored || previewStatus === "phi_detected") {
-    // Phi-detected studies must NOT show the thumbnail — the burned-in
-    // pixels are exactly what we're trying to gate. Fall through to the
-    // existing empty-state copy. The errored case is a safety net for
-    // when the thumbnail JPG itself is missing in MinIO.
+    // Phi-detected studies must NOT show the thumbnail.
     return (
       <SliceViewerOrFallback
         studyUid={studyUid}
@@ -464,23 +603,49 @@ function LegacyThumbnailFallback({
   return (
     <div
       data-testid="legacy-thumbnail-fallback"
-      className="flex h-full flex-col items-center justify-center gap-3 rounded-md bg-bg-muted p-4"
+      style={{
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: 16,
+        background: "#000",
+      }}
     >
-      {/* Plain <img> on a same-origin BFF route — no srcset, no IO. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/api/studies/${encodeURIComponent(studyUid)}/thumbnail`}
         alt={t.alt}
         onError={() => setErrored(true)}
-        className="max-h-[420px] max-w-full rounded border border-border object-contain bg-black"
+        style={{
+          maxHeight: 460,
+          maxWidth: "100%",
+          borderRadius: 4,
+          border: "1px solid rgba(255,255,255,0.08)",
+          objectFit: "contain",
+          background: "#000",
+        }}
       />
-      <p className="text-center text-xs text-text-muted">{caption}</p>
+      <p
+        style={{
+          fontSize: 11,
+          color: "rgba(255,255,255,0.6)",
+          textAlign: "center",
+        }}
+      >
+        {caption}
+      </p>
     </div>
   );
 }
 
 /**
  * ViewerStub — design-spec §11.4. Placeholder for the future DICOM viewer.
+ * Kept exported for back-compat with any caller still importing it from this
+ * module.
  */
 export function ViewerStub({ locale = "en" }: { locale?: "en" | "ko" }) {
   const t =

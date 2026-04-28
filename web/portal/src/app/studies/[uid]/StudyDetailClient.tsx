@@ -100,40 +100,50 @@ export function StudyDetailClient({
   if (error) {
     if (error.status === 404) {
       return (
-        <div className="rounded-md border border-border bg-bg-muted px-6 py-12 text-center">
-          <h1 className="text-lg font-semibold text-text">
-            {dict.study.notFoundTitle}
-          </h1>
-          <p className="mx-auto mt-2 max-w-prose text-sm text-text-muted">
-            {dict.study.notFoundBody}
-          </p>
-          <Link
-            href="/search"
-            className="mt-4 inline-flex rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white"
-          >
-            ← {dict.study.backToResults}
-          </Link>
-        </div>
+        <main className="mx-auto max-w-content px-6 py-6">
+          <div className="rounded-md border border-border bg-bg-muted px-6 py-12 text-center">
+            <h1 className="text-lg font-semibold text-text">
+              {dict.study.notFoundTitle}
+            </h1>
+            <p className="mx-auto mt-2 max-w-prose text-sm text-text-muted">
+              {dict.study.notFoundBody}
+            </p>
+            <Link
+              href="/search"
+              className="mt-4 inline-flex rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white"
+            >
+              ← {dict.study.backToResults}
+            </Link>
+          </div>
+        </main>
       );
     }
     return (
-      <ErrorBanner
-        code={error.code}
-        requestId={error.requestId}
-        detail={error.detail}
-      />
+      <main className="mx-auto max-w-content px-6 py-6">
+        <ErrorBanner
+          code={error.code}
+          requestId={error.requestId}
+          detail={error.detail}
+        />
+      </main>
     );
   }
 
   if (!study) {
     return (
-      <div className="flex flex-col gap-3">
-        <div className="h-10 animate-pulse rounded-md bg-bg-muted" />
-        <div className="h-64 animate-pulse rounded-md bg-bg-muted" />
-      </div>
+      <main className="mx-auto max-w-content px-6 py-6">
+        <div className="flex flex-col gap-3">
+          <div className="h-10 animate-pulse rounded-md bg-bg-muted" />
+          <div className="h-64 animate-pulse rounded-md bg-bg-muted" />
+        </div>
+      </main>
     );
   }
 
+  // Full-bleed: <StudyDetailPanel> renders the v3 sub-bar + dark viewer pane
+  // + right rail + collapsible compliance footer end-to-end. The page-level
+  // <SaMDFooter> stays as a sticky bottom band underneath the collapsible
+  // compliance section so the medical-device disclaimer is always visible.
   return (
     <>
       <Toaster

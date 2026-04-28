@@ -243,7 +243,11 @@ html[lang="ko"] body,
   --mark-highlight-border: #fbc02d;        /* amber outline for stripe-on-stripe contrast */
 
   /* Layout */
-  --rv-sidebar-w: 320px;
+  /* Sidebar narrowed 320 → 240 so the dense ResultTable (~1.3k px intrinsic
+     min) fits on a 1440px monitor without page-level horizontal scroll. The
+     facet groups are short labels + small counts, no risk of truncation at
+     240px. (Kyle screenshot 2026-04-27.) */
+  --rv-sidebar-w: 240px;
   --rv-row-h: 52px;
   --rv-col-stripe-w: 4px;
 }
@@ -380,11 +384,16 @@ html[lang="ko"] body,
 
 /* Result table — 16 grid tracks, dense rows. */
 .rv-result-table {
+  /* width:100% so the table fills the wrapper when there's room (KCD/desc fr
+     tracks then consume the slack); min-width:max-content so the table grows
+     past 100% when visible columns' intrinsic min-widths exceed the wrapper.
+     The outer SearchAppV3 div has overflow-x:auto, so the table scrolls in
+     place instead of pushing the whole page right. */
   width: 100%;
+  min-width: max-content;
   border: 1px solid var(--rv-stone-200);
   border-radius: 6px;
   background: #fff;
-  overflow: hidden;
 }
 .rv-result-table__row {
   display: grid;
@@ -408,14 +417,43 @@ html[lang="ko"] body,
   border-bottom: 1px solid #edecea;
   min-height: var(--rv-row-h);
   font-size: 12.5px;
-  background: #fff;
+  /* `--row-bg` is consumed by the sticky `.rv-col-action` cell so the
+     pinned View column matches stripe / hover backgrounds without
+     transparency bleeding the scrolled-under content through (Kyle
+     2026-04-27 sticky View column). */
+  --row-bg: #fff;
+  background: var(--row-bg);
   transition: background-color 0.12s;
 }
 .rv-result-table__row:nth-child(even) {
-  background: rgba(15, 23, 42, 0.018);
+  /* Solidified stripe — the prior rgba(15,23,42,0.018) was visually
+     identical but transparent, which broke the sticky cell's matching
+     background under horizontal scroll. */
+  --row-bg: #fafbfc;
 }
 .rv-result-table__row:hover {
-  background: var(--rv-stone-50);
+  --row-bg: var(--rv-stone-50);
+}
+
+/* Sticky View / action column — buyer-search-v3 (Kyle 2026-04-27).
+   The trailing 64px grid track is pinned to the right edge of the
+   horizontally scrolling table wrapper so buyers can always reach the
+   "View →" CTA without scrolling. Background mirrors --row-bg so the
+   cell looks like a solid extension of the row, and a left-edge
+   box-shadow surfaces only when content scrolls underneath. */
+.rv-col-action {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--row-bg);
+  /* Edge cue — invisible at scrollLeft=0, fades in as content scrolls
+     under. Negative spread keeps it tight to the cell. */
+  box-shadow: -6px 0 6px -6px rgba(15, 23, 42, 0.18);
+}
+.rv-result-table__row--head .rv-col-action {
+  /* Header row sits above scrolled body cells. */
+  z-index: 2;
+  background: #fff;
 }
 .rv-result-table__row--head {
   min-height: 38px;
@@ -692,4 +730,597 @@ mark {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * STUDY-DETAIL v3 (mockup buyer-ux-v2/v3/study-detail.html)
+ *
+ * Adds detail-subbar / viewer-pane / right-rail / quality-metrics /
+ * detail-meta-card / series-mini / timeline / compliance-collapse /
+ * deid-stepper / audit-info classes — 1:1 port of the mockup CSS so the
+ * react components can reuse the exact same selectors.
+ *
+ * Every selector is `.rv-` prefixed to avoid collisions with the existing
+ * Tailwind utility namespace and other v3 components.
+ * ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --rv-rightbar-w: 380px;
+  --rv-radius-sm: 4px;
+  --rv-radius-md: 6px;
+  --rv-radius-lg: 10px;
+}
+
+/* Detail sub-bar (back · hospital · KCD · modality · UID · prev/next) */
+.rv-detail-subbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--rv-stone-200);
+  flex-wrap: wrap;
+}
+.rv-detail-subbar__breadcrumb {
+  font-size: 12px;
+  color: var(--rv-stone-500);
+}
+.rv-detail-subbar__breadcrumb a {
+  color: var(--rv-navy-700);
+  text-decoration: none;
+}
+.rv-detail-subbar__breadcrumb a:hover {
+  color: var(--rv-teal-700);
+}
+.rv-detail-subbar__title {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--rv-stone-900);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.rv-detail-subbar__nav {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--rv-stone-500);
+}
+
+/* 2-col detail layout — viewer + right rail */
+.rv-layout-detail {
+  display: grid;
+  grid-template-columns: 1fr var(--rv-rightbar-w);
+  gap: 0;
+  min-height: calc(100vh - 56px - 60px);
+}
+@media (max-width: 1024px) {
+  .rv-layout-detail {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Viewer pane (dark) */
+.rv-viewer-pane {
+  background: #0a0a0a;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+  position: relative;
+  min-height: 600px;
+  padding: 20px;
+}
+.rv-viewer-canvas-wrap {
+  flex: 1;
+  width: 100%;
+  position: relative;
+  border-radius: var(--rv-radius-md);
+  overflow: hidden;
+  background: #000;
+  min-height: 480px;
+}
+.rv-viewer-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  color: rgba(255, 255, 255, 0.65);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  pointer-events: none;
+  z-index: 2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.rv-viewer-overlay--tr {
+  left: auto;
+  right: 16px;
+  text-align: right;
+}
+.rv-viewer-overlay--bl {
+  top: auto;
+  bottom: 16px;
+}
+.rv-viewer-overlay--br {
+  top: auto;
+  bottom: 16px;
+  left: auto;
+  right: 16px;
+  text-align: right;
+}
+.rv-viewer-disclaimer {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Right rail */
+.rv-right-rail {
+  background: #fff;
+  border-left: 1px solid var(--rv-stone-200);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.rv-detail-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--rv-stone-200);
+}
+.rv-detail-section:last-child {
+  border-bottom: none;
+}
+.rv-detail-section__title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--rv-stone-500);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* QualityMetricsCard — 2x2 grid */
+.rv-quality-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.rv-quality-metric {
+  background: var(--rv-stone-50);
+  border: 1px solid var(--rv-stone-200);
+  border-radius: var(--rv-radius-sm);
+  padding: 10px 12px;
+}
+.rv-quality-metric__label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rv-stone-500);
+}
+.rv-quality-metric__value {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rv-navy-900);
+  margin-top: 4px;
+  line-height: 1.2;
+  word-break: break-all;
+}
+.rv-quality-metric__sub {
+  font-size: 10.5px;
+  color: var(--rv-stone-500);
+  margin-top: 2px;
+}
+.rv-quality-metric--score .rv-quality-metric__value {
+  color: var(--rv-teal-700);
+}
+.rv-quality-metric--missing .rv-quality-metric__value {
+  color: var(--rv-stone-400);
+}
+
+/* MetaCard (Patient / Study / Series / Acquisition / Pixel) */
+.rv-detail-meta-card {
+  background: var(--rv-stone-50);
+  border: 1px solid var(--rv-stone-200);
+  border-radius: var(--rv-radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.rv-detail-meta-card:last-child {
+  margin-bottom: 0;
+}
+.rv-detail-meta-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rv-navy-900);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--rv-stone-200);
+}
+.rv-detail-meta-card__head__count {
+  margin-left: auto;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--rv-stone-500);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.rv-detail-meta-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 12px;
+  gap: 12px;
+}
+.rv-detail-meta-row__k {
+  color: var(--rv-stone-500);
+  flex-shrink: 0;
+}
+.rv-detail-meta-row__v {
+  color: var(--rv-stone-900);
+  font-weight: 500;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  text-align: right;
+  max-width: 65%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-detail-meta-row__v--missing {
+  color: var(--rv-stone-400);
+}
+
+/* Series mini-cards */
+.rv-series-mini {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 11.5px;
+  border-bottom: 1px dashed var(--rv-stone-200);
+  align-items: center;
+}
+.rv-series-mini:last-child {
+  border-bottom: none;
+}
+.rv-series-mini__num {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rv-navy-100);
+  color: var(--rv-navy-900);
+  border-radius: 3px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.rv-series-mini__title {
+  color: var(--rv-stone-900);
+  font-weight: 500;
+  font-size: 11.5px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-series-mini__sub {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--rv-stone-500);
+  display: block;
+}
+.rv-series-mini__count {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--rv-stone-700);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Sticky CTA */
+.rv-detail-cta {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding: 14px 18px;
+  border-top: 1px solid var(--rv-stone-200);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rv-detail-cta__hint {
+  font-size: 10.5px;
+  color: var(--rv-stone-500);
+  line-height: 1.5;
+}
+
+/* Longitudinal timeline */
+.rv-timeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 8px 0;
+  overflow-x: auto;
+}
+.rv-timeline__step {
+  flex: 1;
+  min-width: 56px;
+  text-align: center;
+  position: relative;
+}
+.rv-timeline__step::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  right: -50%;
+  height: 2px;
+  background: var(--rv-stone-200);
+  z-index: 0;
+}
+.rv-timeline__step:last-child::after {
+  display: none;
+}
+.rv-timeline__dot {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--rv-navy-900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--rv-navy-900);
+  position: relative;
+  z-index: 1;
+}
+.rv-timeline__dot--filled {
+  background: var(--rv-navy-900);
+  color: #fff;
+}
+.rv-timeline__dot--current {
+  background: var(--rv-teal-500);
+  border-color: var(--rv-teal-700);
+  color: #fff;
+}
+.rv-timeline__date {
+  font-size: 10px;
+  color: var(--rv-stone-500);
+  margin-top: 4px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.rv-timeline__hospital {
+  font-size: 9.5px;
+  color: var(--rv-stone-400);
+  margin-top: 1px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.rv-timeline__placeholder {
+  font-size: 11px;
+  color: var(--rv-stone-500);
+  padding: 12px;
+  text-align: center;
+  background: var(--rv-stone-50);
+  border: 1px dashed var(--rv-stone-200);
+  border-radius: var(--rv-radius-sm);
+}
+
+/* Compliance collapse footer */
+.rv-compliance-collapse {
+  background: #fff;
+  border-top: 1px solid var(--rv-stone-200);
+  padding: 0 24px;
+}
+.rv-compliance-collapse__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rv-stone-700);
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+  background: transparent;
+  text-align: left;
+  border: none;
+}
+.rv-compliance-collapse__head:hover {
+  color: var(--rv-navy-900);
+}
+.rv-compliance-collapse__head__chev {
+  transition: transform 0.2s;
+  color: var(--rv-stone-500);
+}
+.rv-compliance-collapse.is-open .rv-compliance-collapse__head__chev {
+  transform: rotate(180deg);
+}
+.rv-compliance-collapse__body {
+  display: none;
+  padding: 8px 0 24px;
+  border-top: 1px dashed var(--rv-stone-200);
+}
+.rv-compliance-collapse.is-open .rv-compliance-collapse__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 768px) {
+  .rv-compliance-collapse.is-open .rv-compliance-collapse__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* De-ID stepper (collapsed footer variant) */
+.rv-deid-stepper {
+  background: linear-gradient(180deg, var(--rv-teal-100) 0%, #fff 100%);
+  border: 1px solid var(--rv-teal-300);
+  border-radius: var(--rv-radius-md);
+  padding: 14px;
+}
+.rv-deid-stepper__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rv-teal-700);
+  margin-bottom: 12px;
+}
+.rv-deid-stepper__head__icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rv-teal-500);
+  color: #fff;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.rv-deid-step {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  position: relative;
+  padding-bottom: 10px;
+}
+.rv-deid-step:last-child {
+  padding-bottom: 0;
+}
+.rv-deid-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 22px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--rv-teal-300);
+}
+.rv-deid-step__num {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rv-teal-500);
+  color: #fff;
+  border-radius: 50%;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  z-index: 1;
+}
+.rv-deid-step__num--done {
+  background: var(--rv-teal-700);
+}
+.rv-deid-step__body {
+  padding-top: 1px;
+}
+.rv-deid-step__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rv-stone-900);
+  display: block;
+  line-height: 1.35;
+}
+.rv-deid-step__title-sub {
+  font-size: 11px;
+  color: var(--rv-stone-600);
+  display: block;
+  margin-top: 1px;
+}
+.rv-deid-step__hash {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--rv-teal-300);
+  color: var(--rv-teal-700);
+  border-radius: 3px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+}
+.rv-deid-stepper__footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rv-teal-300);
+  font-size: 11px;
+  color: var(--rv-teal-700);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Audit info */
+.rv-audit-info {
+  background: var(--rv-stone-50);
+  border: 1px solid var(--rv-stone-200);
+  border-radius: var(--rv-radius-md);
+  padding: 14px;
+  font-size: 12px;
+}
+.rv-audit-info h4 {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--rv-navy-900);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.rv-audit-info dl {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 4px 12px;
+}
+.rv-audit-info dt {
+  font-size: 11px;
+  color: var(--rv-stone-500);
+}
+.rv-audit-info dd {
+  font-size: 11.5px;
+  color: var(--rv-stone-900);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-weight: 500;
+  word-break: break-all;
+}
+.rv-audit-info dd--missing {
+  color: var(--rv-stone-400);
+}
+
+/* KCD chip — same look as the result-table chip */
+.rv-detail-kcd-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  background: var(--rv-amber-100);
+  color: var(--rv-amber-600);
+  border-radius: 3px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
 }

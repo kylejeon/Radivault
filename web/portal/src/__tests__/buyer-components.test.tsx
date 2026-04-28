@@ -98,38 +98,69 @@ describe("StudyCard (§11.3)", () => {
   });
 });
 
-describe("StudyDetailPanel (§11.4)", () => {
+describe("StudyDetailPanel (study-detail v3 mockup)", () => {
   const detail = {
     ...STUDY,
+    patient_age: 52,
     manufacturer: "SIEMENS",
     model_name: "SOMATOM Force",
     n_series: 3,
     ingested_at: "2024-01-01T00:00:00Z",
+    hospital_region_pseudo: "SEOUL-A",
     series: [
       { pseudo_series_uid: "2.25.aaa", modality: "CT", n_instances: 287 },
       { pseudo_series_uid: "2.25.bbb", modality: "CT", n_instances: 64 },
     ],
   };
-  it("renders metadata grid + series + sample download card", () => {
+  it("renders v3 sub-bar + viewer pane + right-rail metadata cards", () => {
     render(<StudyDetailPanel study={detail} />);
     expect(screen.getByTestId("study-detail-panel")).toBeInTheDocument();
-    expect(screen.getByText(/SIEMENS/)).toBeInTheDocument();
-    expect(screen.getByText(/SOMATOM Force/)).toBeInTheDocument();
-    expect(screen.getByTestId("sample-download-card")).toBeInTheDocument();
-    expect(screen.getByTestId("cohort-card")).toBeInTheDocument();
+    expect(screen.getByTestId("study-detail-subbar")).toBeInTheDocument();
+    expect(screen.getByTestId("study-detail-viewer-pane")).toBeInTheDocument();
+    expect(screen.getByTestId("quality-metrics-card")).toBeInTheDocument();
+    expect(screen.getByTestId("meta-card-patient")).toBeInTheDocument();
+    expect(screen.getByTestId("meta-card-study")).toBeInTheDocument();
+    expect(screen.getByTestId("meta-card-series")).toBeInTheDocument();
+    expect(screen.getByTestId("meta-card-acquisition")).toBeInTheDocument();
+    expect(screen.getByTestId("meta-card-pixel")).toBeInTheDocument();
+    expect(screen.getByTestId("longitudinal-timeline")).toBeInTheDocument();
+    expect(screen.getByTestId("compliance-collapse")).toBeInTheDocument();
+    // SIEMENS / SOMATOM Force appear both in the dark viewer-pane overlay
+    // (TR corner — manufacturer + model burned into the v3 viewer chrome)
+    // AND in the Acquisition card; we just need at least one of each.
+    expect(screen.getAllByText(/SIEMENS/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/SOMATOM Force/).length).toBeGreaterThan(0);
+    // v3 promote: sample-download-card + cohort-card both removed
+    // (Kyle 2026-04-28 — viewer already shows JPG preview, header button is
+    // the single source of truth for cohort).
+    expect(screen.queryByTestId("sample-download-card")).toBeNull();
+    expect(screen.queryByTestId("cohort-card")).toBeNull();
   });
-  it("exposes both Add to cohort buttons (header + sidebar)", () => {
+  it("exposes a single Add to cohort button in the right-rail CTA", () => {
     render(<StudyDetailPanel study={detail} />);
     expect(screen.getByTestId("add-to-cohort")).toBeInTheDocument();
-    expect(screen.getByTestId("add-to-cohort-sidebar")).toBeInTheDocument();
+    expect(screen.queryByTestId("add-to-cohort-sidebar")).toBeNull();
   });
-  it("falls back to ModalityFallback when preview_status is not 'verified'", () => {
+  it("falls back to legacy thumbnail when preview_status='pending'", async () => {
     render(
       <StudyDetailPanel
         study={{ ...detail, preview_status: "pending" }}
       />,
     );
-    expect(screen.getByTestId("modality-fallback")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("legacy-thumbnail-fallback"),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to ModalityFallback when preview_status='phi_detected'", async () => {
+    render(
+      <StudyDetailPanel
+        study={{ ...detail, preview_status: "phi_detected" }}
+      />,
+    );
+    expect(
+      await screen.findByTestId("modality-fallback"),
+    ).toBeInTheDocument();
   });
 });
 

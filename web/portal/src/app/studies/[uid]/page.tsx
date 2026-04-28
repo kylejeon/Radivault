@@ -24,12 +24,14 @@ export default async function StudyDetailPage({
   // caused infinite /signin ↔ /studies/[uid] redirect loop.
   if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
   const { uid } = await params;
+  // Full-bleed shell — the v3 study-detail layout owns its own padding (sub-bar
+  // is full-width, dark viewer pane goes edge-to-edge). The legacy
+  // `max-w-content px-6 py-6` wrapper would cap it to 1280px and add a white
+  // gutter that breaks the dark canvas / right-rail composition.
   return (
     <div className="surface-buyer min-h-screen bg-bg">
       <MarketplaceNav active="/search" />
-      <main className="mx-auto max-w-content px-6 py-6">
-        <StudyDetailClient uid={uid} locale="en" />
-      </main>
+      <StudyDetailClient uid={uid} locale="en" />
     </div>
   );
 }
