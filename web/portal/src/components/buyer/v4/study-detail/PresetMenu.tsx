@@ -135,7 +135,7 @@ export function PresetMenu({ active, onSelect, disabled }: PresetMenuProps) {
             <button
               key={preset.id}
               type="button"
-              role="menuitem"
+              role="menuitemradio"
               aria-checked={isActive}
               className={clsx(
                 "rv-preset-menu__item",
@@ -166,7 +166,7 @@ export function PresetMenu({ active, onSelect, disabled }: PresetMenuProps) {
         <div className="rv-preset-menu__sep" aria-hidden />
         <button
           type="button"
-          role="menuitem"
+          role="menuitemradio"
           aria-checked={active === "custom"}
           className={clsx(
             "rv-preset-menu__item",

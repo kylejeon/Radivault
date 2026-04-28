@@ -73,10 +73,12 @@ export function SeriesMiniCardListV4({
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRowRef = useRef<HTMLDivElement>(null);
 
-  // Auto scrollIntoView when active changes (FR-DV-2 v0.2 #3).
+  // Auto scrollIntoView when active changes (FR-DV-2 v0.2 #3). Guarded
+  // because jsdom does not implement scrollIntoView.
   useEffect(() => {
     if (!activeRowRef.current) return;
     if (typeof window === "undefined") return;
+    if (typeof activeRowRef.current.scrollIntoView !== "function") return;
     const reduce = window.matchMedia?.(
       "(prefers-reduced-motion: reduce)",
     ).matches;
