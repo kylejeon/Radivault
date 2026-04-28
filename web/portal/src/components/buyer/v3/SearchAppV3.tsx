@@ -16,7 +16,7 @@
  * Debounce: 250 ms on facet changes (FR-V3-UI-2 spec).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -42,13 +42,8 @@ import { SearchBar } from "@/components/buyer/v3/SearchBar";
 import {
   KCDHeuristicNote,
   PIPATrustNote,
-  TrustBar,
 } from "@/components/buyer/v3/TrustBar";
-import {
-  LocaleProvider,
-  LocaleToggle,
-  useLocale,
-} from "@/components/shared/LocaleToggle";
+import { useLocale } from "@/components/shared/LocaleToggle";
 import type { Locale } from "@/lib/i18n";
 
 type SearchResp = {
@@ -151,12 +146,17 @@ function buildSearchRequest(
   sortDir: SortDir,
   pageSize: number,
   qText: string,
+  cursor: string | null,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     sort: SORT_TO_API[`${sortKey}:${sortDir}`] ?? "date_desc",
     limit: pageSize,
-    include_facets: true,
+    // Skip facets on follow-up pages — facet counts are computed on the
+    // FULL filtered set, so they're identical across pages and re-running
+    // them just burns CPU on the search service.
+    include_facets: cursor === null,
   };
+  if (cursor) body.cursor = cursor;
   // text-search-description FR-TS-2 — additive q field. Empty/whitespace is
   // dropped client-side too so the legacy /search payload shape is identical
   // to v3 facet-only when the buyer hasn't typed anything.
@@ -179,16 +179,16 @@ function buildSearchRequest(
   return body;
 }
 
-export function SearchAppV3({ locale = "en" }: { locale?: Locale }) {
-  // The outer wrapper installs <LocaleProvider> so every v3 child can call
-  // useLocale() and react to runtime EN ↔ KR swap (QA HIGH-3 / BL-2). The
-  // SSR-supplied `locale` prop seeds the initial value; localStorage / cookie
-  // hydration happens inside the provider on mount.
-  return (
-    <LocaleProvider initial={locale === "ko" ? "ko" : "en"}>
-      <SearchAppV3Inner />
-    </LocaleProvider>
-  );
+/**
+ * Top-level <SearchAppV3>. <LocaleProvider> now lives in /search/page.tsx
+ * (so the marketplace top-bar's locale-toggle slot shares the same context),
+ * and this export is just the inner client tree.
+ *
+ * `locale` prop kept for API compatibility — currently unused because the
+ * inner reads `useLocale()` against the page-level provider.
+ */
+export function SearchAppV3({ locale: _locale = "en" }: { locale?: Locale }) {
+  return <SearchAppV3Inner />;
 }
 
 function SearchAppV3Inner() {
@@ -201,6 +201,35 @@ function SearchAppV3Inner() {
   const [pageSize, setPageSize] = useState(25);
   const [response, setResponse] = useState<SearchResp | null>(null);
   const [loading, setLoading] = useState(true);
+  // Cursor pagination (Kyle 2026-04-27 — search showed 25/257 with no way
+  // to reach the rest). Items accumulate across pages; cursor + facet
+  // sha256 reset whenever a filter / sort / q change forces a fresh fetch.
+  const [accumulatedItems, setAccumulatedItems] = useState<ResultTableItem[]>(
+    [],
+  );
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasNext, setHasNext] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // Facet sidebar policy (Kyle 2026-04-27): the *option list* on the left
+  // stays stable so checkboxes don't disappear when a filter narrows the
+  // result set; only the *count* next to each option updates. Booking.com
+  // / Amazon pattern.
+  //
+  //   currentFacets    = counts from the most recent fetch that included
+  //                      facets (cursor pagination skips facets, so we
+  //                      can't always read response.facets directly).
+  //   unfilteredFacets = the canonical option list — a snapshot of facets
+  //                      from a fetch where NO facet filters were active
+  //                      (q can be present; q is a more fundamental scope
+  //                      change, so unfilteredFacets refreshes when q
+  //                      changes too).
+  const [currentFacets, setCurrentFacets] = useState<
+    Record<string, FacetItem[]>
+  >({});
+  const [unfilteredFacets, setUnfilteredFacets] = useState<
+    Record<string, FacetItem[]> | null
+  >(null);
   // text-search-description FR-TS-1 — free-text search bar state. ``qText``
   // is the live, debounced input; ``qApplied`` is the value that has actually
   // been submitted (Enter / autocomplete pick) and is currently in the URL.
@@ -227,10 +256,31 @@ function SearchAppV3Inner() {
     setSelected(new Set(Object.keys(cur)));
   }, []);
 
+  // IntersectionObserver — fires when the sentinel below the table scrolls
+  // into view, triggering the next cursor fetch. Disabled while a fetch is
+  // already in flight or when the upstream says there's no more data.
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    if (!hasNext || loading || loadingMore) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (e?.isIntersecting && hasNext && !loadingMore && !loading) {
+          void runSearch({ append: true });
+        }
+      },
+      { rootMargin: "300px 0px" },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNext, loading, loadingMore, nextCursor]);
+
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(() => {
-      void runSearch();
+      void runSearch({ append: false });
     }, 250);
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
@@ -238,15 +288,24 @@ function SearchAppV3Inner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facets, sortKey, sortDir, pageSize, qApplied]);
 
-  async function runSearch() {
-    setLoading(true);
+  async function runSearch(opts: { append: boolean }) {
+    if (opts.append) setLoadingMore(true);
+    else setLoading(true);
     setError(null);
     try {
+      const cursorToSend = opts.append ? nextCursor : null;
       const res = await fetch("/api/search/studies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          buildSearchRequest(facets, sortKey, sortDir, pageSize, qApplied),
+          buildSearchRequest(
+            facets,
+            sortKey,
+            sortDir,
+            pageSize,
+            qApplied,
+            cursorToSend,
+          ),
         ),
       });
       if (res.status === 401) {
@@ -255,20 +314,80 @@ function SearchAppV3Inner() {
       }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        // ERR_CURSOR_FILTER_MISMATCH = filters changed under the cursor.
+        // Drop the cursor and refetch from page 1 transparently.
+        if (
+          opts.append &&
+          (body?.error === "ERR_CURSOR_FILTER_MISMATCH" ||
+            body?.error === "ERR_CURSOR_INVALID")
+        ) {
+          setNextCursor(null);
+          setAccumulatedItems([]);
+          setHasNext(false);
+          void runSearch({ append: false });
+          return;
+        }
         setError({
           code: body?.error,
           detail: body?.detail,
           requestId: body?.request_id,
         });
-        setResponse(null);
+        if (!opts.append) {
+          setResponse(null);
+          setAccumulatedItems([]);
+          setNextCursor(null);
+          setHasNext(false);
+        }
         return;
       }
       const data = (await res.json()) as SearchResp;
       setResponse(data);
+      setNextCursor(data.next_cursor ?? null);
+      setHasNext(Boolean(data.has_next));
+
+      // Facet bookkeeping. Cursor pages return null (we skip facets after
+      // page 1 to save CPU on the search service), so we only update when
+      // the response actually carries facets.
+      if (data.facets) {
+        setCurrentFacets(data.facets);
+        // Snapshot the option list whenever NO facet filter is applied —
+        // this is "the world" for the current q. Used as the stable option
+        // list for the sidebar even after the buyer applies a filter.
+        const noFacetFiltersActive =
+          facets.modality.length === 0 &&
+          facets.body_part.length === 0 &&
+          facets.sex.length === 0 &&
+          facets.manufacturer.length === 0 &&
+          facets.kcd_code.length === 0 &&
+          facets.hospital_region.length === 0 &&
+          facets.year.length === 0 &&
+          facets.age_min === 0 &&
+          facets.age_max === 120;
+        if (noFacetFiltersActive && !opts.append) {
+          setUnfilteredFacets(data.facets);
+        }
+      }
+
+      const incoming = data.items ?? [];
+      if (opts.append) {
+        setAccumulatedItems((prev) => {
+          // De-dupe by pseudo_study_uid (defensive — cursor pagination
+          // shouldn't repeat, but a filter mismatch race could).
+          const seen = new Set(prev.map((it) => it.pseudo_study_uid));
+          const merged = [...prev];
+          for (const it of incoming) {
+            if (!seen.has(it.pseudo_study_uid)) merged.push(it);
+          }
+          return merged;
+        });
+      } else {
+        setAccumulatedItems(incoming);
+      }
     } catch (err) {
       setError({ code: "ERR_UPSTREAM_UNAVAILABLE", detail: String(err) });
     } finally {
-      setLoading(false);
+      if (opts.append) setLoadingMore(false);
+      else setLoading(false);
     }
   }
 
@@ -283,8 +402,26 @@ function SearchAppV3Inner() {
     router.replace(qs ? `/search?${qs}` : "/search");
   }
 
-  const items = useMemo(() => response?.items ?? [], [response]);
-  const facetData = (response?.facets ?? {}) as Record<string, FacetItem[]>;
+  // Items now come from the accumulator so cursor-paginated rows survive
+  // across follow-up fetches (response only carries the latest page).
+  const items = accumulatedItems;
+  // Build the sidebar facet view: stable option list from `unfilteredFacets`,
+  // counts from `currentFacets`. Items missing from currentFacets show 0 so
+  // the buyer can see "no studies match" without the option vanishing.
+  const facetData: Record<string, FacetItem[]> = (() => {
+    if (!unfilteredFacets) return currentFacets;
+    const merged: Record<string, FacetItem[]> = {};
+    for (const [key, options] of Object.entries(unfilteredFacets)) {
+      const cur = currentFacets[key] ?? [];
+      const countByValue = new Map<string, number>();
+      for (const it of cur) countByValue.set(String(it.value ?? ""), it.count);
+      merged[key] = options.map((it) => ({
+        value: it.value,
+        count: countByValue.get(String(it.value ?? "")) ?? 0,
+      }));
+    }
+    return merged;
+  })();
   const total =
     response?.total_count ?? response?.total_hint ?? items.length;
   const queryMs = response?.meta?.query_duration_ms ?? 0;
@@ -314,26 +451,50 @@ function SearchAppV3Inner() {
     });
   }
 
+  /**
+   * Header-row "select all on this page" — adds the visible UIDs to the
+   * selection set + cohort. Idempotent if some are already selected.
+   */
+  function selectAllVisible(uids: string[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const cohort = loadCohort();
+      for (const uid of uids) {
+        next.add(uid);
+        const item = items.find((i) => i.pseudo_study_uid === uid);
+        if (item) cohort[uid] = toCohortItem(item);
+      }
+      saveCohort(cohort);
+      return next;
+    });
+  }
+
+  /**
+   * Header-row "clear" — wipes the WHOLE selection set + cohort. Per
+   * Kyle 2026-04-27, this is the buyer's "reset everything I've done"
+   * gesture, so we ALSO drop active facet filters + free-text query so
+   * the result table snaps back to the 257-study canonical universe.
+   *
+   * Setting facets / qApplied triggers the 250 ms debounced search
+   * effect → fresh fetch → resets cursor + accumulator transparently.
+   */
+  function clearAllSelection() {
+    setSelected(new Set());
+    saveCohort({});
+    setFacets(EMPTY_V3_FACET_STATE);
+    setQText("");
+    commitQ("");
+  }
+
   return (
     <div className="surface-buyer">
-      {/* Top-bar trust pill row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "10px 24px",
-          background: "var(--rv-navy-700)",
-          color: "#ECECEC",
-        }}
-        data-testid="v3-trust-row"
-      >
-        <span style={{ fontWeight: 700, color: "#fff" }}>RadiVault</span>
-        <TrustBar locale={lc} />
-        <div style={{ marginLeft: "auto" }}>
-          <LocaleToggle variant="dark" />
-        </div>
-      </div>
+      {/*
+        Trust pill + LocaleToggle previously rendered here in a separate navy
+        strip (`v3-trust-row`); they're now slotted into <MarketplaceNav> so
+        the page only ships ONE top bar (Kyle 2026-04-27 dedup). See
+        web/portal/src/components/buyer/MarketplaceNavTrustSlots.tsx +
+        /search/page.tsx where the slots are wired.
+      */}
 
       {/* text-search-description FR-TS-1 — hero free-text search bar.
          Sits above the v3 sub-bar so it dominates the visual entry point
@@ -360,40 +521,6 @@ function SearchAppV3Inner() {
         </div>
       ) : null}
 
-      {/* Sub-bar: KCD autocomplete + page size + sort summary */}
-      <div
-        style={{
-          display: "flex",
-          gap: 16,
-          alignItems: "center",
-          padding: "12px 24px",
-          background: "#fff",
-          borderBottom: "1px solid var(--rv-stone-200)",
-        }}
-      >
-        <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <label style={{ fontSize: 12, color: "var(--rv-stone-500)" }}>
-            {lc === "ko" ? "페이지" : "Page size"}
-          </label>
-          <select
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-            style={{
-              padding: "6px 10px",
-              border: "1px solid var(--rv-stone-300)",
-              borderRadius: 4,
-              fontSize: 12,
-            }}
-            data-testid="v3-page-size"
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-        </div>
-      </div>
-
       {/* Main 2-col layout */}
       <div
         style={{
@@ -409,7 +536,11 @@ function SearchAppV3Inner() {
           resultCount={typeof total === "number" ? total : undefined}
           locale={lc}
         />
-        <section style={{ padding: "16px 24px 80px" }}>
+        {/* min-width: 0 lets this 1fr grid track shrink below its intrinsic
+            content width, which is what allows the inner ResultTable wrapper
+            to clamp to the viewport and own horizontal scroll on its own
+            (instead of expanding the whole page right). */}
+        <section style={{ padding: "16px 24px 80px", minWidth: 0 }}>
           {/* Results header */}
           <div
             style={{
@@ -449,7 +580,7 @@ function SearchAppV3Inner() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
+                gap: 12,
                 fontSize: 12,
                 color: "var(--rv-stone-500)",
               }}
@@ -459,6 +590,34 @@ function SearchAppV3Inner() {
                   ? `정렬: ${sortKey} ${sortDir === "desc" ? "↓" : "↑"}`
                   : `Sort: ${sortKey} ${sortDir === "desc" ? "↓" : "↑"}`}
               </span>
+              {/* Page size moved out of the (now-removed) sub-bar so the
+                  control density on this row matches Show columns / Sort
+                  (Kyle 2026-04-27). */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <label
+                  htmlFor="v3-page-size"
+                  style={{ fontSize: 12, color: "var(--rv-stone-500)" }}
+                >
+                  {lc === "ko" ? "페이지" : "Page size"}
+                </label>
+                <select
+                  id="v3-page-size"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  style={{
+                    padding: "5px 8px",
+                    border: "1px solid var(--rv-stone-300)",
+                    borderRadius: 4,
+                    fontSize: 12,
+                    background: "#fff",
+                  }}
+                  data-testid="v3-page-size"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
               <ColumnToggle
                 columns={V3_COLUMN_DEFS}
                 visibleKeys={visibleColumns}
@@ -538,18 +697,86 @@ function SearchAppV3Inner() {
                 : "No studies match the current filter."}
             </div>
           ) : (
-            <ResultTable
-              items={items}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={onSort}
-              selected={selected}
-              onToggleRow={toggleRow}
-              locale={lc}
-              visibleColumns={visibleColumns}
-              query={qApplied}
-            />
+            // Wrap the dense table in an overflow-x:auto container so when the
+            // intrinsic min-width of all visible columns exceeds the section
+            // width, only the table scrolls horizontally — the page itself
+            // never gets a bottom scrollbar (Kyle 2026-04-27 feedback).
+            <div style={{ overflowX: "auto", width: "100%" }}>
+              <ResultTable
+                items={items}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                selected={selected}
+                onToggleRow={toggleRow}
+                onSelectAllVisible={selectAllVisible}
+                onClearAllSelection={clearAllSelection}
+                locale={lc}
+                visibleColumns={visibleColumns}
+                query={qApplied}
+              />
+            </div>
           )}
+
+          {/* Cursor pagination footer — auto-loads on scroll via the
+              sentinel; the explicit button is the keyboard / a11y fallback
+              and also prevents the IntersectionObserver from getting stuck
+              when the viewport is already taller than the table. */}
+          {items.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+                padding: "16px 0 4px",
+              }}
+              data-testid="v3-pagination-footer"
+            >
+              <span
+                style={{ fontSize: 12, color: "var(--rv-stone-500)" }}
+                data-testid="v3-pagination-count"
+              >
+                {lc === "ko"
+                  ? `${items.length} / ${typeof total === "number" ? total : items.length} 표시`
+                  : `Showing ${items.length} of ${typeof total === "number" ? total : items.length}`}
+              </span>
+              {hasNext ? (
+                <button
+                  type="button"
+                  onClick={() => void runSearch({ append: true })}
+                  disabled={loadingMore}
+                  data-testid="v3-load-more"
+                  style={{
+                    padding: "6px 14px",
+                    background: loadingMore
+                      ? "var(--rv-stone-200)"
+                      : "var(--rv-navy-900)",
+                    color: loadingMore ? "var(--rv-stone-500)" : "#fff",
+                    border: "none",
+                    borderRadius: 4,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: loadingMore ? "default" : "pointer",
+                  }}
+                >
+                  {loadingMore
+                    ? lc === "ko"
+                      ? "로딩 중…"
+                      : "Loading…"
+                    : lc === "ko"
+                      ? "더 보기"
+                      : "Load more"}
+                </button>
+              ) : null}
+              <div
+                ref={sentinelRef}
+                aria-hidden
+                data-testid="v3-pagination-sentinel"
+                style={{ width: 1, height: 1 }}
+              />
+            </div>
+          ) : null}
 
           <div
             style={{
@@ -560,7 +787,8 @@ function SearchAppV3Inner() {
             }}
             data-testid="v3-footer-notes"
           >
-            <PIPATrustNote locale={lc} />
+            {/* PIPATrustNote removed (Kyle 2026-04-28) — buyer doesn't need
+                PIPA §28-8 / 정통망법 boilerplate on every page. */}
             <KCDHeuristicNote locale={lc} />
           </div>
         </section>

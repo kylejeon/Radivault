@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BuyerModalityBadge } from "./ModalityBadge";
+import { HospitalBadge } from "@/components/buyer/v3/HospitalBadge";
 import { SliceViewerOrFallback } from "@/components/SliceViewer";
 import { SampleDownloadButton } from "@/components/preview/SampleDownloadButton";
 import {
@@ -52,6 +53,13 @@ export type StudyDetail = {
   n_series: number;
   total_bytes: number;
   hospital_opaque_id: string | null;
+  /**
+   * Buyer-facing hospital identity (e.g., "SEOUL-A", "BUSAN-B"). Same value
+   * the search results table renders via <HospitalBadge>. Falls back to the
+   * `HOSP-XXXXXX` opaque short code if the upstream omits it (Kyle
+   * 2026-04-27 — `HOSP-3B25BB` is meaningless to a buyer).
+   */
+  hospital_region_pseudo?: string | null;
   ingested_at: string | null;
   series: SeriesSummary[];
   // dev-spec-buyer-browse-preview FR-DATA-1 — when absent, we treat the
@@ -230,12 +238,22 @@ export function StudyDetailPanel({
         </button>
       </header>
 
-      {/* 2. Hospital origin */}
+      {/* 2. Hospital origin — uses the same region_pseudo pill as search
+          results so buyers can match a study back to "SEOUL-A" / "BUSAN-B"
+          rather than puzzling over an opaque HOSP-3B25BB short code (Kyle
+          2026-04-27). Falls back to the legacy short code only when the
+          upstream omits region_pseudo. */}
       <div className="flex items-center gap-2 rounded-md bg-bg-muted px-4 py-2 text-sm">
-        <span aria-hidden className="text-primary-600">◆</span>
-        <span className="font-mono text-text">
-          {shortHospital(study.hospital_opaque_id)}
-        </span>
+        {study.hospital_region_pseudo ? (
+          <HospitalBadge regionPseudo={study.hospital_region_pseudo} />
+        ) : (
+          <>
+            <span aria-hidden className="text-primary-600">◆</span>
+            <span className="font-mono text-text">
+              {shortHospital(study.hospital_opaque_id)}
+            </span>
+          </>
+        )}
         <span className="text-text-muted">· {t.hospital}</span>
       </div>
 
@@ -248,16 +266,29 @@ export function StudyDetailPanel({
             className="h-96 animate-pulse rounded-md bg-bg-muted"
           />
         ) : previewManifest === undefined ? (
-          // Manifest 404 / unavailable — legacy study, fall back to
-          // the existing SliceViewerOrFallback (FR-NEWONLY-3 silent
-          // coexistence).
-          <SliceViewerOrFallback
-            studyUid={study.pseudo_study_uid}
-            sliceCount={sliceCount}
-            previewStatus={previewStatus}
-            modality={study.modality}
-            locale={locale}
-          />
+          // Manifest 404 / unavailable — legacy study (pre jpg-preview-
+          // defacing pipeline). Show the existing 256×256 mid-slice
+          // thumbnail directly so the viewer slot isn't an empty
+          // placeholder when the actual JPG asset DOES exist (Kyle
+          // 2026-04-27). The verified-status path keeps its full
+          // SliceViewer scrubber; only the not-yet-verified fallback
+          // changed.
+          previewStatus === "verified" ? (
+            <SliceViewerOrFallback
+              studyUid={study.pseudo_study_uid}
+              sliceCount={sliceCount}
+              previewStatus={previewStatus}
+              modality={study.modality}
+              locale={locale}
+            />
+          ) : (
+            <LegacyThumbnailFallback
+              studyUid={study.pseudo_study_uid}
+              previewStatus={previewStatus}
+              modality={study.modality}
+              locale={locale}
+            />
+          )
         ) : (
           // jpg-preview-defacing — buyer sees the per-frame slider with
           // the AFNI-defaced (or anatomy-clear) frames. Manifest itself
@@ -269,51 +300,16 @@ export function StudyDetailPanel({
           />
         )}
         <aside className="flex flex-col gap-4">
-          {/* Sample download card */}
-          <section
-            data-testid="sample-download-card"
-            className="rounded-md border border-border bg-bg p-4"
-          >
-            <h3 className="mb-3 text-sm font-semibold text-text">
-              {dict.sampleDownload.sectionTitle}
-            </h3>
-            <SampleDownloadButton
-              studyUid={study.pseudo_study_uid}
-              previewStatus={previewStatus}
-              quota={quota}
-              onQuotaUpdate={setQuota}
-              locale={locale}
-            />
-            <p className="mt-2 text-xs text-text-muted">
-              {dict.sampleDownload.description}
-            </p>
-            <div className="mt-3">
-              <QuotaIndicator state={quota} variant="inline" locale={locale} />
-            </div>
-          </section>
+          {/* Sample download card removed (Kyle 2026-04-28) — viewer
+              already shows the JPG preview, separate "Download preview JPG"
+              CTA was redundant. SampleDownloadButton component kept for
+              backwards compatibility. */}
 
-          {/* Cohort card — visually separated (design-spec §9.2) */}
-          <section
-            data-testid="cohort-card"
-            className="rounded-md border border-border bg-bg p-4"
-          >
-            <h3 className="mb-3 text-sm font-semibold text-text">
-              {dict.cohortCta.sectionTitle}
-            </h3>
-            <button
-              type="button"
-              onClick={onAddToCohort}
-              disabled={alreadyInCohort}
-              data-testid="add-to-cohort-sidebar"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border-strong px-4 py-3 text-sm font-medium text-text hover:bg-bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <span aria-hidden>+</span>
-              <span>{alreadyInCohort ? t.inCohort : t.add}</span>
-            </button>
-            <p className="mt-2 text-xs text-text-muted">
-              {dict.cohortCta.description}
-            </p>
-          </section>
+          {/* Cohort sidebar card removed (Kyle 2026-04-27) — the page
+              header already carries the primary "Add to cohort" CTA, the
+              duplicate sidebar copy was confusing. The card's
+              description was promoted into a small helper line under the
+              header button instead — see StudyDetailClient. */}
 
           {/* Series list */}
           <section className="rounded-md border border-border bg-bg p-4">
@@ -398,6 +394,88 @@ function MetaRow({
       <dt className="text-xs text-text-muted">{label}</dt>
       <dd className="text-sm text-text">{children}</dd>
     </>
+  );
+}
+
+/**
+ * <LegacyThumbnailFallback> — used when the new jpg-preview-defacing
+ * manifest is unavailable (legacy study) AND `preview_status` is not yet
+ * `verified`. Renders the existing per-study mid-slice thumbnail (always
+ * generated at gateway-ingest time by `thumbnail.py`, 256×256, q85) so the
+ * viewer slot isn't an empty placeholder. A small caption surfaces the
+ * `PHI verification pending` state instead of an oversized empty state.
+ */
+function LegacyThumbnailFallback({
+  studyUid,
+  previewStatus,
+  modality,
+  locale = "en",
+}: {
+  studyUid: string;
+  previewStatus: "pending" | "phi_detected" | "not_applicable";
+  modality?: string | null;
+  locale?: Locale;
+}) {
+  const [errored, setErrored] = useState(false);
+  const t =
+    locale === "ko"
+      ? {
+          captionPending:
+            "PHI 검증 대기 중 — 대표 슬라이스 한 장만 표시됩니다.",
+          captionPhi: "PHI 가 감지되어 미리보기가 차단되었습니다.",
+          captionNa:
+            modality
+              ? `${modality} 모달리티는 슬라이스 미리보기를 제공하지 않습니다.`
+              : "이 모달리티는 슬라이스 미리보기를 제공하지 않습니다.",
+          alt: "대표 슬라이스 미리보기",
+        }
+      : {
+          captionPending:
+            "PHI verification pending — single representative slice shown.",
+          captionPhi: "Preview blocked: PHI detected on burned-in pixels.",
+          captionNa: modality
+            ? `${modality} modality does not produce slice previews.`
+            : "This modality does not produce slice previews.",
+          alt: "Representative slice preview",
+        };
+  const caption =
+    previewStatus === "phi_detected"
+      ? t.captionPhi
+      : previewStatus === "not_applicable"
+        ? t.captionNa
+        : t.captionPending;
+
+  if (errored || previewStatus === "phi_detected") {
+    // Phi-detected studies must NOT show the thumbnail — the burned-in
+    // pixels are exactly what we're trying to gate. Fall through to the
+    // existing empty-state copy. The errored case is a safety net for
+    // when the thumbnail JPG itself is missing in MinIO.
+    return (
+      <SliceViewerOrFallback
+        studyUid={studyUid}
+        sliceCount={1}
+        previewStatus={previewStatus}
+        modality={modality}
+        locale={locale}
+      />
+    );
+  }
+
+  return (
+    <div
+      data-testid="legacy-thumbnail-fallback"
+      className="flex h-full flex-col items-center justify-center gap-3 rounded-md bg-bg-muted p-4"
+    >
+      {/* Plain <img> on a same-origin BFF route — no srcset, no IO. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/studies/${encodeURIComponent(studyUid)}/thumbnail`}
+        alt={t.alt}
+        onError={() => setErrored(true)}
+        className="max-h-[420px] max-w-full rounded border border-border object-contain bg-black"
+      />
+      <p className="text-center text-xs text-text-muted">{caption}</p>
+    </div>
   );
 }
 
