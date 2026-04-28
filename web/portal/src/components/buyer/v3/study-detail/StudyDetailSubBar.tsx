@@ -13,6 +13,7 @@
  * fabricate).
  */
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { HospitalBadge } from "@/components/buyer/v3/HospitalBadge";
 import { ModalityDot } from "@/components/buyer/v3/ModalityDot";
@@ -46,13 +47,28 @@ export function StudyDetailSubBar({
       ? { back: "검색으로", prev: "이전", next: "다음" }
       : { back: "Back to search", prev: "Prev", next: "Next" };
 
+  // Restore the buyer's filters + query when going back to /search. The
+  // SearchAppV3 page mirrors its live state into sessionStorage on every
+  // change (key `radivault.lastSearchUrl`); we read it here so the link
+  // returns to the same filtered view instead of resetting to /search.
+  const [backHref, setBackHref] = useState<string>("/search");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.sessionStorage.getItem("radivault.lastSearchUrl");
+      if (saved && saved.startsWith("/search")) setBackHref(saved);
+    } catch {
+      /* storage disabled — fall back to default /search */
+    }
+  }, []);
+
   return (
     <div
       className="rv-detail-subbar"
       data-testid="study-detail-subbar"
     >
       <div className="rv-detail-subbar__breadcrumb">
-        <Link href="/search" data-testid="study-detail-back-link">
+        <Link href={backHref} data-testid="study-detail-back-link">
           ← {t.back}
         </Link>
       </div>

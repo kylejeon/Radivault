@@ -376,6 +376,9 @@ function SearchAppV3Inner() {
   // via router.replace so back-nav from /studies/[uid] and hard reloads
   // both restore the buyer's filters + typed query. Skips work when the
   // serialised query string is identical to what's already in the URL.
+  // ALSO writes to sessionStorage so the StudyDetailSubBar's "Back to
+  // search" Link can rebuild this URL — that link uses an absolute
+  // href="/search" which would otherwise strip the query.
   const urlSyncRef = useRef<string | null>(null);
   useEffect(() => {
     const params = serializeStateToParams({
@@ -388,7 +391,15 @@ function SearchAppV3Inner() {
     const qs = params.toString();
     if (urlSyncRef.current === qs) return;
     urlSyncRef.current = qs;
-    router.replace(qs ? `/search?${qs}` : "/search", { scroll: false });
+    const target = qs ? `/search?${qs}` : "/search";
+    router.replace(target, { scroll: false });
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem("radivault.lastSearchUrl", target);
+      } catch {
+        /* storage full / disabled — best-effort */
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facets, sortKey, sortDir, pageSize, qText]);
 
