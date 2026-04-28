@@ -599,14 +599,6 @@ function SearchAppV3Inner() {
 
   return (
     <div className="surface-buyer">
-      {/*
-        Trust pill + LocaleToggle previously rendered here in a separate navy
-        strip (`v3-trust-row`); they're now slotted into <MarketplaceNav> so
-        the page only ships ONE top bar (Kyle 2026-04-27 dedup). See
-        web/portal/src/components/buyer/MarketplaceNavTrustSlots.tsx +
-        /search/page.tsx where the slots are wired.
-      */}
-
       {/* text-search-description FR-TS-1 — hero free-text search bar.
          Sits above the v3 sub-bar so it dominates the visual entry point
          without disturbing the 3-pane layout below. ``flag-off`` is honoured
