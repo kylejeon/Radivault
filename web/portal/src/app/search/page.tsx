@@ -11,12 +11,20 @@ import { redirect } from "next/navigation";
  *
  * BLOCKER #1 fix from qa-report-d13-demo-rehearsal preserved — accept
  * either v0.2 email/password (buyerPk) or legacy paste-mode (apiKey).
+ *
+ * EN-only buyer portal (Kyle 2026-04-28, design-spec-dicom-viewer v0.3.2):
+ * the previous LocaleProvider + MarketplaceNavLocaleToggle (EN/한국어
+ * tab pair) is removed — global AI buyers are the sole audience and KO
+ * surfacing moves to the future hospital console. SearchAppV3's
+ * `useLocale()` hook still works because it falls back to ("en", noop)
+ * outside a provider (see LocaleToggle.tsx).
  */
 export default async function SearchPage() {
   const session = await getBuyerSession().catch(
     () => ({}) as Awaited<ReturnType<typeof getBuyerSession>>,
   );
   if (!session?.buyerPk && !session?.apiKey) redirect("/signin");
+
   return (
     <div className="surface-buyer min-h-screen bg-bg">
       <MarketplaceNav active="/search" />
