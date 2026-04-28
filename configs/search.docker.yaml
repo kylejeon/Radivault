@@ -39,7 +39,11 @@ rate_limit:
     concurrency: 3
     max_limit_per_page: 100
   tier_paid:
-    rpm: 600
+    # Bumped 600 → 3000 (Kyle 2026-04-28). DICOM viewer scrubbing through
+    # a 300-slice study is one buyer action but generates 300 frame fetches
+    # against /v1/studies/. Cache-Control: immutable absorbs revisits, but
+    # first-time scrub of multiple studies in a session blows past 600.
+    rpm: 3000
     daily: 10000
     concurrency: 20
     max_limit_per_page: 200
