@@ -270,27 +270,42 @@ export function StudyDetailPanel({
   const studyDescription =
     study.study_description ?? study.protocol_name ?? null;
 
-  // Series mini items — merge study.series rows with the preview manifest
-  // so we can render disabled state for non-generated series. When the
-  // manifest is still loading or 404, fall back to study.series only and
-  // assume `generated` (legacy behaviour pre v4).
-  const manifestByUid: Record<string, PreviewManifest["series"][number]> = {};
-  if (previewManifest) {
-    for (const s of previewManifest.series) {
-      manifestByUid[s.pseudo_series_uid] = s;
-    }
+  // Series mini items — when the preview manifest is available, drive the
+  // right-rail list off of IT (same order + indexing as the left
+  // <SeriesPicker> dropdown so row "13" in the rail is row "13" in the
+  // dropdown). Study-endpoint metadata (slice_thickness, resolution,
+  // description) is merged in by pseudo_series_uid. Pre-manifest fallback
+  // keeps using study.series so the rail still renders during the brief
+  // initial load. Kyle 2026-04-28 — left/right out of sync because the
+  // two endpoints returned series in different orders.
+  const studyByUid: Record<string, (typeof study.series)[number]> = {};
+  for (const s of study.series) {
+    studyByUid[s.pseudo_series_uid] = s;
   }
-  const seriesItems: SeriesMiniItemV4[] = study.series.map((s) => ({
-    pseudo_series_uid: s.pseudo_series_uid,
-    modality: s.modality,
-    n_instances: s.n_instances,
-    description: s.description ?? null,
-    slice_thickness_mm: s.slice_thickness_mm ?? null,
-    resolution_w: s.resolution_w ?? null,
-    resolution_h: s.resolution_h ?? null,
-    preview_status:
-      manifestByUid[s.pseudo_series_uid]?.preview_status ?? null,
-  }));
+  const seriesItems: SeriesMiniItemV4[] = previewManifest
+    ? previewManifest.series.map((m) => {
+        const s = studyByUid[m.pseudo_series_uid];
+        return {
+          pseudo_series_uid: m.pseudo_series_uid,
+          modality: s?.modality ?? m.modality,
+          n_instances: s?.n_instances ?? m.frame_count ?? 0,
+          description: s?.description ?? null,
+          slice_thickness_mm: s?.slice_thickness_mm ?? null,
+          resolution_w: s?.resolution_w ?? null,
+          resolution_h: s?.resolution_h ?? null,
+          preview_status: m.preview_status ?? null,
+        };
+      })
+    : study.series.map((s) => ({
+        pseudo_series_uid: s.pseudo_series_uid,
+        modality: s.modality,
+        n_instances: s.n_instances,
+        description: s.description ?? null,
+        slice_thickness_mm: s.slice_thickness_mm ?? null,
+        resolution_w: s.resolution_w ?? null,
+        resolution_h: s.resolution_h ?? null,
+        preview_status: null,
+      }));
 
   // Viewer overlays — use real values where available; corners not populated
   // simply omit lines rather than printing "—" inside dark overlays (those
