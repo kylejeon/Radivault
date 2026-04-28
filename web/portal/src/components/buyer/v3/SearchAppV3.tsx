@@ -191,14 +191,98 @@ export function SearchAppV3({ locale: _locale = "en" }: { locale?: Locale }) {
   return <SearchAppV3Inner />;
 }
 
+// ---------------------------------------------------------------------------
+// URL persistence (Kyle 2026-04-28) — facet state + sort + pageSize + free-
+// text query are mirrored into ?modality=…&body_part=…&q=… on every change
+// via router.replace, and hydrated from the same params on mount. Goal: the
+// buyer's filters survive /search → /studies/[uid] → back navigation, and
+// also survive a hard reload. Live typing (qText) is persisted too so the
+// input box still has the partially-typed value after a navigation.
+// ---------------------------------------------------------------------------
+const LIST_KEYS: Array<keyof V3FacetState> = [
+  "modality",
+  "body_part",
+  "sex",
+  "manufacturer",
+  "kcd_code",
+  "hospital_region",
+  "year",
+];
+
+function readListParam(
+  params: ReturnType<typeof useSearchParams>,
+  key: string,
+): string[] {
+  const v = params?.get(key);
+  if (!v) return [];
+  return v
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function hydrateFacetsFromUrl(
+  params: ReturnType<typeof useSearchParams>,
+): V3FacetState {
+  if (!params) return EMPTY_V3_FACET_STATE;
+  const ageMinRaw = Number(params.get("age_min"));
+  const ageMaxRaw = Number(params.get("age_max"));
+  return {
+    modality: readListParam(params, "modality"),
+    body_part: readListParam(params, "body_part"),
+    sex: readListParam(params, "sex"),
+    manufacturer: readListParam(params, "manufacturer"),
+    kcd_code: readListParam(params, "kcd_code"),
+    hospital_region: readListParam(params, "hospital_region"),
+    year: readListParam(params, "year"),
+    age_min: Number.isFinite(ageMinRaw) && ageMinRaw > 0 ? ageMinRaw : 0,
+    age_max:
+      Number.isFinite(ageMaxRaw) && ageMaxRaw > 0 && ageMaxRaw < 120
+        ? ageMaxRaw
+        : 120,
+  };
+}
+
+function serializeStateToParams(args: {
+  facets: V3FacetState;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  pageSize: number;
+  qText: string;
+}): URLSearchParams {
+  const p = new URLSearchParams();
+  if (args.qText.trim().length > 0) p.set("q", args.qText.trim());
+  for (const key of LIST_KEYS) {
+    const arr = args.facets[key] as string[];
+    if (arr.length > 0) p.set(key, arr.join(","));
+  }
+  if (args.facets.age_min > 0) p.set("age_min", String(args.facets.age_min));
+  if (args.facets.age_max < 120) p.set("age_max", String(args.facets.age_max));
+  if (args.sortKey !== "examdate") p.set("sort", args.sortKey);
+  if (args.sortDir !== "desc") p.set("dir", args.sortDir);
+  if (args.pageSize !== 25) p.set("limit", String(args.pageSize));
+  return p;
+}
+
 function SearchAppV3Inner() {
   const { locale: lc } = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [facets, setFacets] = useState<V3FacetState>(EMPTY_V3_FACET_STATE);
-  const [sortKey, setSortKey] = useState<SortKey>("examdate");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [pageSize, setPageSize] = useState(25);
+  const [facets, setFacets] = useState<V3FacetState>(() =>
+    hydrateFacetsFromUrl(searchParams),
+  );
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const v = searchParams?.get("sort");
+    return (v as SortKey) ?? "examdate";
+  });
+  const [sortDir, setSortDir] = useState<SortDir>(() => {
+    const v = searchParams?.get("dir");
+    return v === "asc" ? "asc" : "desc";
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    const v = Number(searchParams?.get("limit"));
+    return v === 25 || v === 50 || v === 100 ? v : 25;
+  });
   const [response, setResponse] = useState<SearchResp | null>(null);
   const [loading, setLoading] = useState(true);
   // Cursor pagination (Kyle 2026-04-27 — search showed 25/257 with no way
@@ -287,6 +371,26 @@ function SearchAppV3Inner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facets, sortKey, sortDir, pageSize, qApplied]);
+
+  // URL persistence (Kyle 2026-04-28). Mirror live state into searchParams
+  // via router.replace so back-nav from /studies/[uid] and hard reloads
+  // both restore the buyer's filters + typed query. Skips work when the
+  // serialised query string is identical to what's already in the URL.
+  const urlSyncRef = useRef<string | null>(null);
+  useEffect(() => {
+    const params = serializeStateToParams({
+      facets,
+      sortKey,
+      sortDir,
+      pageSize,
+      qText,
+    });
+    const qs = params.toString();
+    if (urlSyncRef.current === qs) return;
+    urlSyncRef.current = qs;
+    router.replace(qs ? `/search?${qs}` : "/search", { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facets, sortKey, sortDir, pageSize, qText]);
 
   async function runSearch(opts: { append: boolean }) {
     if (opts.append) setLoadingMore(true);
@@ -391,15 +495,11 @@ function SearchAppV3Inner() {
     }
   }
 
-  // FR-TS-1 — push q into the URL so a /search?q=brain deep-link works.
+  // FR-TS-1 — commit triggers a fetch via qApplied. URL persistence is
+  // handled by the global state↔URL sync effect above (it watches qText),
+  // so we don't double-write here.
   function commitQ(next: string) {
-    const trimmed = next.trim();
-    setQApplied(trimmed);
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (trimmed) params.set("q", trimmed);
-    else params.delete("q");
-    const qs = params.toString();
-    router.replace(qs ? `/search?${qs}` : "/search");
+    setQApplied(next.trim());
   }
 
   // Items now come from the accumulator so cursor-paginated rows survive
