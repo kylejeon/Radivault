@@ -200,9 +200,32 @@ class SearchResponse(BaseModel):
 
 
 class SeriesSummary(BaseModel):
+    """Per-series row of the study-detail response.
+
+    dev-spec-pixel-spatial-fields FR-PSF-7.1 — adds Tier-1 pixel/spatial
+    fields. All Optional so legacy series rows (ingested before
+    alembic 0011) and current Tier-2 / Tier-3 fields remain NULL on
+    the wire. ``rows`` / ``columns`` are surfaced under the DICOM-
+    standard names even though the underlying central column is
+    ``rows_count`` / ``columns_count`` (Q-PSF-7).
+    """
+
     pseudo_series_uid: str
     modality: str | None
     n_instances: int
+    # FR-PSF-7.1 — Tier-1 pixel/spatial. Numeric values flow through
+    # as ``float | None``; Pydantic v2 coerces ``Decimal`` (psycopg
+    # returns Numeric -> Decimal) into floats during model_dump.
+    photometric_interpretation: str | None = None
+    pixel_spacing_x: float | None = None
+    pixel_spacing_y: float | None = None
+    slice_thickness_mm: float | None = None
+    rows: int | None = None
+    columns: int | None = None
+    bits_allocated: int | None = None
+    bits_stored: int | None = None
+    frame_of_reference_uid_pseudo: str | None = None
+    kvp: float | None = None
 
 
 class SearchStudyDetail(StudyItem):

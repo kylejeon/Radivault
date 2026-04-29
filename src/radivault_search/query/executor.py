@@ -525,11 +525,33 @@ def load_study_detail(
     series_rows = list(
         session.scalars(select(Series).where(Series.study_pk == study.study_pk)).all()
     )
+
+    def _f(v):
+        # dev-spec-pixel-spatial-fields FR-PSF-7.1 — Numeric columns
+        # come back as ``Decimal`` on Postgres. Coerce to float for the
+        # JSON response so the portal viewer's typed schema (number)
+        # consumes them directly without an extra cast.
+        return float(v) if v is not None else None
+
     series_out = [
         SeriesSummary(
             pseudo_series_uid=s.pseudo_series_uid,
             modality=s.modality,
             n_instances=s.n_instances,
+            photometric_interpretation=getattr(
+                s, "photometric_interpretation", None
+            ),
+            pixel_spacing_x=_f(getattr(s, "pixel_spacing_x", None)),
+            pixel_spacing_y=_f(getattr(s, "pixel_spacing_y", None)),
+            slice_thickness_mm=_f(getattr(s, "slice_thickness_mm", None)),
+            rows=getattr(s, "rows_count", None),
+            columns=getattr(s, "columns_count", None),
+            bits_allocated=getattr(s, "bits_allocated", None),
+            bits_stored=getattr(s, "bits_stored", None),
+            frame_of_reference_uid_pseudo=getattr(
+                s, "frame_of_reference_uid_pseudo", None
+            ),
+            kvp=_f(getattr(s, "kvp", None)),
         )
         for s in series_rows
     ]
