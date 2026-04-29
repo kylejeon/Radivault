@@ -17,6 +17,13 @@ import {
   type SeriesMiniItemV4,
 } from "@/components/buyer/v4/study-detail";
 import type { Locale } from "@/lib/i18n";
+import {
+  formatBits,
+  formatKv,
+  formatMm,
+  formatMmPair,
+  formatPx,
+} from "@/lib/format/units";
 
 /**
  * StudyDetailPanel — study-detail v3 (mockup buyer-ux-v2/v3/study-detail.html).
@@ -58,6 +65,18 @@ export type SeriesSummary = {
   slice_thickness_mm?: number | null;
   resolution_w?: number | null;
   resolution_h?: number | null;
+  // dev-spec-pixel-spatial-fields FR-PSF-7.1 — Tier-1 series-level
+  // fields. Optional so legacy series rows ingested before alembic 0011
+  // (and the demo's pre-wipe data) keep rendering "—".
+  photometric_interpretation?: string | null;
+  pixel_spacing_x?: number | null;
+  pixel_spacing_y?: number | null;
+  rows?: number | null;
+  columns?: number | null;
+  bits_allocated?: number | null;
+  bits_stored?: number | null;
+  frame_of_reference_uid_pseudo?: string | null;
+  kvp?: number | null;
 };
 
 export type StudyDetail = {
@@ -159,6 +178,9 @@ export function StudyDetailPanel({
           photomtr: "PhotomtrInterp",
           pixelSpacing: "PixelSpacing",
           frameOfRef: "FrameOfRef",
+          sliceThickness: "슬라이스 두께",
+          resolution: "해상도",
+          bits: "Bits (할당 / 저장)",
         }
       : {
           add: "+ Add to cohort",
@@ -186,6 +208,9 @@ export function StudyDetailPanel({
           photomtr: "PhotomtrInterp",
           pixelSpacing: "PixelSpacing",
           frameOfRef: "FrameOfRef",
+          sliceThickness: "Slice thickness",
+          resolution: "Resolution",
+          bits: "Bits (alloc / stored)",
         };
 
   const previewStatus = study.preview_status ?? "pending";
@@ -282,6 +307,15 @@ export function StudyDetailPanel({
   for (const s of study.series) {
     studyByUid[s.pseudo_series_uid] = s;
   }
+  // dev-spec-pixel-spatial-fields FR-PSF-8.5 — active series lookup so
+  // the Pixel & Spatial / Acquisition cards re-bind on series picker
+  // change. Falls back to the first series when activeSeriesUid is
+  // null (initial render / no preview manifest yet).
+  const activeSeries: SeriesSummary | undefined =
+    (activeSeriesUid && studyByUid[activeSeriesUid]) ||
+    study.series[0] ||
+    undefined;
+
   const seriesItems: SeriesMiniItemV4[] = previewManifest
     ? previewManifest.series.map((m) => {
         const s = studyByUid[m.pseudo_series_uid];
@@ -522,16 +556,26 @@ export function StudyDetailPanel({
                   value: study.manufacturer,
                 },
                 { key: "model", label: t.model, value: study.model_name },
-                { key: "kvp", label: t.kvp, value: null /* TODO (0018,0060) */ },
                 {
+                  // dev-spec-pixel-spatial-fields FR-PSF-8.2 — Tier-1
+                  // KVP is series-level. Falls back to "—" via formatKv
+                  // when null.
+                  key: "kvp",
+                  label: t.kvp,
+                  value: formatKv(activeSeries?.kvp ?? null),
+                },
+                {
+                  // Tier-2 (out of scope for this task) — keep TODO
+                  // anchor so the follow-up ticket has a one-touch
+                  // landing spot.
                   key: "tube-current",
                   label: t.tubeCurrent,
-                  value: null /* TODO (0018,1151) */,
+                  value: null /* TODO Tier-2 (0018,1151) */,
                 },
                 {
                   key: "contrast",
                   label: t.contrast,
-                  value: null /* TODO (0018,0010) */,
+                  value: null /* TODO Tier-2 (0018,0010) */,
                 },
               ]}
             />
@@ -541,19 +585,47 @@ export function StudyDetailPanel({
               slug="pixel"
               rows={[
                 {
+                  // dev-spec-pixel-spatial-fields FR-PSF-8.1 / FR-PSF-8.7
+                  // — Tier-1 Pixel & Spatial card binding. Order follows
+                  // mockup (PhotomtrInterp -> PixelSpacing ->
+                  // SliceThickness -> Resolution -> Bits -> FrameOfRef).
                   key: "photomtr",
                   label: t.photomtr,
-                  value: null /* TODO (0028,0004) */,
+                  value: activeSeries?.photometric_interpretation ?? null,
                 },
                 {
                   key: "pixel-spacing",
                   label: t.pixelSpacing,
-                  value: null /* TODO (0028,0030) */,
+                  value: formatMmPair(
+                    activeSeries?.pixel_spacing_x ?? null,
+                    activeSeries?.pixel_spacing_y ?? null,
+                  ),
+                },
+                {
+                  key: "slice-thickness",
+                  label: t.sliceThickness,
+                  value: formatMm(activeSeries?.slice_thickness_mm ?? null),
+                },
+                {
+                  key: "resolution",
+                  label: t.resolution,
+                  value: formatPx(
+                    activeSeries?.rows ?? null,
+                    activeSeries?.columns ?? null,
+                  ),
+                },
+                {
+                  key: "bits",
+                  label: t.bits,
+                  value: formatBits(
+                    activeSeries?.bits_allocated ?? null,
+                    activeSeries?.bits_stored ?? null,
+                  ),
                 },
                 {
                   key: "frame-of-ref",
                   label: t.frameOfRef,
-                  value: null /* TODO (0020,0052) */,
+                  value: activeSeries?.frame_of_reference_uid_pseudo ?? null,
                 },
               ]}
             />
