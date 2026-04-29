@@ -87,9 +87,10 @@ class ManifestValidator:
     # ------------------------------------------------------------------
     def _check_version(self, manifest: Manifest) -> None:
         # metadata-thumbnail-ingest FR-META-1: accept v1 (legacy) and v2 (new
-        # study/series/thumbnail fields). Higher versions are rejected so the
-        # cross-team contract stays explicit.
-        if manifest.manifest_version not in (1, 2):
+        # study/series/thumbnail fields). dev-spec-pixel-spatial-fields
+        # FR-PSF-4.1 / FR-PSF-3.5 — v3 adds optional Tier-1 series-level
+        # pixel/spatial fields; the wire shape is otherwise identical to v2.
+        if manifest.manifest_version not in (1, 2, 3):
             raise ManifestVersion(
                 detail=f"manifest_version={manifest.manifest_version} unsupported"
             )

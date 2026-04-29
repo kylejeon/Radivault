@@ -132,8 +132,34 @@ class UploadClient:
                 }
             )
             total_bytes += len(data)
+        # dev-spec-pixel-spatial-fields FR-PSF-3.1 — bump manifest_version
+        # to 3 when the gateway has populated any of the Tier-1 pixel/
+        # spatial series fields. Backwards-compatible: central accepts v1
+        # and v2 ingests unchanged (FR-PSF-3.5).
+        version = 1
+        if study_metadata or thumbnail:
+            version = 2
+            sd_for_version = study_metadata
+            if sd_for_version is not None:
+                series_for_version = list(getattr(sd_for_version, "series", []) or [])
+                _v3_keys = (
+                    "photometric_interpretation",
+                    "pixel_spacing_x",
+                    "pixel_spacing_y",
+                    "rows",
+                    "columns",
+                    "bits_allocated",
+                    "bits_stored",
+                    "frame_of_reference_uid_pseudo",
+                )
+                if any(
+                    s.get(k) is not None
+                    for s in series_for_version
+                    for k in _v3_keys
+                ):
+                    version = 3
         manifest: dict[str, Any] = {
-            "manifest_version": 2 if (study_metadata or thumbnail) else 1,
+            "manifest_version": version,
             "gateway_id": gateway_id,
             "hospital_id": hospital_id,
             "pseudo_study_uid": pseudo_study_uid,

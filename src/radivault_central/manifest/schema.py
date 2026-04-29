@@ -50,6 +50,12 @@ class SeriesEntryV2(BaseModel):
     ``series.series_description`` central column). The legacy
     ``series_description_clean`` field is retained for backward
     compatibility with the metadata-thumbnail-ingest contract.
+
+    dev-spec-pixel-spatial-fields FR-PSF-3.3 — adds Tier-1 pixel/spatial
+    fields. All Optional so v2.0/v2.1 manifests still validate against
+    this same model. FR-PSF-5.4 — invalid values (negative spacing,
+    rows<=0, etc.) are normalised to ``None`` rather than rejected; the
+    gateway is the source of truth for validity (FR-PSF-2.7).
     """
 
     model_config = ConfigDict(extra="allow")
@@ -62,6 +68,20 @@ class SeriesEntryV2(BaseModel):
     series_description: str | None = Field(default=None, max_length=200)
     slice_thickness_mm: float | None = None
     kvp: float | None = None
+    # FR-PSF-3.3 — Tier-1 pixel/spatial. ``photometric_interpretation``
+    # records the **DICOM original** value per FR-PSF-6.4 (e.g. the raw
+    # ``MONOCHROME1`` is preserved here even when the gateway preview
+    # JPG is normalised to MONOCHROME2 luminance). Length cap mirrors
+    # the central column ``series.photometric_interpretation
+    # VARCHAR(20)``.
+    photometric_interpretation: str | None = Field(default=None, max_length=20)
+    pixel_spacing_x: float | None = None
+    pixel_spacing_y: float | None = None
+    rows: int | None = Field(default=None, ge=1)
+    columns: int | None = Field(default=None, ge=1)
+    bits_allocated: int | None = Field(default=None, ge=1, le=64)
+    bits_stored: int | None = Field(default=None, ge=1, le=64)
+    frame_of_reference_uid_pseudo: str | None = Field(default=None, max_length=64)
 
 
 class ThumbnailV2(BaseModel):

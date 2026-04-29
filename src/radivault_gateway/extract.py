@@ -212,6 +212,66 @@ def _parse_float(raw) -> float | None:
     return v
 
 
+def _parse_int_positive(raw) -> int | None:
+    """dev-spec-pixel-spatial-fields FR-PSF-2.7 — ``rows == 0`` (or any
+    non-positive integer) is invalid per DICOM PS3.3 Section C.7.6.3 and
+    must collapse to ``None`` so the buyer viewer renders a proper
+    "Unknown" placeholder rather than a misleading "0 px" value.
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if v <= 0:
+        return None
+    return v
+
+
+def _parse_pixel_spacing(ds) -> tuple[float | None, float | None]:
+    """dev-spec-pixel-spatial-fields FR-PSF-2.2 — ``(0028,0030) PixelSpacing``
+    extraction with ``(0018,1164) ImagerPixelSpacing`` fallback for CR/DX/MG.
+
+    Returns ``(spacing_x, spacing_y)`` in millimetres, or ``(None, None)``
+    if the source attributes are missing / unparseable / non-positive.
+    DICOM stores the pair as ``[row_spacing, column_spacing]`` (DS×2);
+    we surface them as ``pixel_spacing_x`` (row) and ``pixel_spacing_y``
+    (column) verbatim for downstream callers.
+    """
+    raw = getattr(ds, "PixelSpacing", None)
+    if raw is None:
+        # Projection-radiography fallback (CR/DX/MG do not carry
+        # PixelSpacing — only the imager-plane equivalent).
+        raw = getattr(ds, "ImagerPixelSpacing", None)
+    if raw is None:
+        return None, None
+    # pydicom returns DS×N as pydicom.multival.MultiValue or list.
+    try:
+        items = list(raw)
+    except TypeError:
+        return None, None
+    if len(items) < 2:
+        return None, None
+    return _parse_float(items[0]), _parse_float(items[1])
+
+
+def _parse_uid(raw) -> str | None:
+    """Trim and length-cap a DICOM UI-VR value. Returns ``None`` when empty.
+
+    UID column in central is ``varchar(64)`` (DICOM PS3.5 Section 9 caps
+    UI at 64 chars), so the cap is defensive — values longer than 64
+    characters are non-conformant DICOM and we collapse them to None
+    rather than corrupt the column.
+    """
+    if raw is None:
+        return None
+    val = str(raw).strip()
+    if not val or len(val) > 64:
+        return None
+    return val
+
+
 def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
     """Extract the 12 MVP fields from a list of de-identified DICOM paths.
 
@@ -248,11 +308,33 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
         series_uid = str(getattr(ds, "SeriesInstanceUID", "") or "")
         if not series_uid:
             continue
+        # dev-spec-pixel-spatial-fields FR-PSF-2 — capture Tier-1 series
+        # fields off the **first instance** of each series. DICOM PS3.3
+        # guarantees PixelSpacing/Rows/Columns/Bits* are constant within
+        # a single series for non-Enhanced single-frame studies.
+        series_modality = (
+            str(getattr(ds, "Modality", "") or "").strip().upper() or None
+        )
+        ps_x, ps_y = _parse_pixel_spacing(ds)
+        rows_val = _parse_int_positive(getattr(ds, "Rows", None))
+        cols_val = _parse_int_positive(getattr(ds, "Columns", None))
+        bits_alloc = _parse_int_positive(getattr(ds, "BitsAllocated", None))
+        bits_stored = _parse_int_positive(getattr(ds, "BitsStored", None))
+        # FR-PSF-2.7 — ``bits_stored > bits_allocated`` is an invalid
+        # combination per DICOM Standard. Drop both sides to None so the
+        # buyer doesn't see contradictory values.
+        if (
+            bits_alloc is not None
+            and bits_stored is not None
+            and bits_stored > bits_alloc
+        ):
+            bits_alloc = None
+            bits_stored = None
         entry = series_map.setdefault(
             series_uid,
             {
                 "pseudo_series_uid": series_uid,
-                "modality": str(getattr(ds, "Modality", "") or "").strip().upper() or None,
+                "modality": series_modality,
                 "n_instances": 0,
                 "body_part": _parse_body_part(
                     str(getattr(ds, "BodyPartExamined", "") or "")
@@ -260,6 +342,24 @@ def extract_study_metadata(instances: list[Path]) -> StudyMetadata:
                 "slice_thickness_mm": _parse_float(getattr(ds, "SliceThickness", None)),
                 "kvp": _parse_float(getattr(ds, "KVP", None)),
                 "series_description_clean": None,
+                # FR-PSF-2.2 — Tier-1 pixel/spatial fields.
+                "photometric_interpretation": (
+                    str(getattr(ds, "PhotometricInterpretation", "") or "").strip()
+                    or None
+                ),
+                "pixel_spacing_x": ps_x,
+                "pixel_spacing_y": ps_y,
+                "rows": rows_val,
+                "columns": cols_val,
+                "bits_allocated": bits_alloc,
+                "bits_stored": bits_stored,
+                # FR-PSF-2.2 / 11.1 — gateway de-id engine has already
+                # rewritten FrameOfReferenceUID into a pseudo UID before
+                # this extract runs (pseudonymisation precedes metadata
+                # capture in radivault_gateway/pipeline.py).
+                "frame_of_reference_uid_pseudo": _parse_uid(
+                    getattr(ds, "FrameOfReferenceUID", None)
+                ),
             },
         )
         entry["n_instances"] += 1
