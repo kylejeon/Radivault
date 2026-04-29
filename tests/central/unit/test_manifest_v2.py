@@ -133,11 +133,20 @@ def test_v1_manifest_still_accepted() -> None:
     assert m.series == []
 
 
-def test_v3_manifest_rejected() -> None:
-    """Higher versions are not yet supported."""
+def test_v3_manifest_accepted() -> None:
+    """dev-spec-pixel-spatial-fields FR-PSF-4.1 — v3 is accepted."""
+    payload = _manifest_v2(manifest_version=3)
+    raw = json.dumps(payload).encode("utf-8")
+    validator = ManifestValidator(_hospital())
+    m = validator.parse_and_validate(raw)
+    assert m.manifest_version == 3
+
+
+def test_v4_manifest_rejected() -> None:
+    """Higher versions than v3 are still rejected."""
     from radivault_central.errors import ManifestVersion
 
-    payload = _manifest_v2(manifest_version=3)
+    payload = _manifest_v2(manifest_version=4)
     raw = json.dumps(payload).encode("utf-8")
     validator = ManifestValidator(_hospital())
     with pytest.raises(ManifestVersion):

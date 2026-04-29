@@ -632,6 +632,25 @@ async def post_ingest(request: Request) -> dict:
                         "instances": instances,
                         # text-search-description Phase 1.5 — per-series desc.
                         "series_description": getattr(s, "series_description", None),
+                        # dev-spec-pixel-spatial-fields FR-PSF-3.3 / FR-PSF-5.1
+                        # — Tier-1 series fields. All Optional; v1/v2 manifests
+                        # leave them None and the central column stays NULL.
+                        "photometric_interpretation": getattr(
+                            s, "photometric_interpretation", None
+                        ),
+                        "pixel_spacing_x": getattr(s, "pixel_spacing_x", None),
+                        "pixel_spacing_y": getattr(s, "pixel_spacing_y", None),
+                        "slice_thickness_mm": getattr(
+                            s, "slice_thickness_mm", None
+                        ),
+                        "rows": getattr(s, "rows", None),
+                        "columns": getattr(s, "columns", None),
+                        "bits_allocated": getattr(s, "bits_allocated", None),
+                        "bits_stored": getattr(s, "bits_stored", None),
+                        "frame_of_reference_uid_pseudo": getattr(
+                            s, "frame_of_reference_uid_pseudo", None
+                        ),
+                        "kvp": getattr(s, "kvp", None),
                     }
                 )
             # Any leftover files (manifest series counts misaligned) → trailing series.

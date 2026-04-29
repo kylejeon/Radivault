@@ -70,10 +70,11 @@ def test_valid_manifest_passes():
 
 
 def test_manifest_version_rejected():
-    # metadata-thumbnail-ingest FR-META-1: v1 + v2 are accepted; v3 is not.
+    # metadata-thumbnail-ingest FR-META-1: v1 + v2 + v3 are accepted; v4 is not.
+    # dev-spec-pixel-spatial-fields FR-PSF-4.1 — v3 added.
     v = ManifestValidator(_hospital())
     with pytest.raises(ManifestVersion):
-        v.parse_and_validate(_raw(_manifest(manifest_version=3)))
+        v.parse_and_validate(_raw(_manifest(manifest_version=4)))
 
 
 def test_manifest_v2_accepted():
@@ -81,6 +82,13 @@ def test_manifest_v2_accepted():
     v = ManifestValidator(_hospital())
     m = v.parse_and_validate(_raw(_manifest(manifest_version=2)))
     assert m.manifest_version == 2
+
+
+def test_manifest_v3_accepted():
+    """dev-spec-pixel-spatial-fields FR-PSF-4.1 — v3 with no v3 fields parses."""
+    v = ManifestValidator(_hospital())
+    m = v.parse_and_validate(_raw(_manifest(manifest_version=3)))
+    assert m.manifest_version == 3
 
 
 def test_manifest_bad_anonymization_flag():

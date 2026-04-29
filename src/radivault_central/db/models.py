@@ -24,6 +24,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     SmallInteger,
     String,
     UniqueConstraint,
@@ -257,6 +258,23 @@ class Series(Base):
     # text-search-description Phase 1.5 (FR-TS15-6) — per-series scrubbed
     # description. Mirrors study.study_description NULL semantics.
     series_description: Mapped[str | None] = mapped_column(String(200))
+
+    # dev-spec-pixel-spatial-fields FR-PSF-4.3 (alembic 0011) — Tier-1
+    # series-level pixel/spatial fields. All NULL-allowed; legacy rows
+    # ingested before manifest v3 keep ``NULL`` until re-sync. Columns
+    # ``rows_count`` / ``columns_count`` are renamed from the DICOM
+    # attribute names ``Rows`` / ``Columns`` to dodge SQL reserved-word
+    # quoting friction (Q-PSF-7 default).
+    photometric_interpretation: Mapped[str | None] = mapped_column(String(20))
+    pixel_spacing_x: Mapped[float | None] = mapped_column(Numeric(7, 4))
+    pixel_spacing_y: Mapped[float | None] = mapped_column(Numeric(7, 4))
+    slice_thickness_mm: Mapped[float | None] = mapped_column(Numeric(7, 4))
+    rows_count: Mapped[int | None] = mapped_column(Integer)
+    columns_count: Mapped[int | None] = mapped_column(Integer)
+    bits_allocated: Mapped[int | None] = mapped_column(SmallInteger)
+    bits_stored: Mapped[int | None] = mapped_column(SmallInteger)
+    frame_of_reference_uid_pseudo: Mapped[str | None] = mapped_column(String(64))
+    kvp: Mapped[float | None] = mapped_column(Numeric(5, 1))
 
     # jpg-preview-defacing FR-PREVIEW-12 (alembic 0010). New ingestions only:
     # legacy series rows keep ``preview_status='pending'`` and are auto-404'd

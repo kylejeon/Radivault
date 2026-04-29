@@ -166,6 +166,21 @@ def insert_study_full(
             n_instances=len(s["instances"]),
             # text-search-description Phase 1.5 — per-series scrubbed text.
             series_description=s.get("series_description"),
+            # dev-spec-pixel-spatial-fields FR-PSF-5.1 — Tier-1 series-
+            # level pixel/spatial fields. All Optional; v1/v2 manifests
+            # carry None and the columns stay NULL (FR-PSF-3.5).
+            photometric_interpretation=s.get("photometric_interpretation"),
+            pixel_spacing_x=s.get("pixel_spacing_x"),
+            pixel_spacing_y=s.get("pixel_spacing_y"),
+            slice_thickness_mm=s.get("slice_thickness_mm"),
+            rows_count=s.get("rows"),
+            columns_count=s.get("columns"),
+            bits_allocated=s.get("bits_allocated"),
+            bits_stored=s.get("bits_stored"),
+            frame_of_reference_uid_pseudo=s.get(
+                "frame_of_reference_uid_pseudo"
+            ),
+            kvp=s.get("kvp"),
         )
         session.add(series_row)
         session.flush()
